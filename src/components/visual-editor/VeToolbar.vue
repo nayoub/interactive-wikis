@@ -34,6 +34,7 @@ import {
   cdxIconUndo,
   cdxIconWikitext,
 } from '@wikimedia/codex-icons'
+import type { Icon } from '@wikimedia/codex-icons'
 
 import { STR } from './engine/strings'
 
@@ -51,8 +52,13 @@ const props = withDefaults(
   review: boolean
     /** Editor still loading: progress bar (Vector) / "Loading editor…" (Minerva). */
     loading?: boolean
+    /**
+     * Working Insert-menu tools (Vector "Insert ▾", Minerva "+"). Each emits
+     * `insert` with its `value`. Empty → Insert stays the inert placeholder.
+     */
+    insertItems?: { value: string; label: string; icon: Icon }[]
   }>(),
-  { showSuggestionsToggle: true },
+  { showSuggestionsToggle: true, insertItems: () => [] },
 )
 
 const emit = defineEmits<{
@@ -63,6 +69,7 @@ const emit = defineEmits<{
   publish: []
   back: []
   textStyle: [command: string]
+  insert: [value: string]
 }>()
 
 const toggleModel = computed({
@@ -114,9 +121,9 @@ function onScroll() {
 }
 
 // Minerva menus
-const openMenu = ref<null | 'text' | 'add' | 'more'>(null)
+const openMenu = ref<null | 'text' | 'add' | 'more' | 'insert'>(null)
 const textExpanded = ref(false)
-function toggleMenu(menu: 'text' | 'add' | 'more') {
+function toggleMenu(menu: 'text' | 'add' | 'more' | 'insert') {
   openMenu.value = openMenu.value === menu ? null : menu
   if (menu === 'text') textExpanded.value = false
 }
@@ -147,7 +154,7 @@ const slots = computed(() =>
 const coreSlots = computed(() => 3 + (props.canRedo ? 1 : 0) + 1)
 const showLink = computed(() => slots.value >= coreSlots.value + 2)
 const showCite = showLink
-const showAdd = computed(() => !showLink.value)
+const showAdd = computed(() => !showLink.value || props.insertItems.length > 0)
 const overflowing = computed(() => slots.value < coreSlots.value + (showLink.value ? 2 : 1))
 
 const TEXT_STYLES = [
@@ -159,7 +166,13 @@ const TEXT_STYLES = [
 const addItems = computed(() => [
   ...(!showLink.value ? [{ value: 'link', label: 'Link', icon: cdxIconLink }] : []),
   ...(!showCite.value ? [{ value: 'cite', label: 'Cite', icon: cdxIconQuotes }] : []),
+  ...props.insertItems,
 ])
+
+function chooseInsert(value: string) {
+  openMenu.value = null
+  if (props.insertItems.some((item) => item.value === value)) emit('insert', value)
+}
 
 function applyTextStyle(command: string) {
   emit('textStyle', command)
@@ -251,7 +264,31 @@ onBeforeUnmount(() => {
         <CdxIcon :icon="cdxIconListBullet" />
         <CdxIcon :icon="cdxIconExpand" size="small" />
       </button>
-      <button class="ve-toolbar__btn ve-toolbar__btn--dropdown">
+      <div v-if="insertItems.length" class="ve-toolbar__menu-wrap">
+        <button
+          class="ve-toolbar__btn ve-toolbar__btn--dropdown ve-toolbar__menu-trigger"
+          :class="{ 've-toolbar__menu-trigger--active': openMenu === 'insert' }"
+          aria-haspopup="menu"
+          :aria-expanded="openMenu === 'insert'"
+          @click.stop="toggleMenu('insert')"
+        >
+          <span>Insert</span>
+          <CdxIcon :icon="cdxIconExpand" size="small" />
+        </button>
+        <div v-if="openMenu === 'insert'" class="ve-toolbar__menu ve-toolbar__menu--dropdown" role="menu">
+          <button
+            v-for="item in insertItems"
+            :key="item.value"
+            class="ve-toolbar__menu-item"
+            role="menuitem"
+            @click="chooseInsert(item.value)"
+          >
+            <CdxIcon :icon="item.icon" />
+            <span>{{ item.label }}</span>
+          </button>
+        </div>
+      </div>
+      <button v-else class="ve-toolbar__btn ve-toolbar__btn--dropdown">
         <span>Insert</span>
         <CdxIcon :icon="cdxIconExpand" size="small" />
       </button>
@@ -367,7 +404,7 @@ onBeforeUnmount(() => {
         </button>
         <div v-if="openMenu === 'add'" class="ve-toolbar__menu" role="menu">
           <template v-for="(item, i) in addItems" :key="i">
-            <button class="ve-toolbar__menu-item" role="menuitem" @click="openMenu = null">
+            <button class="ve-toolbar__menu-item" role="menuitem" @click="chooseInsert(item.value)">
               <CdxIcon :icon="item.icon" />
               <span>{{ item.label }}</span>
             </button>
@@ -850,6 +887,15 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+.ve-toolbar__menu--dropdown {
+  position: absolute;
+  top: 100%;
+  right: auto;
+  left: 0;
+  width: max-content;
+  min-width: 200px;
 }
 
 .ve-toolbar__menu--text {
