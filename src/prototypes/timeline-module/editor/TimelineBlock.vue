@@ -108,8 +108,9 @@ function onMove(id: string) {
 .tl-block--editing .tl-block__body {
   cursor: pointer;
   border-radius: var(--border-radius-base, 2px);
-  outline: 1px dashed transparent;
-  outline-offset: 4px;
+  outline: 1px solid transparent;
+  outline-offset: 6px;
+  transition: outline-color 140ms;
 }
 .tl-block--editing:hover .tl-block__body {
   outline-color: var(--border-color-progressive);
@@ -130,6 +131,21 @@ function onMove(id: string) {
   border-radius: var(--border-radius-base, 2px);
   box-shadow: var(--box-shadow-small, 0 1px 1px rgba(0, 0, 0, 0.1));
   z-index: 3;
+}
+@media (hover: hover) {
+  .tl-block__context {
+    opacity: 0;
+    transform: translateY(4px);
+    transition:
+      opacity 140ms,
+      transform 140ms;
+  }
+  .tl-block--editing:hover .tl-block__context,
+  .tl-block--editing:focus-within .tl-block__context,
+  .tl-block--active .tl-block__context {
+    opacity: 1;
+    transform: none;
+  }
 }
 .tl-block__badge {
   padding-inline: var(--spacing-50);

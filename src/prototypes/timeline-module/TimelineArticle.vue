@@ -489,21 +489,20 @@ const pickedSummary = computed(() =>
 .tl-page--selecting .mw-parser-output .tl-mount {
   opacity: 0.6;
 }
+/* Chips: same metrics as the text (no bold, zero net padding), so picking never reflows. */
 .tl-page--selecting .tl-mention {
-  display: inline;
-  padding: 0 3px;
-  margin: 0 -1px;
+  padding: 1px 3px;
+  margin: -1px -3px;
   border-radius: var(--border-radius-base, 2px);
   background-color: var(--background-color-progressive-subtle);
-  box-shadow: inset 0 0 0 1px var(--border-color-progressive);
   color: var(--color-progressive);
-  font-weight: var(--font-weight-bold);
   cursor: pointer;
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
   transition:
     background-color 120ms,
-    color 120ms;
+    color 120ms,
+    box-shadow 240ms;
 }
 .tl-page--selecting .tl-mention:hover {
   background-color: var(--background-color-progressive-subtle--hover);
@@ -515,24 +514,21 @@ const pickedSummary = computed(() =>
 .tl-page--selecting .tl-mention--picked {
   background-color: var(--background-color-progressive);
   color: var(--color-inverted-fixed, #fff);
-  box-shadow: none;
 }
 .tl-page--selecting .tl-mention--picked:hover {
   background-color: var(--background-color-progressive--hover);
 }
-.tl-page--selecting .tl-mention--picked::before {
-  content: '✓\00a0';
-}
-.tl-mention--pop {
-  animation: tl-pop 260ms ease-out;
-}
-@keyframes tl-pop {
-  40% {
-    transform: scale(1.12);
-  }
-}
+/* A ring that ripples out on tap: feedback without moving any text. */
 .tl-page--selecting .tl-mention--pop {
-  display: inline-block;
+  animation: tl-ring 420ms ease-out;
+}
+@keyframes tl-ring {
+  from {
+    box-shadow: 0 0 0 0 var(--border-color-progressive);
+  }
+  to {
+    box-shadow: 0 0 0 6px transparent;
+  }
 }
 
 ::highlight(tl-hover) {

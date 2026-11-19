@@ -3,13 +3,14 @@
  * Reader rendering of a timeline. Pure view: takes events, knows nothing about
  * the editor or the article. Every layout is an ordered list underneath.
  *
- * - horizontal: desktop, when the column is wide enough. One axis; cards
- *   alternate above and below it, connected to their dot by a leader line.
- * - vertical: mobile, or desktop when horizontal would be cramped.
+ * - horizontal (desktop, wide column): one axis. Labels sit in an even rhythm,
+ *   alternating above and below; each is tied to its dot by an orthogonal
+ *   leader (vertical → horizontal → vertical) routed so leaders never cross.
+ * - vertical (mobile, or a cramped column): a single rule with dots.
  * - fallback: a plain dated list (also what print gets).
  *
- * Spacing: "proportional" places dots (horizontal) or gaps (vertical) by time;
- * "even" spaces events equally and marks long gaps with a break label.
+ * Spacing: "proportional" puts dots (horizontal) or gaps (vertical) where time
+ * puts them; "even" spaces events equally and dots the stretches it skipped.
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { CdxButton, CdxIcon } from '@wikimedia/codex'
@@ -42,6 +43,7 @@ const props = withDefaults(
 const emit = defineEmits<{ select: [event: TimelineEvent] }>()
 
 const sorted = computed(() => sortEvents(props.events))
+const n = computed(() => sorted.value.length)
 
 const rootRef = ref<HTMLElement | null>(null)
 const width = ref(0)
@@ -55,28 +57,26 @@ onMounted(() => {
 })
 onBeforeUnmount(() => ro?.disconnect())
 
-/** Narrowest slot a horizontal card can live in (cards span two slots, alternating sides). */
-const MIN_SLOT = 84
+const hoverId = ref<string | null>(null)
+const lit = (id: string) => hoverId.value === id || props.activeId === id
+
+/** Narrowest slot per event; a label spans two slots (neighbours alternate sides). */
+const MIN_SLOT = 80
 
 const effectiveLayout = computed<'horizontal' | 'vertical'>(() => {
   if (props.layout !== 'auto') return props.layout
   if (props.skin !== 'desktop') return 'vertical'
-  // Fall back to vertical when even two-slot cards would get too narrow to read.
   return width.value >= 560 ? 'horizontal' : 'vertical'
 })
 
+const years = computed(() => sorted.value.map((e) => toYears(e.date.start)))
 const span = computed(() => {
-  const list = sorted.value
-  if (!list.length) return { min: 0, max: 1 }
-  const min = toYears(list[0].date.start)
-  const last = list[list.length - 1]
-  const max = Math.max(
-    ...list.map((e) => toYears(e.date.end ?? e.date.start)),
-    toYears(last.date.start),
-  )
+  const ys = years.value
+  if (!ys.length) return { min: 0, max: 1 }
+  const min = ys[0]
+  const max = ys[ys.length - 1]
   return { min, max: max === min ? min + 1 : max }
 })
-
 const yearsRange = computed(() => {
   const list = sorted.value
   if (!list.length) return ''
@@ -85,64 +85,119 @@ const yearsRange = computed(() => {
   return a === b ? String(a) : `${a}–${b}`
 })
 
-/** Gap (years) before each event, for break labels. */
-function gapBefore(i: number): number {
-  if (i === 0) return 0
-  return toYears(sorted.value[i].date.start) - toYears(sorted.value[i - 1].date.start)
-}
+/** Years skipped before event i. */
+const gapBefore = (i: number) => (i === 0 ? 0 : years.value[i] - years.value[i - 1])
 const BREAK_YEARS = 8
 function gapLabel(i: number): string | null {
   const gap = Math.round(gapBefore(i))
-  return gap >= BREAK_YEARS ? `${gap} years` : null
+  return gap >= BREAK_YEARS ? `${gap} yrs` : null
 }
 
-// ── Horizontal ─────────────────────────────────────────────────────────────
+// ── Horizontal geometry (px) ───────────────────────────────────────────────
 const trackRef = ref<HTMLElement | null>(null)
-const n = computed(() => sorted.value.length)
-const trackWidth = computed(() => Math.max(width.value, n.value * MIN_SLOT))
-const EDGE = 0.035
+const trackWidth = computed(() => Math.max(width.value, (n.value + 1) * MIN_SLOT))
+/** Half-slot columns, plus one half-slot of margin at each end so no label is clipped. */
+const halfCols = computed(() => n.value * 2 + 2)
+const half = computed(() => trackWidth.value / halfCols.value)
 
-/** Card centre, 0..1 across the track: evenly spaced slots. */
-function slotX(i: number) {
-  return (i + 0.5) / n.value
-}
-/** Dot position, 0..1: proportional to time, or the slot itself. */
-function dotX(i: number) {
-  if (props.spacing === 'even') return slotX(i)
-  const t = toYears(sorted.value[i].date.start)
-  return EDGE + ((t - span.value.min) / (span.value.max - span.value.min)) * (1 - 2 * EDGE)
-}
-/** Grid placement: a card spans two slots, centred on its own, clamped at the ends. */
-function gridColumn(i: number) {
-  // Slot i is half-columns [2i, 2i+2); its card spans [2i-1, 2i+3), shrunk (not
-  // shifted) at the ends so same-side neighbours never overlap.
-  const cols = n.value * 2
-  const start = Math.max(0, i * 2 - 1)
-  const end = Math.min(cols, i * 2 + 3)
-  return `${start + 1} / ${end + 1}`
-}
-
-const ticks = computed(() => {
-  if (props.spacing === 'even' || !n.value) return []
+/** Label centre: an even rhythm. */
+const cx = (i: number) => (2 * i + 2) * half.value
+/** Dot: where time puts it, between the first and last label centres; or the label itself. */
+function dx(i: number) {
+  if (props.spacing === 'even' || n.value < 2) return cx(i)
   const { min, max } = span.value
-  const step = max - min > 60 ? 20 : max - min > 25 ? 10 : 5
-  const out: { x: number; label: string }[] = []
-  for (let y = Math.ceil(min / step) * step; y <= max; y += step) {
-    out.push({ x: EDGE + ((y - min) / (max - min)) * (1 - 2 * EDGE), label: String(y) })
+  return cx(0) + ((years.value[i] - min) / (max - min)) * (cx(n.value - 1) - cx(0))
+}
+const above = (i: number) => i % 2 === 0
+const gridColumn = (i: number) => `${2 * i + 1} / span 4`
+
+/**
+ * Jog levels (0 = nearest the axis). Within a run of leaders all bending the
+ * same way, later leaders jog further from the axis when bending right and
+ * nearer when bending left — which is exactly what keeps them from crossing.
+ */
+const levels = computed(() => {
+  const out = new Array<number>(n.value).fill(0)
+  for (const side of [0, 1]) {
+    const idx = sorted.value.map((_, i) => i).filter((i) => i % 2 === side)
+    const dir = (i: number) => Math.sign(Math.round(dx(i) - cx(i)))
+    // Right-benders: forward pass.
+    for (let k = 1; k < idx.length; k++) {
+      const a = idx[k - 1]
+      const b = idx[k]
+      if (dir(a) > 0 && dir(b) > 0 && cx(b) < dx(a) + 8) out[b] = out[a] + 1
+    }
+    // Left-benders: backward pass.
+    for (let k = idx.length - 2; k >= 0; k--) {
+      const a = idx[k]
+      const b = idx[k + 1]
+      if (dir(a) < 0 && dir(b) < 0 && dx(b) - 8 < cx(a)) out[a] = out[b] + 1
+    }
   }
   return out
 })
 
-const BAND = 64
-function leader(i: number) {
-  const above = i % 2 === 0
-  const xc = slotX(i) * 1000
-  const xd = dotX(i) * 1000
-  const mid = BAND / 2
-  return above
-    ? `${xc},0 ${xc},8 ${xd},${mid - 8} ${xd},${mid}`
-    : `${xd},${mid} ${xd},${mid + 8} ${xc},${BAND - 8} ${xc},${BAND}`
+const BASE = 16
+const STEP = 7
+const LABEL_GAP = 6
+const band = computed(() => {
+  const maxLevel = Math.max(0, ...levels.value)
+  return 2 * (BASE + maxLevel * STEP + 12)
+})
+const axisY = computed(() => band.value / 2)
+
+function leaderPath(i: number) {
+  const c = cx(i)
+  const d = dx(i)
+  const ay = axisY.value
+  const top = above(i)
+  const y0 = top ? 0 : band.value
+  const jog = top ? ay - BASE - levels.value[i] * STEP : ay + BASE + levels.value[i] * STEP
+  if (Math.abs(c - d) < 1) return `M${c},${y0} V${ay}`
+  const s = Math.sign(d - c)
+  const v = top ? 1 : -1 // direction from label towards axis
+  const r = Math.min(4, Math.abs(d - c) / 2)
+  return [
+    `M${c},${y0}`,
+    `V${jog - v * r}`,
+    `Q${c},${jog} ${c + s * r},${jog}`,
+    `H${d - s * r}`,
+    `Q${d},${jog} ${d},${jog + v * r}`,
+    `V${ay}`,
+  ].join(' ')
 }
+
+/** Axis segments between consecutive dots; dotted where even spacing skipped time. */
+const segments = computed(() => {
+  const out: { x1: number; x2: number; elided: boolean; label: string | null; mid: number }[] = []
+  for (let i = 1; i < n.value; i++) {
+    const elided = props.spacing === 'even' && !!gapLabel(i)
+    out.push({
+      x1: dx(i - 1),
+      x2: dx(i),
+      elided,
+      label: elided ? gapLabel(i) : null,
+      mid: (dx(i - 1) + dx(i)) / 2,
+    })
+  }
+  return out
+})
+
+/** Ruler years on the axis (proportional only), skipped where a dot would collide. */
+const ticks = computed(() => {
+  if (props.spacing === 'even' || n.value < 2) return []
+  const { min, max } = span.value
+  const step = max - min > 60 ? 20 : max - min > 25 ? 10 : 5
+  const x0 = cx(0)
+  const x1 = cx(n.value - 1)
+  const dots = sorted.value.map((_, i) => dx(i))
+  const out: { x: number; label: string }[] = []
+  for (let y = Math.ceil(min / step) * step; y <= max; y += step) {
+    const x = x0 + ((y - min) / (max - min)) * (x1 - x0)
+    if (dots.every((d) => Math.abs(d - x) > 26)) out.push({ x, label: String(y) })
+  }
+  return out
+})
 
 const canScrollLeft = ref(false)
 const canScrollRight = ref(false)
@@ -162,7 +217,7 @@ watch([trackWidth, width, effectiveLayout], () => nextTick(updateScroll))
 const PX_PER_YEAR = 6
 function verticalGap(i: number) {
   if (i === 0) return 0
-  if (props.spacing === 'even') return gapLabel(i) ? 28 : 0
+  if (props.spacing === 'even') return gapLabel(i) ? 32 : 0
   return Math.round(gapBefore(i) * PX_PER_YEAR)
 }
 
@@ -195,10 +250,12 @@ function focusEvent(id: string) {
   el?.focus({ preventScroll: true })
   // Bring it into view inside a horizontal track only; the page scroll is the caller's.
   const track = el?.closest('.tl-h__track') as HTMLElement | null
-  if (el && track) {
-    const left =
-      el.closest('li')!.offsetLeft - track.clientWidth / 2 + el.closest('li')!.clientWidth / 2
-    track.scrollTo({ left, behavior: 'smooth' })
+  const li = el?.closest('li')
+  if (track && li) {
+    track.scrollTo({
+      left: li.offsetLeft - track.clientWidth / 2 + li.clientWidth / 2,
+      behavior: 'smooth',
+    })
   }
 }
 defineExpose({ focusEvent, el: rootRef })
@@ -217,9 +274,7 @@ const titleId = `tl-title-${Math.random().toString(36).slice(2, 8)}`
   >
     <div class="tl__header">
       <div :id="titleId" class="tl__title">{{ title || 'Timeline' }}</div>
-      <small v-if="sorted.length" class="tl__meta"
-        >{{ sorted.length }} events · {{ yearsRange }}</small
-      >
+      <small v-if="sorted.length" class="tl__meta">{{ yearsRange }}</small>
     </div>
 
     <p v-if="!sorted.length" class="tl__empty">No events yet.</p>
@@ -247,19 +302,26 @@ const titleId = `tl-title-${Math.random().toString(36).slice(2, 8)}`
             class="tl-h__grid"
             :style="{
               width: `${trackWidth}px`,
-              gridTemplateColumns: `repeat(${n * 2}, 1fr)`,
-              '--tl-band': `${BAND}px`,
+              gridTemplateColumns: `repeat(${halfCols}, 1fr)`,
+              gridTemplateRows: `auto ${band}px auto`,
             }"
           >
             <li
               v-for="(event, i) in sorted"
               :key="event.id"
               class="tl-h__item"
-              :class="i % 2 === 0 ? 'tl-h__item--above' : 'tl-h__item--below'"
+              :class="[
+                above(i) ? 'tl-h__item--above' : 'tl-h__item--below',
+                { 'tl-h__item--lit': lit(event.id) },
+              ]"
               :style="{ gridColumn: gridColumn(i) }"
               :data-event-id="event.id"
+              @mouseenter="hoverId = event.id"
+              @mouseleave="hoverId = null"
+              @focusin="hoverId = event.id"
+              @focusout="hoverId = null"
             >
-              <div class="tl-card" :class="{ 'tl-card--active': activeId === event.id }">
+              <div class="tl-card">
                 <img
                   v-if="event.image"
                   class="tl-card__img"
@@ -282,58 +344,71 @@ const titleId = `tl-title-${Math.random().toString(36).slice(2, 8)}`
                 >
               </div>
             </li>
+
             <li class="tl-h__axis" aria-hidden="true">
-              <svg
-                class="tl-h__leaders"
-                viewBox="0 0 1000 64"
-                preserveAspectRatio="none"
-                :height="BAND"
-              >
-                <polyline v-for="(event, i) in sorted" :key="event.id" :points="leader(i)" />
+              <svg class="tl-h__svg" :width="trackWidth" :height="band">
+                <line
+                  v-for="(seg, k) in segments"
+                  :key="`s${k}`"
+                  class="tl-h__seg"
+                  :class="{ 'tl-h__seg--elided': seg.elided }"
+                  :x1="seg.x1"
+                  :x2="seg.x2"
+                  :y1="axisY"
+                  :y2="axisY"
+                />
+                <path
+                  v-for="(event, i) in sorted"
+                  :key="`l${event.id}`"
+                  class="tl-h__leader"
+                  :class="{ 'tl-h__leader--lit': lit(event.id) }"
+                  :d="leaderPath(i)"
+                />
+                <circle
+                  v-for="(event, i) in sorted"
+                  :key="`d${event.id}`"
+                  class="tl-h__dot"
+                  :class="{ 'tl-h__dot--lit': lit(event.id) }"
+                  :cx="dx(i)"
+                  :cy="axisY"
+                  :r="lit(event.id) ? 4.5 : 3.5"
+                />
               </svg>
-              <span class="tl-h__line" />
-              <span
+              <small
                 v-for="tick in ticks"
                 :key="tick.label"
                 class="tl-h__tick"
-                :style="{ left: `${tick.x * 100}%` }"
-                ><small>{{ tick.label }}</small></span
+                :style="{ left: `${tick.x}px`, top: `${axisY}px` }"
+                >{{ tick.label }}</small
               >
-              <template v-if="spacing === 'even'">
-                <span
-                  v-for="(event, i) in sorted"
-                  v-show="gapLabel(i)"
-                  :key="`gap-${event.id}`"
-                  class="tl-h__break"
-                  :style="{ left: `${(slotX(i) + slotX(i - 1)) * 50}%` }"
-                  ><small>{{ gapLabel(i) }}</small></span
+              <template v-for="(seg, k) in segments" :key="`g${k}`">
+                <small
+                  v-if="seg.label"
+                  class="tl-h__tick"
+                  :style="{ left: `${seg.mid}px`, top: `${axisY}px` }"
+                  >{{ seg.label }}</small
                 >
               </template>
-              <span
-                v-for="(event, i) in sorted"
-                :key="`dot-${event.id}`"
-                class="tl-h__dot"
-                :class="{ 'tl-h__dot--active': activeId === event.id }"
-                :style="{ left: `${dotX(i) * 100}%` }"
-              />
             </li>
           </ol>
         </div>
         <CdxButton
           v-if="canScrollLeft"
           class="tl-h__scroll tl-h__scroll--prev"
+          size="small"
           aria-label="Earlier events"
           @click="scrollTrack(-1)"
         >
-          <CdxIcon :icon="cdxIconPrevious" />
+          <CdxIcon :icon="cdxIconPrevious" size="small" />
         </CdxButton>
         <CdxButton
           v-if="canScrollRight"
           class="tl-h__scroll tl-h__scroll--next"
+          size="small"
           aria-label="Later events"
           @click="scrollTrack(1)"
         >
-          <CdxIcon :icon="cdxIconNext" />
+          <CdxIcon :icon="cdxIconNext" size="small" />
         </CdxButton>
       </div>
 
@@ -343,18 +418,22 @@ const titleId = `tl-title-${Math.random().toString(36).slice(2, 8)}`
           v-for="(event, i) in sorted"
           :key="event.id"
           class="tl-v__item"
-          :style="{ marginTop: `${verticalGap(i)}px`, '--gap': `${verticalGap(i)}px` }"
+          :class="{
+            'tl-v__item--first': i === 0,
+            'tl-v__item--last': i === n - 1,
+            'tl-v__item--elided': spacing === 'even' && !!gapLabel(i),
+            'tl-v__item--lit': lit(event.id),
+          }"
+          :style="{ '--gap': `${verticalGap(i)}px` }"
           :data-event-id="event.id"
+          @mouseenter="hoverId = event.id"
+          @mouseleave="hoverId = null"
         >
-          <span v-if="gapLabel(i)" class="tl-v__gap" aria-hidden="true"
-            ><small>{{ gapLabel(i) }}</small></span
-          >
-          <span
-            class="tl-v__dot"
-            :class="{ 'tl-v__dot--active': activeId === event.id }"
-            aria-hidden="true"
-          />
-          <div class="tl-card tl-card--row" :class="{ 'tl-card--active': activeId === event.id }">
+          <small v-if="gapLabel(i) && verticalGap(i)" class="tl-v__gap" aria-hidden="true">{{
+            gapLabel(i)
+          }}</small>
+          <span class="tl-v__dot" aria-hidden="true" />
+          <div class="tl-card tl-card--row">
             <div class="tl-card__text">
               <time class="tl-card__date" :datetime="isoDate(event.date)">{{
                 formatDate(event.date)
@@ -389,9 +468,10 @@ const titleId = `tl-title-${Math.random().toString(36).slice(2, 8)}`
   /* Sit beside floated figures/infoboxes (narrower), don't drop below them. */
   display: flow-root;
   min-width: 0;
-  margin-block: var(--spacing-150) var(--spacing-150);
-  padding-block: var(--spacing-75) var(--spacing-100);
-  border-block: var(--border-width-base, 1px) solid var(--border-color-subtle);
+  margin-block: var(--spacing-200);
+  padding-block: var(--spacing-100) var(--spacing-150);
+  border-top: var(--border-width-base, 1px) solid var(--border-color-base);
+  border-bottom: var(--border-width-base, 1px) solid var(--border-color-subtle);
   color: var(--color-base);
   font-family: var(--font-family-base);
 }
@@ -401,8 +481,7 @@ const titleId = `tl-title-${Math.random().toString(36).slice(2, 8)}`
   align-items: baseline;
   justify-content: space-between;
   gap: var(--spacing-75);
-  flex-wrap: wrap;
-  margin-block-end: var(--spacing-75);
+  margin-block-end: var(--spacing-150);
 }
 
 /* Heading 4 */
@@ -413,10 +492,7 @@ const titleId = `tl-title-${Math.random().toString(36).slice(2, 8)}`
   line-height: var(--line-height-large);
 }
 
-.tl__meta {
-  color: var(--color-subtle);
-}
-
+.tl__meta,
 .tl__empty {
   color: var(--color-subtle);
   margin: 0;
@@ -435,10 +511,9 @@ const titleId = `tl-title-${Math.random().toString(36).slice(2, 8)}`
   display: block;
 }
 
-/* ── Cards (shared) ─────────────────────────────────────────────────────── */
+/* ── Labels (shared) ────────────────────────────────────────────────────── */
 .tl-card {
   position: relative;
-  border-radius: var(--border-radius-base, 2px);
 }
 /* Beat the skin's `.mw-parser-output a:link` colours: labels read as text, not links. */
 .tl .tl-card__link.tl-card__link,
@@ -446,28 +521,18 @@ const titleId = `tl-title-${Math.random().toString(36).slice(2, 8)}`
   color: var(--color-base);
   text-decoration: none;
 }
-/* Stretched link: the whole card is the target; the citation sits above it. */
+/* Stretched link: the whole label is the target; the citation sits above it. */
 .tl-card__link::after {
   content: '';
   position: absolute;
-  inset: 0;
-  border-radius: inherit;
+  inset: -4px;
 }
 .tl-card__link:focus-visible {
   outline: none;
 }
 .tl-card__link:focus-visible::after {
-  box-shadow: 0 0 0 var(--border-width-thick, 2px) var(--box-shadow-color-progressive--focus);
   border-radius: var(--border-radius-base, 2px);
-}
-.tl-card:hover {
-  background-color: var(--background-color-interactive-subtle);
-}
-.tl .tl-card:hover .tl-card__link.tl-card__link {
-  color: var(--color-progressive);
-}
-.tl-card--active {
-  background-color: var(--background-color-progressive-subtle);
+  box-shadow: 0 0 0 var(--border-width-thick, 2px) var(--box-shadow-color-progressive--focus);
 }
 
 /* Heading 4 */
@@ -477,6 +542,7 @@ const titleId = `tl-title-${Math.random().toString(36).slice(2, 8)}`
   font-size: var(--font-size-large);
   font-weight: var(--font-weight-bold);
   line-height: var(--line-height-large);
+  transition: color 120ms;
 }
 
 /* Small */
@@ -486,12 +552,16 @@ const titleId = `tl-title-${Math.random().toString(36).slice(2, 8)}`
   font-size: var(--font-size-small);
   font-weight: var(--font-weight-normal);
   line-height: var(--line-height-small);
-  color: var(--color-base);
+  color: var(--color-subtle);
 }
-
 .tl-card__ref {
   position: relative;
   z-index: 1;
+}
+
+.tl-h__item--lit .tl-card__date,
+.tl-v__item--lit .tl-card__date {
+  color: var(--color-progressive);
 }
 
 /* ── Horizontal ─────────────────────────────────────────────────────────── */
@@ -501,185 +571,177 @@ const titleId = `tl-title-${Math.random().toString(36).slice(2, 8)}`
 .tl-h__track {
   overflow-x: auto;
   overflow-y: hidden;
-  scrollbar-width: thin;
-  padding-block-end: var(--spacing-25);
+  scrollbar-width: none;
+}
+.tl-h__track::-webkit-scrollbar {
+  display: none;
 }
 .tl ol.tl-h__grid {
   display: grid;
-  grid-template-rows: auto var(--tl-band) auto;
   list-style: none;
   margin: 0;
   padding: 0;
 }
 .tl li.tl-h__item {
   margin: 0;
-  padding-inline: var(--spacing-50);
+  padding-inline: var(--spacing-75);
   min-width: 0;
+  text-align: center;
 }
 .tl-h__item--above {
   grid-row: 1;
   align-self: end;
+  padding-bottom: 6px;
 }
 .tl-h__item--below {
   grid-row: 3;
   align-self: start;
-}
-.tl-h__item .tl-card {
-  padding: var(--spacing-50);
-  text-align: center;
+  padding-top: 6px;
 }
 .tl-card__img {
   display: block;
   width: 100%;
-  height: 88px;
+  max-width: 120px;
+  aspect-ratio: 3 / 2;
+  margin: 0 auto var(--spacing-50);
   object-fit: cover;
-  margin-block-end: var(--spacing-50);
   border-radius: var(--border-radius-base, 2px);
   background: var(--background-color-neutral-subtle);
 }
+
 .tl li.tl-h__axis {
-  margin: 0;
   grid-row: 2;
   grid-column: 1 / -1;
   position: relative;
-  height: var(--tl-band);
+  margin: 0;
 }
-.tl-h__leaders {
+.tl-h__svg {
   position: absolute;
   inset: 0;
-  width: 100%;
   overflow: visible;
 }
-.tl-h__leaders polyline {
+.tl-h__seg {
+  stroke: var(--color-base);
+  stroke-width: 1;
+}
+.tl-h__seg--elided {
+  stroke-dasharray: 1 4;
+  stroke-linecap: round;
+  stroke-width: 1.5;
+}
+.tl-h__leader {
   fill: none;
   stroke: var(--border-color-base);
   stroke-width: 1;
-  vector-effect: non-scaling-stroke;
+  transition: stroke 120ms;
 }
-.tl-h__line {
-  position: absolute;
-  top: calc(50% - 1px);
-  inset-inline: 0;
-  height: 2px;
-  background: var(--color-base);
+.tl-h__leader--lit {
+  stroke: var(--color-progressive);
 }
 .tl-h__dot {
-  position: absolute;
-  top: 50%;
-  width: 12px;
-  height: 12px;
-  margin: -6px 0 0 -6px;
-  border-radius: 50%;
-  background: var(--background-color-base);
-  border: 2px solid var(--color-base);
-  box-sizing: border-box;
+  fill: var(--color-base);
+  transition:
+    fill 120ms,
+    r 120ms;
 }
-.tl-h__dot--active {
-  background: var(--color-progressive);
-  border-color: var(--color-progressive);
+.tl-h__dot--lit {
+  fill: var(--color-progressive);
 }
+/* Ruler labels sit on the axis, interrupting it. */
 .tl-h__tick {
   position: absolute;
-  top: 50%;
-  width: 1px;
-  height: 6px;
-  background: var(--color-base);
-}
-.tl-h__tick small {
-  position: absolute;
-  top: 6px;
-  left: 0;
-  transform: translateX(-50%);
-  color: var(--color-subtle);
-  background: var(--background-color-base);
-  padding-inline: 2px;
-}
-.tl-h__break {
-  position: absolute;
-  top: 50%;
   transform: translate(-50%, -50%);
-  padding-inline: var(--spacing-25);
+  padding-inline: 6px;
   background: var(--background-color-base);
   color: var(--color-subtle);
   white-space: nowrap;
 }
 .tl-h__scroll {
   position: absolute;
-  top: calc(50% - 16px);
+  top: 50%;
+  transform: translateY(-50%);
   z-index: 2;
   border-radius: 50%;
-  box-shadow: var(--box-shadow-medium);
+  background: var(--background-color-base);
+  box-shadow: var(--box-shadow-small, 0 1px 2px rgba(0, 0, 0, 0.15));
 }
 .tl-h__scroll--prev {
-  inset-inline-start: -8px;
+  inset-inline-start: 0;
 }
 .tl-h__scroll--next {
-  inset-inline-end: -8px;
+  inset-inline-end: 0;
 }
 
 /* ── Vertical ───────────────────────────────────────────────────────────── */
 .tl ol.tl-v {
-  position: relative;
+  --dot-y: 14px;
+  --rule-x: 3px;
   list-style: none;
   margin: 0;
-  padding: 0 0 0 28px;
-}
-.tl-v::before {
-  content: '';
-  position: absolute;
-  top: 10px;
-  bottom: 10px;
-  left: 7px;
-  width: 2px;
-  background: var(--color-base);
+  padding: 0;
 }
 .tl li.tl-v__item {
   position: relative;
   margin: 0;
-  padding-block: 2px;
+  padding: var(--gap, 0px) 0 var(--spacing-100) 24px;
+}
+/* The rule is drawn per item: ::after from the previous dot down to this one
+   (dotted where time was skipped), ::before from this dot onwards. */
+.tl-v__item::before,
+.tl-v__item::after {
+  content: '';
+  position: absolute;
+  left: var(--rule-x);
+  width: 0;
+  border-left: 1px solid var(--color-base);
+}
+.tl-v__item::after {
+  top: 0;
+  height: calc(var(--gap, 0px) + var(--dot-y));
+}
+.tl-v__item::before {
+  top: calc(var(--gap, 0px) + var(--dot-y));
+  bottom: 0;
+}
+.tl-v__item--first::after,
+.tl-v__item--last::before {
+  display: none;
+}
+.tl-v__item--elided::after {
+  border-left-style: dotted;
+  border-left-width: 2px;
+  margin-left: -0.5px;
 }
 .tl-v__dot {
   position: absolute;
-  left: -27px;
-  top: 12px;
-  width: 12px;
-  height: 12px;
+  left: calc(var(--rule-x) - 3px);
+  top: calc(var(--gap, 0px) + var(--dot-y) - 3px);
+  z-index: 1;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
-  border: 2px solid var(--color-base);
-  background: var(--background-color-base);
-  box-sizing: border-box;
+  background: var(--color-base);
+  transition:
+    background-color 120ms,
+    transform 120ms;
 }
-.tl-v__dot--active {
+.tl-v__item--lit .tl-v__dot {
   background: var(--color-progressive);
-  border-color: var(--color-progressive);
+  transform: scale(1.3);
 }
 .tl-v__gap {
   position: absolute;
-  bottom: 100%;
-  left: 0;
+  top: 0;
+  left: 24px;
   display: flex;
   align-items: center;
   height: var(--gap);
   color: var(--color-subtle);
-  white-space: nowrap;
-}
-/* Even spacing: the line is broken where time was skipped. */
-.tl--even .tl-v__gap::before {
-  content: '';
-  position: absolute;
-  left: -24px;
-  width: 10px;
-  height: 6px;
-  background: var(--background-color-base);
-  border-block: 1px solid var(--color-base);
-  transform: skewY(-20deg);
 }
 .tl-card--row {
   display: flex;
   align-items: flex-start;
   gap: var(--spacing-75);
-  padding: var(--spacing-25) var(--spacing-50);
-  margin-inline-start: calc(-1 * var(--spacing-50));
 }
 .tl-card__text {
   flex: 1;
@@ -687,8 +749,9 @@ const titleId = `tl-title-${Math.random().toString(36).slice(2, 8)}`
 }
 .tl-card__thumb {
   flex: none;
-  width: 64px;
-  height: 64px;
+  width: 56px;
+  height: 56px;
+  margin-top: 4px;
   object-fit: cover;
   border-radius: var(--border-radius-base, 2px);
   background: var(--background-color-neutral-subtle);

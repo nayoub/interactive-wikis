@@ -4,17 +4,7 @@
  * editable; a live reader preview; where it goes; insert / done.
  */
 import { computed, ref } from 'vue'
-import {
-  CdxButton,
-  CdxDialog,
-  CdxField,
-  CdxIcon,
-  CdxMessage,
-  CdxSelect,
-  CdxTab,
-  CdxTabs,
-  CdxTextInput,
-} from '@wikimedia/codex'
+import { CdxButton, CdxDialog, CdxIcon, CdxSelect, CdxTab, CdxTabs } from '@wikimedia/codex'
 import { cdxIconFullscreen } from '@wikimedia/codex-icons'
 
 import CurationPanel from '../selection/CurationPanel.vue'
@@ -127,12 +117,18 @@ const hint = computed(() =>
     @close="emit('close')"
   >
     <CdxTabs v-model:active="tab" class="tp__tabs" :framed="false">
-      <CdxTab name="events" :label="`Events (${count})`">
+      <CdxTab name="events" label="Events">
         <div class="tp__pane">
-          <CdxMessage v-if="!count" class="tp__intro">
-            Every date in the article is now highlighted. Tap the ones that belong on the timeline;
-            tap again to remove. Each one brings its sentence with it.
-          </CdxMessage>
+          <input
+            v-model="draft.title"
+            class="tp__title"
+            placeholder="Untitled timeline"
+            aria-label="Timeline title"
+          />
+          <div v-if="!count" class="tp__empty">
+            <p>Tap any highlighted date in the article.</p>
+            <small>Each date brings its sentence with it. Tap again to remove it.</small>
+          </div>
           <ol v-else class="tp__list">
             <li v-for="event in sorted" :key="event.id" class="tp__item">
               <EventEditor
@@ -149,10 +145,6 @@ const hint = computed(() =>
       </CdxTab>
       <CdxTab name="preview" label="Preview">
         <div class="tp__pane">
-          <CdxField class="tp__title-field">
-            <template #label>Timeline title</template>
-            <CdxTextInput v-model="draft.title" placeholder="Timeline" />
-          </CdxField>
           <TimelineView
             :events="draft.events"
             :title="draft.title"
@@ -160,22 +152,28 @@ const hint = computed(() =>
             :skin="skin"
             layout="vertical"
           />
-          <CdxButton v-if="skin === 'desktop' && count" weight="quiet" @click="widePreview = true">
-            <CdxIcon :icon="cdxIconFullscreen" /> Preview at article width
+          <CdxButton
+            v-if="skin === 'desktop' && count"
+            class="tp__wide-btn"
+            weight="quiet"
+            size="small"
+            @click="widePreview = true"
+          >
+            <CdxIcon :icon="cdxIconFullscreen" size="small" /> At article width
           </CdxButton>
         </div>
       </CdxTab>
     </CdxTabs>
 
     <template #footer>
-      <CdxField v-if="!draft.editingPlaced" class="tp__placement">
-        <template #label>Place it</template>
-        <CdxSelect
-          v-model:selected="placementValue"
-          :menu-items="placementItems"
-          :menu-config="{ visibleItemLimit: 6 }"
-        />
-      </CdxField>
+      <CdxSelect
+        v-if="!draft.editingPlaced"
+        v-model:selected="placementValue"
+        class="tp__placement"
+        aria-label="Where to insert"
+        :menu-items="placementItems"
+        :menu-config="{ visibleItemLimit: 6 }"
+      />
       <div class="tp__actions">
         <CdxButton weight="quiet" @click="emit('discard')">{{
           draft.editingPlaced ? 'Cancel' : 'Discard'
@@ -227,16 +225,50 @@ const hint = computed(() =>
 .tp__item {
   margin: 0;
   padding-block: var(--spacing-100);
-  border-bottom: var(--border-width-base, 1px) solid var(--border-color-subtle);
 }
-.tp__item:first-child {
-  padding-top: 0;
+.tp__item + .tp__item {
+  border-top: var(--border-width-base, 1px) solid var(--border-color-subtle);
 }
-.tp__title-field {
-  margin-bottom: var(--spacing-75);
+/* Heading 4, editable in place. */
+.tp__title {
+  display: block;
+  box-sizing: border-box;
+  width: calc(100% + var(--spacing-50));
+  margin: 0 0 var(--spacing-50) calc(-1 * var(--spacing-50));
+  padding: 2px var(--spacing-50);
+  border: 0;
+  border-radius: var(--border-radius-base, 2px);
+  background: transparent;
+  color: var(--color-base);
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-large);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-large);
+}
+.tp__title::placeholder {
+  color: var(--color-placeholder);
+}
+.tp__title:hover {
+  background: var(--background-color-interactive-subtle);
+}
+.tp__title:focus {
+  outline: none;
+  background: var(--background-color-base);
+  box-shadow: inset 0 0 0 1px var(--border-color-progressive);
+}
+.tp__empty {
+  padding-block: var(--spacing-200);
+  color: var(--color-subtle);
+}
+.tp__empty p {
+  margin: 0 0 var(--spacing-25);
+  color: var(--color-base);
+}
+.tp__wide-btn {
+  margin-top: var(--spacing-75);
 }
 .tp__placement {
-  margin: 0;
+  width: 100%;
 }
 .tp__actions {
   display: flex;

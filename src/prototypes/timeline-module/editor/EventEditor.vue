@@ -1,16 +1,12 @@
 <script setup lang="ts">
-/** One picked event in the curation list: label, date, image, source, delete. */
-import { computed, ref } from 'vue'
-import {
-  CdxButton,
-  CdxCheckbox,
-  CdxField,
-  CdxIcon,
-  CdxSelect,
-  CdxTextArea,
-  CdxTextInput,
-} from '@wikimedia/codex'
-import { cdxIconCalendar, cdxIconImage, cdxIconTrash, cdxIconUndo } from '@wikimedia/codex-icons'
+/**
+ * One picked event in the curation list. Reads as the event itself — date,
+ * label, source — and becomes editable where you touch it. Tools appear on
+ * hover (always visible on touch).
+ */
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { CdxButton, CdxCheckbox, CdxIcon, CdxSelect, CdxTextInput } from '@wikimedia/codex'
+import { cdxIconArrowNext, cdxIconClose, cdxIconImage, cdxIconTrash } from '@wikimedia/codex-icons'
 
 import { MONTH_NAMES, formatDate } from '../timeline/format'
 import type { Precision, TimelineEvent } from '../timeline/types'
@@ -20,19 +16,43 @@ const event = defineModel<TimelineEvent>({ required: true })
 const emit = defineEmits<{ remove: []; chooseImage: []; showSource: [] }>()
 
 const dateOpen = ref(false)
+const sourceOpen = ref(false)
 
-const label = computed({
-  get: () => event.value.label,
-  set: (v: string) => (event.value.label = v.replace(/\n/g, ' ')),
+// Label: a borderless, self-sizing textarea.
+const labelRef = ref<HTMLTextAreaElement | null>(null)
+function fit() {
+  const el = labelRef.value
+  // Skip while hidden (collapsed sheet): scrollHeight is 0 there.
+  if (!el || !el.offsetParent) return
+  el.style.height = 'auto'
+  el.style.height = `${el.scrollHeight}px`
+}
+// Refit when the row first becomes visible or its width changes.
+let ro: ResizeObserver | null = null
+onMounted(() => {
+  if (!labelRef.value) return
+  ro = new ResizeObserver(fit)
+  ro.observe(labelRef.value)
 })
+onBeforeUnmount(() => ro?.disconnect())
+function onLabel(e: Event) {
+  event.value.label = (e.target as HTMLTextAreaElement).value.replace(/\n/g, ' ')
+  fit()
+}
+onMounted(fit)
+watch(
+  () => event.value.label,
+  () => nextTick(fit),
+)
+const labelEdited = computed(() => !!props.draftLabel && props.draftLabel !== event.value.label)
 
+// Date
 const precisionItems = [
   { value: 'year', label: 'Year' },
-  { value: 'month', label: 'Month and year' },
-  { value: 'day', label: 'Full date' },
+  { value: 'month', label: 'Month' },
+  { value: 'day', label: 'Day' },
 ]
 const monthItems = MONTH_NAMES.map((m, i) => ({ value: i + 1, label: m }))
-
 const precision = computed({
   get: () => event.value.date.precision,
   set: (p: Precision) => {
@@ -48,12 +68,10 @@ const precision = computed({
     }
   },
 })
-
 function num(v: string | number, min: number, max: number) {
   const n = Math.round(Number(v))
   return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : min
 }
-
 const year = computed({
   get: () => String(event.value.date.start.y),
   set: (v) => (event.value.date.start.y = num(v, 1, 2100)),
@@ -84,7 +102,7 @@ const circa = computed({
   set: (v: boolean) => (event.value.date.circa = v),
 })
 
-/** Source sentence split around the matched date, so it can be emphasised. */
+/** Source sentence split around the matched date, so it can be marked. */
 const sourceParts = computed(() => {
   const s = event.value.sourceText
   const d = event.value.sourceDateText
@@ -92,94 +110,120 @@ const sourceParts = computed(() => {
   if (i === -1) return [s, '', '']
   return [s.slice(0, i), d, s.slice(i + d.length)]
 })
-
-const labelEdited = computed(() => !!props.draftLabel && props.draftLabel !== event.value.label)
 </script>
 
 <template>
   <div class="ev">
-    <div class="ev__row">
+    <div class="ev__head">
       <button
         type="button"
         class="ev__date"
         :aria-expanded="dateOpen"
-        :aria-label="`Date: ${formatDate(event.date)}. Adjust date`"
+        :aria-label="`${formatDate(event.date)}. Adjust date`"
         @click="dateOpen = !dateOpen"
       >
-        <CdxIcon :icon="cdxIconCalendar" size="small" />
-        <span>{{ formatDate(event.date) }}</span>
+        {{ formatDate(event.date) }}
       </button>
-      <CdxButton
-        weight="quiet"
-        action="destructive"
-        size="small"
-        aria-label="Remove event"
-        @click="emit('remove')"
-      >
-        <CdxIcon :icon="cdxIconTrash" />
-      </CdxButton>
+      <div class="ev__tools">
+        <CdxButton
+          weight="quiet"
+          size="small"
+          :aria-label="event.image ? 'Change image' : 'Add image'"
+          @click="emit('chooseImage')"
+        >
+          <CdxIcon :icon="cdxIconImage" size="small" />
+        </CdxButton>
+        <CdxButton weight="quiet" size="small" aria-label="Remove event" @click="emit('remove')">
+          <CdxIcon :icon="cdxIconTrash" size="small" />
+        </CdxButton>
+      </div>
     </div>
 
     <div v-if="dateOpen" class="ev__dates">
-      <CdxField>
-        <template #label>Precision</template>
-        <CdxSelect v-model:selected="precision" :menu-items="precisionItems" />
-      </CdxField>
-      <div class="ev__date-fields">
-        <CdxField v-if="precision === 'day'" class="ev__day">
-          <template #label>Day</template>
-          <CdxTextInput v-model="day" input-type="number" min="1" max="31" />
-        </CdxField>
-        <CdxField v-if="precision !== 'year'" class="ev__month">
-          <template #label>Month</template>
-          <CdxSelect v-model:selected="month" :menu-items="monthItems" />
-        </CdxField>
-        <CdxField class="ev__year">
-          <template #label>Year</template>
-          <CdxTextInput v-model="year" input-type="number" />
-        </CdxField>
+      <CdxSelect v-model:selected="precision" class="ev__precision" :menu-items="precisionItems" />
+      <CdxTextInput
+        v-if="precision === 'day'"
+        v-model="day"
+        class="ev__num ev__num--day"
+        input-type="number"
+        aria-label="Day"
+      />
+      <CdxSelect
+        v-if="precision !== 'year'"
+        v-model:selected="month"
+        class="ev__month"
+        :menu-items="monthItems"
+      />
+      <CdxTextInput v-model="year" class="ev__num" input-type="number" aria-label="Year" />
+      <span v-if="isRange" class="ev__until">to</span>
+      <CdxTextInput
+        v-if="isRange"
+        v-model="endYear"
+        class="ev__num"
+        input-type="number"
+        aria-label="Until year"
+      />
+      <div class="ev__flags">
+        <CdxCheckbox v-model="circa" inline>c.</CdxCheckbox>
+        <CdxCheckbox v-model="isRange" inline>Span</CdxCheckbox>
       </div>
-      <div class="ev__date-fields">
-        <CdxCheckbox v-model="circa" inline>Approximate (c.)</CdxCheckbox>
-        <CdxCheckbox v-model="isRange" inline>Span of years</CdxCheckbox>
-      </div>
-      <CdxField v-if="isRange" class="ev__year">
-        <template #label>Until</template>
-        <CdxTextInput v-model="endYear" input-type="number" />
-      </CdxField>
     </div>
 
-    <CdxField class="ev__label">
-      <template #label>Label</template>
-      <CdxTextArea v-model="label" autosize rows="1" />
-      <template v-if="labelEdited" #help-text>
-        <button type="button" class="ev__link" @click="event.label = draftLabel!">
-          <CdxIcon :icon="cdxIconUndo" size="x-small" /> Use drafted label
-        </button>
-      </template>
-    </CdxField>
-
-    <div class="ev__media">
-      <template v-if="event.image">
-        <img class="ev__thumb" :src="event.image.src" :alt="event.image.caption" />
-        <CdxButton size="small" @click="emit('chooseImage')">Change</CdxButton>
-        <CdxButton size="small" weight="quiet" @click="event.image = undefined"
-          >Remove image</CdxButton
+    <div class="ev__body">
+      <div class="ev__text">
+        <textarea
+          ref="labelRef"
+          class="ev__label"
+          rows="1"
+          :value="event.label"
+          aria-label="Label"
+          @input="onLabel"
+        />
+        <button
+          v-if="labelEdited"
+          type="button"
+          class="ev__link ev__revert"
+          @click="event.label = draftLabel!"
         >
-      </template>
-      <CdxButton v-else size="small" weight="quiet" @click="emit('chooseImage')">
-        <CdxIcon :icon="cdxIconImage" /> Add image
-      </CdxButton>
+          Use drafted label
+        </button>
+      </div>
+      <div v-if="event.image" class="ev__image">
+        <button
+          type="button"
+          class="ev__thumb"
+          aria-label="Change image"
+          @click="emit('chooseImage')"
+        >
+          <img :src="event.image.src" :alt="event.image.caption" />
+        </button>
+        <button
+          type="button"
+          class="ev__unimage"
+          aria-label="Remove image"
+          @click="event.image = undefined"
+        >
+          <CdxIcon :icon="cdxIconClose" size="x-small" />
+        </button>
+      </div>
     </div>
 
-    <blockquote class="ev__source">
-      {{ sourceParts[0] }}<mark>{{ sourceParts[1] }}</mark
-      >{{ sourceParts[2] }}
-      <sup v-if="event.citation" class="reference">{{ event.citation.label }}</sup>
-    </blockquote>
+    <small class="ev__source" :class="{ 'ev__source--open': sourceOpen }">
+      <button
+        type="button"
+        class="ev__quote"
+        :aria-expanded="sourceOpen"
+        @click="sourceOpen = !sourceOpen"
+      >
+        {{ sourceParts[0] }}<mark>{{ sourceParts[1] }}</mark
+        >{{ sourceParts[2] }}
+      </button>
+    </small>
     <small class="ev__where">
-      {{ event.sourceAnchor.sectionTitle }} ·
-      <button type="button" class="ev__link" @click="emit('showSource')">Show in article</button>
+      {{ event.sourceAnchor.sectionTitle }}
+      <button type="button" class="ev__link" @click="emit('showSource')">
+        Show in article <CdxIcon :icon="cdxIconArrowNext" size="x-small" />
+      </button>
     </small>
   </div>
 </template>
@@ -188,94 +232,220 @@ const labelEdited = computed(() => !!props.draftLabel && props.draftLabel !== ev
 .ev {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-50);
+  gap: var(--spacing-25);
 }
-.ev__row {
+.ev__head {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  min-height: 32px;
 }
+
 /* Heading 4 */
 .ev__date {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-25);
-  padding: 2px var(--spacing-50) 2px var(--spacing-25);
-  margin-inline-start: calc(-1 * var(--spacing-25));
+  padding: 0;
   border: 0;
-  border-radius: var(--border-radius-base, 2px);
-  background: transparent;
+  background: none;
   color: var(--color-base);
   font-family: var(--font-family-base);
   font-size: var(--font-size-large);
   font-weight: var(--font-weight-bold);
   line-height: var(--line-height-large);
+  text-decoration: underline dotted transparent;
+  text-underline-offset: 4px;
   cursor: pointer;
 }
-.ev__date:hover {
-  background: var(--background-color-interactive-subtle--hover);
+.ev__date:hover,
+.ev__date[aria-expanded='true'] {
+  text-decoration-color: var(--border-color-base);
 }
-.ev__date .cdx-icon {
+
+.ev__tools {
+  display: flex;
+  gap: 2px;
   color: var(--color-subtle);
 }
+@media (hover: hover) {
+  .ev__tools {
+    opacity: 0;
+    transition: opacity 120ms;
+  }
+  .ev:hover .ev__tools,
+  .ev:focus-within .ev__tools {
+    opacity: 1;
+  }
+}
+
 .ev__dates {
-  padding: var(--spacing-75);
-  background: var(--background-color-interactive-subtle);
-  border-radius: var(--border-radius-base, 2px);
-}
-.ev__dates :deep(.cdx-field) {
-  margin-top: 0;
-}
-.ev__date-fields {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--spacing-50);
-  margin-top: var(--spacing-50);
-}
-.ev__day {
-  width: 72px;
-}
-.ev__month {
-  flex: 1;
-  min-width: 120px;
-}
-.ev__year {
-  width: 96px;
-}
-.ev__label {
-  margin-top: 0 !important;
-}
-.ev__media {
-  display: flex;
   align-items: center;
   gap: var(--spacing-50);
+  padding-block: var(--spacing-50);
 }
-.ev__thumb {
-  width: 56px;
-  height: 40px;
-  object-fit: cover;
-  border-radius: var(--border-radius-base, 2px);
+.ev__dates :deep(.cdx-select-vue) {
+  min-width: 0;
 }
-/* Block quote */
-.ev__source {
+.ev__precision {
+  width: 96px;
+}
+.ev__month {
+  width: 132px;
+}
+.ev__num {
+  width: 80px;
+  min-width: 0;
+}
+.ev__num--day {
+  width: 60px;
+}
+.ev__until {
+  color: var(--color-subtle);
+}
+.ev__flags {
+  display: flex;
+  gap: var(--spacing-75);
+}
+.ev__flags :deep(.cdx-checkbox) {
   margin: 0;
-  padding-inline-start: var(--spacing-75);
-  border-inline-start: 2px solid var(--border-color-subtle);
-  font-family: var(--font-family-serif, serif);
+}
+
+.ev__body {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-75);
+}
+.ev__text {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Body: the label reads as text until you touch it. */
+.ev__label {
+  display: block;
+  box-sizing: border-box;
+  margin: 0 0 0 calc(-1 * var(--spacing-50));
+  padding: 2px var(--spacing-50);
+  width: calc(100% + var(--spacing-50));
+  overflow: hidden;
+  resize: none;
+  border: 0;
+  border-radius: var(--border-radius-base, 2px);
+  background: transparent;
+  color: var(--color-base);
+  font-family: var(--font-family-base);
   font-size: var(--font-size-medium);
   font-weight: var(--font-weight-normal);
   line-height: var(--line-height-medium);
+  transition:
+    background-color 120ms,
+    box-shadow 120ms;
+}
+.ev__label:hover {
+  background: var(--background-color-interactive-subtle);
+}
+.ev__label:focus {
+  outline: none;
+  background: var(--background-color-base);
+  box-shadow: inset 0 0 0 1px var(--border-color-progressive);
+}
+.ev .ev__revert {
+  margin-top: 2px;
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+  display: none;
+}
+.ev:focus-within .ev__link.ev__revert {
+  display: inline-flex;
+}
+@media (hover: hover) {
+  .ev:hover .ev__link.ev__revert {
+    display: inline-flex;
+  }
+}
+
+.ev__image {
+  position: relative;
+  flex: none;
+}
+.ev__thumb {
+  display: block;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+.ev__thumb img {
+  display: block;
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: var(--border-radius-base, 2px);
+}
+.ev__unimage {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--background-color-base);
+  box-shadow: var(--box-shadow-small, 0 1px 2px rgba(0, 0, 0, 0.2));
+  color: var(--color-subtle);
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .ev__unimage {
+    opacity: 0;
+  }
+  .ev__image:hover .ev__unimage,
+  .ev__unimage:focus-visible {
+    opacity: 1;
+  }
+}
+
+/* Small: the source, folded to two lines until opened. */
+.ev__source {
   color: var(--color-subtle);
 }
-.ev__source mark {
-  background: var(--background-color-progressive-subtle);
+.ev__quote {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.ev__source--open .ev__quote {
+  -webkit-line-clamp: unset;
+}
+.ev__quote mark {
+  background: none;
   color: var(--color-base);
-  padding-inline: 1px;
+  font-weight: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--border-color-progressive);
+  text-underline-offset: 3px;
 }
 .ev__where {
-  color: var(--color-subtle);
+  display: flex;
+  justify-content: space-between;
+  color: var(--color-placeholder);
 }
 .ev__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
   padding: 0;
   border: 0;
   background: none;
@@ -285,5 +455,8 @@ const labelEdited = computed(() => !!props.draftLabel && props.draftLabel !== ev
 }
 .ev__link:hover {
   text-decoration: underline;
+}
+.ev__link .cdx-icon {
+  color: inherit;
 }
 </style>
