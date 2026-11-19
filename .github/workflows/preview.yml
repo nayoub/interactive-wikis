@@ -1,0 +1,104 @@
+name: Build PR preview
+
+# Step 1 of 2 for PR previews. Builds every pull request, including ones from
+# forks, with a read-only token, so the PR's code can't write to the repo.
+# preview-deploy.yml then publishes the build to gh-pages.
+#
+# GitHub skips pull_request runs while a PR conflicts with its base, so
+# pushes to this repo's PRs into the default branch are built on push
+# instead, which runs either way. pull_request covers everything else: fork
+# PRs, PRs into other branches, and opening, reopening and closing any PR.
+
+on:
+  push:
+    branches-ignore: [main, gh-pages]
+  pull_request:
+    types: [opened, reopened, synchronize, closed]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  build:
+    # Skip branch deletions, and pushes to this repo's PRs into the default
+    # branch arriving as pull_request events: the push run builds those.
+    if: >-
+      (github.event_name == 'push' && !github.event.deleted) ||
+      (github.event_name == 'pull_request' &&
+        (github.event.pull_request.head.repo.full_name != github.repository ||
+          github.event.pull_request.base.ref != github.event.repository.default_branch ||
+          github.event.action != 'synchronize'))
+    # On the job, not the workflow, so runs skipped by the `if` above never
+    # join a group and can't cancel a real build. Push and pull_request runs
+    # get separate groups (by branch and by PR), so a push that finds no PR
+    # can't cancel a PR's build either. Runs that finish out of order are
+    # fine: preview-deploy.yml only deploys a PR's latest commit and removes
+    # closed PRs' previews.
+    concurrency:
+      group: preview-build-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref_name }}
+      cancel-in-progress: true
+    runs-on: ubuntu-latest
+    steps:
+      # A push doesn't say which PR it belongs to, so look up the branch's
+      # open PR into the default branch (there can be only one). No PR means
+      # nothing to preview.
+      - name: Find PR
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          OWNER: ${{ github.repository_owner }}
+          BRANCH: ${{ github.ref_name }}
+          BASE: ${{ github.event.repository.default_branch }}
+          EVENT: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.number }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = push ]; then
+            # -f lets gh URL-encode the branch name.
+            number=$(gh api -X GET "repos/$REPO/pulls" -f state=open -f head="$OWNER:$BRANCH" -f base="$BASE" --jq '.[0].number // empty')
+          else
+            number=$PR_NUMBER
+          fi
+          if [ -z "$number" ]; then
+            echo "No open PR for $BRANCH; nothing to preview."
+          else
+            echo "PR #$number"
+          fi
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout PR head
+        if: steps.pr.outputs.number != '' && github.event.action != 'closed'
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Setup Node
+        if: steps.pr.outputs.number != '' && github.event.action != 'closed'
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      # Same as production: patched at preview root, stock under codex/stock/ when patched.
+      - name: Install dependencies and build
+        if: steps.pr.outputs.number != '' && github.event.action != 'closed'
+        run: npm ci && npm run build
+        env:
+          PROTOWIKI_BASE: /${{ github.event.repository.name }}/pr-preview/pr-${{ steps.pr.outputs.number }}/
+
+      # The deploy workflow can't tell which PR a fork's run belongs to, so the
+      # number goes along with the build. Closed PRs upload only the number.
+      - name: Record PR number
+        if: steps.pr.outputs.number != ''
+        run: echo "${{ steps.pr.outputs.number }}" > pr-number
+
+      - name: Upload build
+        if: steps.pr.outputs.number != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: preview
+          path: |
+            pr-number
+            dist
