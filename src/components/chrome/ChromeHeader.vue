@@ -1,0 +1,154 @@
+<script setup lang="ts">
+import { computed, defineComponent, h, useSlots } from 'vue'
+import { RouterLink } from 'vue-router'
+
+import type { HeaderItem } from '@/components/header/headerItems'
+import type { ChromeNavTool } from './headerNavTools'
+import MinervaChromeHeader from './MinervaChromeHeader.vue'
+import VectorChromeHeader from './VectorChromeHeader.vue'
+import { t } from '@/i18n'
+import { globalSkin, globalTheme } from '@/theme'
+import type { Skin, Theme } from '@/theme'
+
+export type { HeaderItem }
+
+interface Props {
+  /** Local skin override. Sets `data-skin` on the root. */
+  skin?: Skin
+  /** Local theme override. Sets `data-theme` on the root. */
+  theme?: Theme
+  /** Desktop chrome: Meta link mock before tool icons; trim; empty hides unless **`#username`** overrides. */
+  username?: string
+  /** Desktop stacked wordmark image URL (`#logo` replaces both lines). */
+  wordmarkSrc?: string
+  /** Desktop tagline image URL beneath the wordmark. */
+  taglineSrc?: string
+  /** Minerva wordmark; defaults to **`wordmarkSrc`** then the UI-language wordmark. */
+  mobileWordmarkSrc?: string
+  /** Subset/order of mocked Vector tool icons (**desktop only**). */
+  navTools?: ChromeNavTool[]
+  /** Minerva bar only — override default **`left`** item array. */
+  left?: HeaderItem[]
+  /** Minerva bar only — override default **`middle`** item array. */
+  middle?: HeaderItem[]
+  /** Minerva bar only — override default **`right`** item array. */
+  right?: HeaderItem[]
+  /** Minerva bar only — when false, the default wordmark is decorative (not a link). */
+  brandLink?: boolean
+  /** Minerva only — float a Home button in the corner (emits **`home`**). */
+  floatingHome?: boolean
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  skin: undefined,
+  theme: undefined,
+  username: undefined,
+  wordmarkSrc: undefined,
+  taglineSrc: undefined,
+  mobileWordmarkSrc: undefined,
+  navTools: undefined,
+  left: undefined,
+  middle: undefined,
+  right: undefined,
+  brandLink: true,
+  floatingHome: false,
+})
+
+const emit = defineEmits<{
+  /** Desktop **`home`** nav tool, or the Minerva **`floatingHome`** button, was clicked. */
+  home: []
+}>()
+
+const slots = useSlots()
+
+const effectiveSkin = computed<Skin>(() => props.skin ?? globalSkin.value)
+const effectiveTheme = computed<Theme>(() => props.theme ?? globalTheme.value)
+const isDesktop = computed(() => effectiveSkin.value === 'desktop')
+
+function slotBridgeComponent(slotName: 'menu' | 'logo') {
+  return defineComponent({
+    name: `ChromeHeader${slotName === 'menu' ? 'Menu' : 'Logo'}Slot`,
+    setup() {
+      return () => slots[slotName]?.() ?? null
+    },
+  })
+}
+
+const minervaLeft = computed((): HeaderItem[] | undefined => {
+  if (props.left !== undefined) return props.left
+  if (slots.menu) return [{ type: 'component', component: slotBridgeComponent('menu') }]
+  return undefined
+})
+
+const minervaMiddle = computed((): HeaderItem[] | undefined => {
+  if (props.middle !== undefined) return props.middle
+  if (slots.logo) {
+    return [
+      {
+        type: 'component',
+        component: defineComponent({
+          name: 'ChromeHeaderLogoSlot',
+          setup() {
+            return () => {
+              const logo = () => slots.logo?.() ?? null
+              if (!props.brandLink) {
+                return h('span', { class: 'minerva-chrome-header__brand' }, logo)
+              }
+              return h(
+                RouterLink,
+                {
+                  class: 'minerva-chrome-header__brand',
+                  to: '/',
+                  'aria-label': t('chrome.visitMainPage'),
+                },
+                logo,
+              )
+            }
+          },
+        }),
+      },
+    ]
+  }
+  return undefined
+})
+
+const minervaRight = computed((): HeaderItem[] | undefined => props.right)
+</script>
+
+<template>
+  <VectorChromeHeader
+    v-if="isDesktop"
+    :theme="effectiveTheme"
+    :username="props.username"
+    :wordmark-src="props.wordmarkSrc"
+    :tagline-src="props.taglineSrc"
+    :nav-tools="props.navTools"
+    @home="emit('home')"
+  >
+    <template v-if="slots.menu" #menu>
+      <slot name="menu" />
+    </template>
+    <template v-if="slots.logo" #logo>
+      <slot name="logo" />
+    </template>
+    <template v-if="slots.username" #username>
+      <slot name="username" />
+    </template>
+    <template v-if="slots.nav" #nav>
+      <slot name="nav" />
+    </template>
+  </VectorChromeHeader>
+
+  <MinervaChromeHeader
+    v-else
+    :theme="effectiveTheme"
+    :left="minervaLeft"
+    :middle="minervaMiddle"
+    :right="minervaRight"
+    :wordmark-src="props.wordmarkSrc"
+    :mobile-wordmark-src="props.mobileWordmarkSrc"
+    :brand-link="props.brandLink"
+    :floating-home="props.floatingHome"
+    @home="emit('home')"
+  />
+</template>
