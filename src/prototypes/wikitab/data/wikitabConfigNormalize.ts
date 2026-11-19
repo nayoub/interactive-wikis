@@ -1,0 +1,449 @@
+import {
+  WIKITAB_CONFIGURE_MODULES,
+  WIKITAB_DAILY_READS_MODULE_ID,
+  WIKITAB_DEFAULT_HIDDEN_MODULE_IDS,
+  WIKITAB_DISCUSSIONS_MODULE_ID,
+  WIKITAB_FEATURED_MODULE_ID,
+  WIKITAB_NEARBY_MODULE_ID,
+  WIKITAB_REVIEW_CHANGES_MODULE_ID,
+  WIKITAB_SAVED_MODULE_ID,
+  WIKITAB_SECTIONS,
+  WIKITAB_SUGGESTED_EDITS_MODULE_ID,
+  type WikitabCardData,
+  type WikitabModuleId,
+  type WikitabSectionId,
+} from '../sections'
+import { normalizeColorThemeId, type WikitabColorThemeId } from './wikitabColorThemes'
+import { cloneSavedItems, normalizeSavedItems, type WikitabSavedItem } from './wikitabSavedItems'
+import { articleTitleKey } from './wikitabHtml'
+
+/** Never bump — old shapes upgrade in `wikitabStorageMigration.ts`. */
+export const WIKITAB_CONFIG_STORAGE_KEY = 'wikitab-config-v3'
+
+export interface WikitabNearbyLastCoord {
+  lat: number
+  lon: number
+  updatedAt: number
+}
+
+/** Durable Nearby card payload — kept with consent coords so eviction of feed caches cannot wipe it. */
+export interface WikitabNearbyCardsCache {
+  coordKey: string
+  lat: number
+  lon: number
+  items: WikitabCardData[]
+  hasMore: boolean
+  fetchedAt: number
+}
+
+export interface WikitabConfig {
+  pinnedSectionIds: WikitabModuleId[]
+  hiddenSectionIds: WikitabModuleId[]
+  moduleOrderIds: WikitabModuleId[]
+  /** Hidden article title keys per wiki language — titles are only unique per wiki. */
+  hiddenArticleTitleKeys: Record<string, string[]>
+  /** Dismissed edit revision ids per wiki language — every wiki numbers its own revisions. */
+  dismissedActivityRevids: Record<string, number[]>
+  hiddenCommonsImagePageIds: number[]
+  potdAttributionExpandedDay: string | null
+  colorThemeId: WikitabColorThemeId | null
+  reviewChangesShowSavedEdits: boolean
+  reviewChangesShowRecentRiskyEdits: boolean
+  /** Active discussions — community noticeboards (Help desk + Village pumps). */
+  discussionsShowNoticeboards: boolean
+  /** Active discussions — talk pages of saved article seeds. */
+  discussionsShowSavedTalk: boolean
+  /** Last successful Nearby geolocation — refetch without re-prompting when set. */
+  nearbyLastCoord: WikitabNearbyLastCoord | null
+  /**
+   * Full Nearby card list for `nearbyLastCoord`, per wiki language — paints with
+   * no network when fresh. Keyed by language so tabs on different wikis never
+   * overwrite each other's cards.
+   */
+  nearbyCardsCache: Record<string, WikitabNearbyCardsCache>
+  savedItems: WikitabSavedItem[]
+  configRevision: number
+}
+
+export const DEFAULT_WIKITAB_CONFIG: WikitabConfig = {
+  pinnedSectionIds: [],
+  hiddenSectionIds: [...WIKITAB_DEFAULT_HIDDEN_MODULE_IDS],
+  moduleOrderIds: [],
+  hiddenArticleTitleKeys: {},
+  dismissedActivityRevids: {},
+  hiddenCommonsImagePageIds: [],
+  potdAttributionExpandedDay: null,
+  colorThemeId: null,
+  reviewChangesShowSavedEdits: true,
+  reviewChangesShowRecentRiskyEdits: true,
+  discussionsShowNoticeboards: true,
+  discussionsShowSavedTalk: true,
+  nearbyLastCoord: null,
+  nearbyCardsCache: {},
+  savedItems: [],
+  configRevision: 0,
+}
+
+const VALID_FEED_SECTION_IDS = new Set<WikitabSectionId>(
+  WIKITAB_SECTIONS.map((section) => section.id),
+)
+
+const VALID_MODULE_IDS = new Set<WikitabModuleId>([
+  ...VALID_FEED_SECTION_IDS,
+  WIKITAB_SAVED_MODULE_ID,
+  WIKITAB_FEATURED_MODULE_ID,
+  WIKITAB_DAILY_READS_MODULE_ID,
+  WIKITAB_NEARBY_MODULE_ID,
+  WIKITAB_SUGGESTED_EDITS_MODULE_ID,
+  WIKITAB_REVIEW_CHANGES_MODULE_ID,
+  WIKITAB_DISCUSSIONS_MODULE_ID,
+])
+
+function isModuleId(value: string): value is WikitabModuleId {
+  return VALID_MODULE_IDS.has(value as WikitabModuleId)
+}
+
+export function normalizePinnedSectionIds(raw: unknown): WikitabModuleId[] {
+  if (!Array.isArray(raw)) return []
+
+  const seen = new Set<WikitabModuleId>()
+  const ids: WikitabModuleId[] = []
+
+  for (const item of raw) {
+    if (typeof item !== 'string') continue
+    const id = item.trim()
+    if (!id || !isModuleId(id) || seen.has(id)) continue
+    seen.add(id)
+    ids.push(id)
+  }
+
+  return ids
+}
+
+export function normalizeModuleOrderIds(raw: unknown): WikitabModuleId[] {
+  if (!Array.isArray(raw)) return []
+
+  const seen = new Set<WikitabModuleId>()
+  const ids: WikitabModuleId[] = []
+
+  for (const item of raw) {
+    if (typeof item !== 'string') continue
+    const id = item.trim()
+    if (!id || !isModuleId(id) || seen.has(id)) continue
+    seen.add(id)
+    ids.push(id)
+  }
+
+  for (const module of WIKITAB_CONFIGURE_MODULES) {
+    if (!seen.has(module.id)) {
+      seen.add(module.id)
+      ids.push(module.id)
+    }
+  }
+
+  return ids
+}
+
+export function normalizeHiddenSectionIds(raw: unknown): WikitabModuleId[] {
+  if (!Array.isArray(raw)) return []
+
+  const seen = new Set<WikitabModuleId>()
+  const ids: WikitabModuleId[] = []
+
+  for (const item of raw) {
+    if (typeof item !== 'string') continue
+    const id = item.trim()
+    if (!id || !isModuleId(id) || seen.has(id)) continue
+    seen.add(id)
+    ids.push(id)
+  }
+
+  return ids
+}
+
+/**
+ * `{ [lang]: list }`. A bare array is the pre-language shape — always enwiki —
+ * and becomes `{ en: list }`.
+ */
+function normalizePerLanguage<T>(
+  raw: unknown,
+  normalizeList: (list: unknown) => T[],
+): Record<string, T[]> {
+  if (Array.isArray(raw)) {
+    const list = normalizeList(raw)
+    return list.length ? { en: list } : {}
+  }
+  if (typeof raw !== 'object' || raw === null) return {}
+  const byLang: Record<string, T[]> = {}
+  for (const [lang, list] of Object.entries(raw as Record<string, unknown>)) {
+    const normalized = normalizeList(list)
+    if (lang.trim() && normalized.length) byLang[lang.trim().toLowerCase()] = normalized
+  }
+  return byLang
+}
+
+export function normalizeHiddenArticleTitleKeysByLang(raw: unknown): Record<string, string[]> {
+  return normalizePerLanguage(raw, normalizeHiddenArticleTitleKeys)
+}
+
+export function normalizeDismissedActivityRevidsByLang(raw: unknown): Record<string, number[]> {
+  return normalizePerLanguage(raw, normalizeDismissedActivityRevids)
+}
+
+export function normalizeHiddenArticleTitleKeys(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return []
+
+  const seen = new Set<string>()
+  const keys: string[] = []
+
+  for (const item of raw) {
+    if (typeof item !== 'string') continue
+    const key = articleTitleKey(item)
+    if (!key || seen.has(key)) continue
+    seen.add(key)
+    keys.push(key)
+  }
+
+  return keys
+}
+
+export function normalizePotdAttributionExpandedDay(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null
+  const day = raw.trim()
+  return day.length > 0 ? day : null
+}
+
+export function normalizeDismissedActivityRevids(raw: unknown): number[] {
+  if (!Array.isArray(raw)) return []
+
+  const seen = new Set<number>()
+  const revids: number[] = []
+
+  for (const item of raw) {
+    const revid = typeof item === 'number' ? item : Number(item)
+    if (!Number.isInteger(revid) || revid <= 0 || seen.has(revid)) continue
+    seen.add(revid)
+    revids.push(revid)
+  }
+
+  return revids
+}
+
+export function normalizeHiddenCommonsImagePageIds(raw: unknown): number[] {
+  if (!Array.isArray(raw)) return []
+
+  const seen = new Set<number>()
+  const pageIds: number[] = []
+
+  for (const item of raw) {
+    const pageid = typeof item === 'number' ? item : Number(item)
+    if (!Number.isInteger(pageid) || pageid <= 0 || seen.has(pageid)) continue
+    seen.add(pageid)
+    pageIds.push(pageid)
+  }
+
+  return pageIds
+}
+
+function normalizeConfigRevision(raw: unknown): number {
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return 0
+  return Math.max(0, Math.floor(raw))
+}
+
+function normalizeReviewChangesBool(raw: unknown, defaultValue: boolean): boolean {
+  if (typeof raw !== 'boolean') return defaultValue
+  return raw
+}
+
+export function normalizeNearbyLastCoord(raw: unknown): WikitabNearbyLastCoord | null {
+  if (typeof raw !== 'object' || raw === null) return null
+
+  const record = raw as Record<string, unknown>
+  const lat = typeof record.lat === 'number' ? record.lat : Number(record.lat)
+  const lon = typeof record.lon === 'number' ? record.lon : Number(record.lon)
+  const updatedAt =
+    typeof record.updatedAt === 'number' ? record.updatedAt : Number(record.updatedAt)
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || !Number.isFinite(updatedAt)) {
+    return null
+  }
+  if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return null
+
+  return { lat, lon, updatedAt: Math.max(0, Math.floor(updatedAt)) }
+}
+
+function normalizeNearbyCardItem(raw: unknown): WikitabCardData | null {
+  if (typeof raw !== 'object' || raw === null) return null
+  const record = raw as Record<string, unknown>
+  if (typeof record.key !== 'string' || !record.key.trim()) return null
+
+  const item: WikitabCardData = { key: record.key.trim() }
+  if (typeof record.url === 'string') item.url = record.url
+  if (typeof record.title === 'string') item.title = record.title
+  if (typeof record.description === 'string') item.description = record.description
+  if (typeof record.thumbnailUrl === 'string') item.thumbnailUrl = record.thumbnailUrl
+  if (typeof record.supportingText === 'string') item.supportingText = record.supportingText
+  return item
+}
+
+export function normalizeNearbyCardsCache(raw: unknown): WikitabNearbyCardsCache | null {
+  if (typeof raw !== 'object' || raw === null) return null
+
+  const record = raw as Record<string, unknown>
+  const lat = typeof record.lat === 'number' ? record.lat : Number(record.lat)
+  const lon = typeof record.lon === 'number' ? record.lon : Number(record.lon)
+  const fetchedAt =
+    typeof record.fetchedAt === 'number' ? record.fetchedAt : Number(record.fetchedAt)
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || !Number.isFinite(fetchedAt)) return null
+  if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return null
+  if (!Array.isArray(record.items)) return null
+
+  const items: WikitabCardData[] = []
+  for (const entry of record.items) {
+    const item = normalizeNearbyCardItem(entry)
+    if (item) items.push(item)
+  }
+  if (!items.length) return null
+
+  const coordKey =
+    typeof record.coordKey === 'string' && record.coordKey.trim()
+      ? record.coordKey.trim()
+      : `${lat.toFixed(5)}|${lon.toFixed(5)}`
+
+  return {
+    coordKey,
+    lat,
+    lon,
+    items,
+    hasMore: record.hasMore === true,
+    fetchedAt: Math.max(0, Math.floor(fetchedAt)),
+  }
+}
+
+/**
+ * `{ [lang]: cache }`. The pre-language single-object shape (it has `lat`) was
+ * always enwiki, so it becomes `{ en: … }`.
+ */
+export function normalizeNearbyCardsCacheByLang(
+  raw: unknown,
+): Record<string, WikitabNearbyCardsCache> {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return {}
+  const record = raw as Record<string, unknown>
+  if ('lat' in record) {
+    const legacy = normalizeNearbyCardsCache(record)
+    return legacy ? { en: legacy } : {}
+  }
+  const byLang: Record<string, WikitabNearbyCardsCache> = {}
+  for (const [lang, entry] of Object.entries(record)) {
+    const normalized = normalizeNearbyCardsCache(entry)
+    if (normalized) byLang[lang] = normalized
+  }
+  return byLang
+}
+
+export function normalizeWikitabConfig(raw: unknown): WikitabConfig {
+  if (typeof raw !== 'object' || raw === null) {
+    return cloneWikitabConfig(DEFAULT_WIKITAB_CONFIG)
+  }
+
+  const record = raw as Record<string, unknown>
+
+  return {
+    pinnedSectionIds: normalizePinnedSectionIds(record.pinnedSectionIds),
+    hiddenSectionIds: normalizeHiddenSectionIds(record.hiddenSectionIds),
+    moduleOrderIds: normalizeModuleOrderIds(record.moduleOrderIds),
+    hiddenArticleTitleKeys: normalizeHiddenArticleTitleKeysByLang(record.hiddenArticleTitleKeys),
+    dismissedActivityRevids: normalizeDismissedActivityRevidsByLang(
+      record.dismissedActivityRevids,
+    ),
+    hiddenCommonsImagePageIds: normalizeHiddenCommonsImagePageIds(record.hiddenCommonsImagePageIds),
+    potdAttributionExpandedDay: normalizePotdAttributionExpandedDay(
+      record.potdAttributionExpandedDay,
+    ),
+    colorThemeId: normalizeColorThemeId(record.colorThemeId),
+    reviewChangesShowSavedEdits: normalizeReviewChangesBool(
+      record.reviewChangesShowSavedEdits,
+      true,
+    ),
+    reviewChangesShowRecentRiskyEdits: normalizeReviewChangesBool(
+      record.reviewChangesShowRecentRiskyEdits,
+      true,
+    ),
+    discussionsShowNoticeboards: normalizeReviewChangesBool(
+      record.discussionsShowNoticeboards,
+      true,
+    ),
+    discussionsShowSavedTalk: normalizeReviewChangesBool(record.discussionsShowSavedTalk, true),
+    nearbyLastCoord: normalizeNearbyLastCoord(record.nearbyLastCoord),
+    nearbyCardsCache: normalizeNearbyCardsCacheByLang(record.nearbyCardsCache),
+    savedItems: normalizeSavedItems(record.savedItems),
+    configRevision: normalizeConfigRevision(record.configRevision),
+  }
+}
+
+export function cloneWikitabConfig(config: WikitabConfig): WikitabConfig {
+  return {
+    pinnedSectionIds: [...config.pinnedSectionIds],
+    hiddenSectionIds: [...config.hiddenSectionIds],
+    moduleOrderIds: [...config.moduleOrderIds],
+    hiddenArticleTitleKeys: Object.fromEntries(
+      Object.entries(config.hiddenArticleTitleKeys).map(([lang, keys]) => [lang, [...keys]]),
+    ),
+    dismissedActivityRevids: Object.fromEntries(
+      Object.entries(config.dismissedActivityRevids).map(([lang, ids]) => [lang, [...ids]]),
+    ),
+    hiddenCommonsImagePageIds: [...config.hiddenCommonsImagePageIds],
+    potdAttributionExpandedDay: config.potdAttributionExpandedDay,
+    colorThemeId: config.colorThemeId,
+    reviewChangesShowSavedEdits: config.reviewChangesShowSavedEdits,
+    reviewChangesShowRecentRiskyEdits: config.reviewChangesShowRecentRiskyEdits,
+    discussionsShowNoticeboards: config.discussionsShowNoticeboards,
+    discussionsShowSavedTalk: config.discussionsShowSavedTalk,
+    nearbyLastCoord: config.nearbyLastCoord
+      ? { ...config.nearbyLastCoord }
+      : null,
+    nearbyCardsCache: Object.fromEntries(
+      Object.entries(config.nearbyCardsCache).map(([lang, entry]) => [
+        lang,
+        { ...entry, items: entry.items.map((item) => ({ ...item })) },
+      ]),
+    ),
+    savedItems: cloneSavedItems(config.savedItems),
+    configRevision: config.configRevision,
+  }
+}
+
+export function nextWikitabConfigRevision(current: number): number {
+  return Math.max(Date.now(), current + 1)
+}
+
+function isQuotaExceededError(error: unknown): boolean {
+  if (!(error instanceof DOMException)) return false
+  return (
+    error.name === 'QuotaExceededError' ||
+    error.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
+    error.code === 22
+  )
+}
+
+function warnConfigPersistFailed(reason: string, detail?: unknown): void {
+  if (!import.meta.env.DEV) return
+  console.warn('[wikitab] config persist failed:', reason, detail ?? '')
+}
+
+export function writeWikitabConfig(config: WikitabConfig): boolean {
+  if (typeof window === 'undefined') return true
+
+  try {
+    window.localStorage.setItem(WIKITAB_CONFIG_STORAGE_KEY, JSON.stringify(config))
+    return true
+  } catch (error) {
+    if (isQuotaExceededError(error)) {
+      warnConfigPersistFailed('localStorage quota exceeded')
+    } else {
+      warnConfigPersistFailed('localStorage setItem failed', error)
+    }
+    return false
+  }
+}
