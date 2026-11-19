@@ -1,0 +1,535 @@
+import { wikimediaApiFetchHeaders } from '@/config'
+import { fetchWikimedia } from '@/lib/fetchWikimedia'
+import { WIKITAB_SECTIONS, type WikitabCardData, type WikitabFeed, type WikitabSectionId } from '../sections'
+import { fetchBirthsOnThisDay } from './fetchBirthsOnThisDay'
+import {
+  isFeedSliceStale,
+  persistPartialFeed,
+  previousUtcDay,
+  readCachedFeed,
+  readCachedSectionSlice,
+  utcDayKey,
+} from './feedCache'
+import { fetchMainPageOtd } from './fetchMainPageOtd'
+import {
+  WIKITAB_FEED_CARD_THUMB_WIDTH,
+  wikimediaThumbnailAtLeast,
+} from './wikimediaThumbnailUrl'
+import {
+  feedDykPayloadToCardData,
+  feedNewsPayloadToCardData,
+  feedTrendingPayloadToCardData,
+} from './wikitabCardPayloadMappers'
+import type {
+  WikitabFeedDykCardPayload,
+  WikitabFeedNewsCardPayload,
+  WikitabFeedTrendingCardPayload,
+} from './wikitabCardPayloadTypes'
+import {
+  WIKI_HOST,
+  articleUrl,
+  expandDykSnippetHtml,
+  normalizeFeedHtml,
+  primaryLinkTitle,
+} from './wikitabHtml'
+import { seedArticle } from './wikitabSeedArticle'
+import { WIKITAB_LANGUAGE } from './wikitabLanguage'
+
+interface FeedThumbnail {
+  source?: string
+}
+
+interface FeedSummary {
+  title?: string
+  normalizedtitle?: string
+  description?: string
+  thumbnail?: FeedThumbnail
+  views?: number
+  rank?: number
+  content_urls?: { desktop?: { page?: string } }
+}
+
+export interface FeaturedFeedResponse {
+  tfa?: FeedSummary & { extract_html?: string }
+  mostread?: { date?: string; articles?: FeedSummary[] }
+  dyk?: { html?: string; text?: string }[]
+  news?: { story?: string; links?: FeedSummary[] }[]
+  image?: {
+    thumbnail?: { source?: string; width?: number; height?: number }
+    image?: { source?: string; width?: number; height?: number }
+    file_page?: string
+    description?: { html?: string }
+    artist?: { html?: string }
+    license?: { type?: string; url?: string }
+  }
+}
+
+interface InFlightProgressive {
+  promise: Promise<WikitabFeed>
+  listeners: Set<(feed: WikitabFeed) => void>
+  lastFeed: WikitabFeed | null
+}
+
+/** Deduplicates concurrent and repeat calls within a single page session. */
+const inFlight = new Map<string, InFlightProgressive>()
+
+/** One `feed/featured` request per UTC day per page session. */
+const featuredPayloadByDay = new Map<string, Promise<FeaturedFeedResponse>>()
+
+const ALL_SECTION_IDS = new Set<WikitabSectionId>(WIKITAB_SECTIONS.map((section) => section.id))
+
+export const FEATURED_SECTION_IDS: readonly WikitabSectionId[] = ['trending', 'news', 'dyk']
+
+export interface FetchDailyFeedOptions {
+  enabledSections?: ReadonlySet<WikitabSectionId>
+}
+
+function emptyFeed(): WikitabFeed {
+  return {
+    trending: [],
+    news: [],
+    dyk: [],
+    otd: [],
+    births: [],
+  }
+}
+
+function resolveEnabledSections(options?: FetchDailyFeedOptions): ReadonlySet<WikitabSectionId> {
+  return options?.enabledSections ?? ALL_SECTION_IDS
+}
+
+function needsFeaturedFetch(enabled: ReadonlySet<WikitabSectionId>): boolean {
+  return FEATURED_SECTION_IDS.some((id) => enabled.has(id))
+}
+
+function feedUrl(day: string): string {
+  const [year, month, date] = day.split('-')
+  return `https://${WIKI_HOST}/api/rest_v1/feed/featured/${year}/${month}/${date}`
+}
+
+function summaryUrl(summary: FeedSummary): string | undefined {
+  const direct = summary.content_urls?.desktop?.page
+  if (direct) return direct
+  return summary.title ? articleUrl(summary.title) : undefined
+}
+
+function trendingArticleToPayload(
+  article: FeedSummary & { rank?: number; views?: number },
+): WikitabFeedTrendingCardPayload | null {
+  const url = summaryUrl(article)
+  const title = article.normalizedtitle ?? article.title?.replace(/_/g, ' ')
+  if (!url || !title) return null
+  if (typeof article.views !== 'number') return null
+
+  return {
+    key: article.title ?? article.normalizedtitle ?? String(article.rank),
+    url,
+    title,
+    description: article.description || undefined,
+    pageViews: article.views,
+    thumbnailUrl: wikimediaThumbnailAtLeast(
+      article.thumbnail?.source,
+      WIKITAB_FEED_CARD_THUMB_WIDTH,
+    ),
+  }
+}
+
+function mapTrending(response: FeaturedFeedResponse): WikitabCardData[] {
+  const articles = response.mostread?.articles ?? []
+  return [...articles]
+    .sort((a, b) => (a.rank ?? Number.MAX_SAFE_INTEGER) - (b.rank ?? Number.MAX_SAFE_INTEGER))
+    .map((article) => trendingArticleToPayload(article))
+    .filter((payload): payload is WikitabFeedTrendingCardPayload => payload !== null)
+    .map(feedTrendingPayloadToCardData)
+}
+
+function mapDyk(response: FeaturedFeedResponse): WikitabCardData[] {
+  return (response.dyk ?? [])
+    .filter((hook) => hook.html)
+    .flatMap((hook, index) => {
+      const html = hook.html as string
+      const subject = primaryLinkTitle(html)
+      if (!subject) return []
+
+      const payload: WikitabFeedDykCardPayload = {
+        key: `dyk-${index}`,
+        description: expandDykSnippetHtml(normalizeFeedHtml(html)),
+        url: articleUrl(subject),
+      }
+      return [{ ...feedDykPayloadToCardData(payload), seedArticle: seedArticle(subject, 'hook-link') }]
+    })
+}
+
+function mapNews(response: FeaturedFeedResponse): WikitabCardData[] {
+  return (response.news ?? [])
+    .filter((item) => item.story)
+    .flatMap((item, index) => {
+      const story = item.story as string
+      const subject = primaryLinkTitle(story)
+      const lead =
+        item.links?.find(
+          (link) =>
+            link.normalizedtitle === subject ||
+            link.title?.replace(/_/g, ' ') === subject,
+        ) ?? item.links?.[0]
+      const url = subject ? articleUrl(subject) : lead && summaryUrl(lead)
+      if (!url) return []
+
+      const payload: WikitabFeedNewsCardPayload = {
+        key: `news-${index}`,
+        description: normalizeFeedHtml(story),
+        url,
+        thumbnailUrl: wikimediaThumbnailAtLeast(
+          lead?.thumbnail?.source,
+          WIKITAB_FEED_CARD_THUMB_WIDTH,
+        ),
+      }
+      const seedTitle = subject ?? lead?.normalizedtitle ?? lead?.title
+      return [
+        { ...feedNewsPayloadToCardData(payload), seedArticle: seedArticle(seedTitle, 'hook-link') },
+      ]
+    })
+}
+
+function mapFeaturedFeed(payload: FeaturedFeedResponse, day: string): WikitabFeed {
+  return {
+    trending: mapTrending(payload),
+    news: mapNews(payload),
+    dyk: mapDyk(payload),
+    otd: [],
+    births: [],
+  }
+}
+
+async function fetchFeaturedPayload(
+  day: string,
+  signal?: AbortSignal,
+): Promise<FeaturedFeedResponse> {
+  const response = await fetchWikimedia(feedUrl(day), {
+    headers: wikimediaApiFetchHeaders('wikitab-feed'),
+    signal,
+  })
+  if (!response.ok) {
+    throw new Error(`Featured feed request failed (${response.status})`)
+  }
+  return (await response.json()) as FeaturedFeedResponse
+}
+
+export function getFeaturedPayload(day: string, signal?: AbortSignal): Promise<FeaturedFeedResponse> {
+  const existing = featuredPayloadByDay.get(day)
+  if (existing) return existing
+
+  const promise = fetchFeaturedPayload(day, signal).catch((error) => {
+    featuredPayloadByDay.delete(day)
+    throw error
+  })
+  featuredPayloadByDay.set(day, promise)
+  return promise
+}
+
+/** When today's `mostread` is missing, fall back to the previous UTC day. */
+async function resolveTrending(
+  payload: FeaturedFeedResponse,
+  day: string,
+  signal?: AbortSignal,
+): Promise<WikitabCardData[]> {
+  let trending = mapTrending(payload)
+  if (trending.length > 0) return trending
+
+  try {
+    const yesterday = previousUtcDay(day)
+    const fallback = await getFeaturedPayload(yesterday, signal)
+    trending = mapTrending(fallback)
+  } catch {
+    // Empty state keeps the section visible.
+  }
+  return trending
+}
+
+/**
+ * Phase 1: featured feed (Trending, In the news, Did you know). Phase 2: OTD
+ * and Birthdays in parallel, patching the feed as each secondary request
+ * settles so lower sections can resolve independently.
+ */
+async function requestFeedProgressive(
+  day: string,
+  onUpdate: (feed: WikitabFeed) => void,
+  signal?: AbortSignal,
+  options?: FetchDailyFeedOptions,
+): Promise<WikitabFeed> {
+  const enabled = resolveEnabledSections(options)
+  const feed = emptyFeed()
+
+  if (!needsFeaturedFetch(enabled)) {
+    onUpdate({ ...feed })
+  } else {
+    const payload = await getFeaturedPayload(day, signal)
+    const trending = enabled.has('trending')
+      ? await resolveTrending(payload, day, signal)
+      : []
+    Object.assign(feed, mapFeaturedFeed(payload, day), { trending })
+    if (!enabled.has('news')) feed.news = []
+    if (!enabled.has('dyk')) feed.dyk = []
+    onUpdate({ ...feed })
+  }
+
+  const secondaryTasks: Promise<void>[] = []
+
+  if (enabled.has('otd')) {
+    secondaryTasks.push(
+      fetchMainPageOtd(signal).then(
+        (otd) => {
+          feed.otd = otd
+          onUpdate({ ...feed })
+        },
+        () => {
+          feed.otd = []
+          onUpdate({ ...feed })
+        },
+      ),
+    )
+  }
+
+  if (enabled.has('births')) {
+    secondaryTasks.push(
+      fetchBirthsOnThisDay(day, signal).then(
+        (births) => {
+          feed.births = births
+          onUpdate({ ...feed })
+        },
+        () => {
+          feed.births = []
+          onUpdate({ ...feed })
+        },
+      ),
+    )
+  }
+
+  await Promise.all(secondaryTasks)
+
+  return { ...feed }
+}
+
+async function fetchFeaturedSectionSlice(
+  sectionId: WikitabSectionId,
+  day: string,
+  signal?: AbortSignal,
+): Promise<WikitabCardData[]> {
+  const payload = await getFeaturedPayload(day, signal)
+
+  switch (sectionId) {
+    case 'trending':
+      return resolveTrending(payload, day, signal)
+    case 'news':
+      return mapNews(payload)
+    case 'dyk':
+      return mapDyk(payload)
+    default:
+      return []
+  }
+}
+
+export interface FetchWikitabSectionFeedOptions {
+  /** Skip session and localStorage caches — used by manual section refresh. */
+  force?: boolean
+}
+
+export function listStaleEnabledFeedSections(
+  day: string,
+  enabled: ReadonlySet<WikitabSectionId>,
+): WikitabSectionId[] {
+  return WIKITAB_SECTIONS.map((section) => section.id).filter(
+    (id) => enabled.has(id) && isFeedSliceStale(WIKITAB_LANGUAGE, day, id),
+  )
+}
+
+async function refetchFeaturedFeedSlices(
+  day: string,
+  enabledFeatured: readonly WikitabSectionId[],
+  signal?: AbortSignal,
+): Promise<Partial<Pick<WikitabFeed, 'trending' | 'news' | 'dyk'>>> {
+  featuredPayloadByDay.delete(day)
+  const payload = await getFeaturedPayload(day, signal)
+  const out: Partial<Pick<WikitabFeed, 'trending' | 'news' | 'dyk'>> = {}
+
+  if (enabledFeatured.includes('trending')) {
+    out.trending = await resolveTrending(payload, day, signal)
+  }
+  if (enabledFeatured.includes('news')) {
+    out.news = mapNews(payload)
+  }
+  if (enabledFeatured.includes('dyk')) {
+    out.dyk = mapDyk(payload)
+  }
+
+  return out
+}
+
+async function refetchSecondaryFeedSlice(
+  sectionId: WikitabSectionId,
+  day: string,
+  signal?: AbortSignal,
+): Promise<WikitabCardData[]> {
+  switch (sectionId) {
+    case 'otd':
+      return fetchMainPageOtd(signal).catch(() => [])
+    case 'births':
+      return fetchBirthsOnThisDay(day, signal).catch(() => [])
+    default:
+      return []
+  }
+}
+
+/** Background refresh for slices that exceeded TTL — does not block on cache paint. */
+export async function refreshStaleFeedSections(
+  day: string,
+  staleSectionIds: readonly WikitabSectionId[],
+  enabled: ReadonlySet<WikitabSectionId>,
+  signal: AbortSignal | undefined,
+  onUpdate: (feed: WikitabFeed) => void,
+  baseFeed: WikitabFeed,
+): Promise<WikitabFeed> {
+  let feed: WikitabFeed = { ...baseFeed }
+
+  const featuredStale = staleSectionIds.filter((id) =>
+    FEATURED_SECTION_IDS.includes(id as (typeof FEATURED_SECTION_IDS)[number]),
+  )
+  const secondaryStale = staleSectionIds.filter(
+    (id) => !FEATURED_SECTION_IDS.includes(id as (typeof FEATURED_SECTION_IDS)[number]),
+  )
+
+  if (featuredStale.length) {
+    const enabledFeatured = FEATURED_SECTION_IDS.filter((id) => enabled.has(id))
+    const slices = await refetchFeaturedFeedSlices(day, enabledFeatured, signal)
+    feed = { ...feed, ...slices }
+    persistPartialFeed(WIKITAB_LANGUAGE, day, feed, Date.now(), enabledFeatured)
+    onUpdate(feed)
+  }
+
+  for (const sectionId of secondaryStale) {
+    if (signal?.aborted) break
+    const items = await refetchSecondaryFeedSlice(sectionId, day, signal)
+    feed = { ...feed, [sectionId]: items }
+    persistPartialFeed(WIKITAB_LANGUAGE, day, feed, Date.now(), [sectionId])
+    onUpdate(feed)
+  }
+
+  return feed
+}
+
+/** Fetches one section's feed slice — for late unhide after initial load. */
+export async function fetchWikitabSectionFeed(
+  sectionId: WikitabSectionId,
+  signal?: AbortSignal,
+  options?: FetchWikitabSectionFeedOptions,
+): Promise<WikitabCardData[]> {
+  const day = utcDayKey()
+  const force = options?.force === true
+
+  if (FEATURED_SECTION_IDS.includes(sectionId)) {
+    if (!force) {
+      const pending = inFlight.get(day)
+      if (pending?.lastFeed?.[sectionId]?.length) {
+        return pending.lastFeed[sectionId]
+      }
+
+      const cachedSlice = readCachedSectionSlice(WIKITAB_LANGUAGE, day, sectionId)
+      if (cachedSlice) return cachedSlice
+    } else {
+      featuredPayloadByDay.delete(day)
+    }
+
+    return fetchFeaturedSectionSlice(sectionId, day, signal)
+  }
+
+  if (!force) {
+    const cachedSlice = readCachedSectionSlice(WIKITAB_LANGUAGE, day, sectionId)
+    if (cachedSlice) return cachedSlice
+  }
+
+  switch (sectionId) {
+    case 'otd':
+      return fetchMainPageOtd(signal).catch(() => [])
+    case 'births':
+      return fetchBirthsOnThisDay(day, signal).catch(() => [])
+    default:
+      return []
+  }
+}
+
+function notifyListeners(entry: InFlightProgressive, feed: WikitabFeed): void {
+  entry.lastFeed = feed
+  entry.listeners.forEach((listener) => listener(feed))
+}
+
+/**
+ * Featured feed plus Main Page OTD and births endpoints. Reads through the
+ * session map, then the localStorage day cache, before going to the network.
+ * Calls `onUpdate` after the featured payload lands and again as each secondary
+ * section resolves.
+ */
+export function fetchDailyFeedProgressive(
+  onUpdate: (feed: WikitabFeed) => void,
+  signal?: AbortSignal,
+  options?: FetchDailyFeedOptions,
+): Promise<WikitabFeed> {
+  const day = utcDayKey()
+  const enabled = resolveEnabledSections(options)
+
+  const cached = readCachedFeed(WIKITAB_LANGUAGE, day)
+  if (cached) {
+    onUpdate(cached)
+
+    const stale = listStaleEnabledFeedSections(day, enabled)
+    if (stale.length) {
+      return refreshStaleFeedSections(day, stale, enabled, signal, onUpdate, cached).catch(
+        () => cached,
+      )
+    }
+
+    return Promise.resolve(cached)
+  }
+
+  const pending = inFlight.get(day)
+  if (pending) {
+    if (pending.lastFeed) onUpdate(pending.lastFeed)
+    pending.listeners.add(onUpdate)
+    return pending.promise
+  }
+
+  if (!needsFeaturedFetch(enabled) && !enabled.has('otd') && !enabled.has('births')) {
+    const feed = emptyFeed()
+    onUpdate(feed)
+    return Promise.resolve(feed)
+  }
+
+  const entry: InFlightProgressive = {
+    promise: Promise.resolve({} as WikitabFeed),
+    listeners: new Set([onUpdate]),
+    lastFeed: null,
+  }
+
+  entry.promise = requestFeedProgressive(
+    day,
+    (feed) => notifyListeners(entry, feed),
+    signal,
+    options,
+  )
+    .then((feed) => {
+      persistPartialFeed(WIKITAB_LANGUAGE, day, feed)
+      inFlight.delete(day)
+      return feed
+    })
+    .catch((error) => {
+      inFlight.delete(day)
+      throw error
+    })
+
+  inFlight.set(day, entry)
+  return entry.promise
+}
+
+/** Awaits the complete daily feed without subscribing to intermediate updates. */
+export function fetchDailyFeed(signal?: AbortSignal): Promise<WikitabFeed> {
+  return fetchDailyFeedProgressive(() => {}, signal)
+}
