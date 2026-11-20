@@ -30,6 +30,7 @@ import {
 import { dateYears, formatDate } from '../model/dates'
 import { sortPlaces } from '../model/places'
 import { levelFor, loadCoarse, loadTiles, loaded, tilesFor } from './baseMap'
+import { createVectorBase, type VectorBase } from './vectorBase'
 import type { MapOptions, Place } from '../model/types'
 
 const props = withDefaults(
@@ -182,38 +183,40 @@ const coarseLayer = computed(() => {
 })
 const fineScale = computed(() => loaded.fine?.scale ?? 1)
 
-// ── Street map: OpenStreetMap tiles over the Natural Earth base ─────────────
-// Cities, streets and names come from the tiles; the drawn base stays underneath
-// as the fallback while tiles load or when offline. Tiles are toned down by a
-// token filter so the base stays weaker than the marks.
-const TILE = 256
-const MAX_ZOOM = 19
-const failed = reactive(new Set<string>())
-const tiles = computed(() => {
-  if (!width.value) return []
-  const z = Math.max(0, Math.min(MAX_ZOOM, Math.round(Math.log2(view.k / TILE))))
-  const n = 2 ** z
-  const size = view.k / n // on-screen size of one tile
-  const b = viewBounds.value
-  const out: { key: string; src: string; left: number; top: number; size: number }[] = []
-  const y0 = Math.max(0, Math.floor(b.y0 * n))
-  const y1 = Math.min(n - 1, Math.floor(b.y1 * n))
-  for (let tx = Math.floor(b.x0 * n); tx <= Math.floor(b.x1 * n); tx++) {
-    const x = ((tx % n) + n) % n // wrap around the antimeridian
-    for (let ty = y0; ty <= y1; ty++) {
-      const key = `${z}/${x}/${ty}`
-      if (failed.has(key)) continue
-      out.push({
-        key: `${key}@${tx}`,
-        src: `https://tile.openstreetmap.org/${key}.png`,
-        left: (tx / n - view.cx) * view.k + width.value / 2,
-        top: (ty / n - view.cy) * view.k + height.value / 2,
-        size,
-      })
-    }
+// ── Street map: vector tiles behind the marks (./vectorBase.ts) ─────────────
+// Cities, streets and names come from OpenStreetMap vector tiles, coloured from
+// tokens. The drawn Natural Earth base stays underneath as the fallback while
+// they load, or offline.
+const vectorRef = ref<HTMLElement | null>(null)
+let vector: VectorBase | null = null
+let vectorFailed = false
+async function ensureVector() {
+  if (vector || vectorFailed || !vectorRef.value || !width.value) return
+  try {
+    vector = await createVectorBase(vectorRef.value)
+    vector.setView(view.cx, view.cy, view.k)
+  } catch {
+    vectorFailed = true // offline or blocked: the drawn base carries on alone
   }
-  return out
+}
+watch([() => view.cx, () => view.cy, () => view.k], () => vector?.setView(view.cx, view.cy, view.k))
+watch([width, height], () =>
+  nextTick(() => {
+    vector?.resize()
+    vector?.setView(view.cx, view.cy, view.k)
+    ensureVector()
+  }),
+)
+onMounted(() => nextTick(ensureVector))
+// The container goes away with the plain-list fallback: start again when it returns.
+watch(vectorRef, (el, old) => {
+  if (old && vector) {
+    vector.destroy()
+    vector = null
+  }
+  if (el) nextTick(ensureVector)
 })
+onBeforeUnmount(() => vector?.destroy())
 
 // ── Clusters: merge dots that would overlap; area ∝ count ──────────────────
 interface Cluster {
@@ -595,24 +598,7 @@ const titleId = `map-title-${Math.random().toString(36).slice(2, 8)}`
           </g>
         </svg>
 
-        <div class="map__tiles" aria-hidden="true">
-          <img
-            v-for="t in tiles"
-            :key="t.key"
-            class="map__tile"
-            :src="t.src"
-            alt=""
-            draggable="false"
-            decoding="async"
-            :style="{
-              left: `${t.left}px`,
-              top: `${t.top}px`,
-              width: `${t.size + 0.5}px`,
-              height: `${t.size + 0.5}px`,
-            }"
-            @error="failed.add(t.key.split('@')[0])"
-          />
-        </div>
+        <div ref="vectorRef" class="map__vector" aria-hidden="true" />
 
         <ol class="map__list">
           <li v-for="(p, i) in sorted" :key="p.id" :data-place-id="p.id" class="map__item">
@@ -709,11 +695,11 @@ const titleId = `map-title-${Math.random().toString(36).slice(2, 8)}`
         </div>
 
         <small class="map__attribution"
-          >©
+          ><a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> ©
+          <a href="https://www.openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a> ·
           <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener"
-            >OpenStreetMap</a
-          >
-          contributors</small
+            >© OpenStreetMap</a
+          ></small
         >
 
         <div class="map__controls">
@@ -938,18 +924,14 @@ small,
     0 0 2px var(--viz-label-halo),
     0 0 3px var(--viz-label-halo);
 }
-.map__tiles {
+.map__vector {
   position: absolute;
   inset: 0;
-  overflow: hidden;
   pointer-events: none;
-  filter: var(--viz-tiles-filter);
-  opacity: var(--viz-tiles-opacity);
 }
-.map__tile {
-  position: absolute;
-  max-width: none;
-  user-select: none;
+/* MapLibre's own wrapper must not intercept anything or show its controls. */
+.map__vector :deep(.maplibregl-canvas) {
+  outline: none;
 }
 .map__attribution {
   position: absolute;

@@ -19,10 +19,12 @@ Shared:
 - `model/` — plain data (`types.ts`: `BaseItem`, `TimelineEvent`, `Place`, `ModuleData`…) and logic on it (`dates.ts`, `places.ts`).
 - `host/` — the page: `ModulesPrototype` (control strip, phone-width iframe), `ArticleModules` (article, VE toolbar with Insert per kind, select mode, curator, placed blocks, timeline↔map links), `kinds.ts` (everything that differs between kinds), `loadArticle.ts` (the Frank Gehry snapshot), `examples.ts`, `store.ts` (one localStorage store per route).
 
-Street map: the map draws OpenStreetMap tiles (`tile.openstreetmap.org`, credited on the map) over the
-drawn base, toned down by `--viz-tiles-filter`, so readers can zoom to city and street level. The
-drawn Natural Earth base stays underneath as the fallback while tiles load or offline. (Wikimedia's
-own tiles refuse requests from other sites, and CARTO's need an API key.)
+Street map: cities and streets come from OpenStreetMap data as **vector tiles from OpenFreeMap**
+(free, no key; credited on the map), drawn by MapLibre GL behind the renderer's own marks
+(`render/vectorBase.ts`). The style is OpenFreeMap's Positron recoloured from `--viz-map-*` tokens:
+neutrals only, so the base stays weaker than the marks. MapLibre is loaded only when a map is on the
+page. The drawn Natural Earth base stays underneath as the fallback while tiles load or offline.
+(Wikimedia's own tiles refuse requests from other sites; CARTO's need an API key.)
 
 Data, committed (no runtime lookups except the panel's Commons and Wikidata searches and the street-map tiles):
 
