@@ -1,0 +1,41 @@
+{
+ "file": "File:21st_Bundestag.svg",
+ "total": 630,
+ "parties": [
+  {
+   "label": "LINKE",
+   "color": "#be3075",
+   "seats": 64
+  },
+  {
+   "label": "SPD",
+   "color": "#e3000f",
+   "seats": 120
+  },
+  {
+   "label": "B90/GRUENE",
+   "color": "#409a3c",
+   "seats": 85
+  },
+  {
+   "label": "SSW",
+   "color": "#003c8f",
+   "seats": 1
+  },
+  {
+   "label": "CDU",
+   "color": "#151518",
+   "seats": 164
+  },
+  {
+   "label": "CSU",
+   "color": "#008ac5",
+   "seats": 44
+  },
+  {
+   "label": "AfD",
+   "color": "#00a2de",
+   "seats": 152
+  }
+ ]
+}

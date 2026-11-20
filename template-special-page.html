@@ -15,6 +15,11 @@
   )
   if (m && m[2]) return
   sessionStorage.removeItem(key)
+  // Only a pr-preview or codex/<variant> base index restores a path. Anywhere
+  // else the stored path is stale (left by an earlier preview visit): appending
+  // it to this page's own path would send the router to a route that does not
+  // exist and render a blank page.
+  if (!m) return
   var base = l.pathname.replace(/\/$/, '') || l.pathname
   h.replaceState(null, '', base + stored)
 })(location, history)
@@ -24,8 +29,8 @@
     <link rel="icon" type="image/svg+xml" href="/interactive-wikis/images/ProtoWiki.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ProtoWiki</title>
-    <script type="module" crossorigin src="/interactive-wikis/assets/index-CAAPwUwV.js"></script>
-    <link rel="stylesheet" crossorigin href="/interactive-wikis/assets/index-Dy8alOon.css">
+    <script type="module" crossorigin src="/interactive-wikis/assets/index-nW1te2GA.js"></script>
+    <link rel="stylesheet" crossorigin href="/interactive-wikis/assets/index-P-iDnMCV.css">
   </head>
   <body>
     <div id="app"></div>
