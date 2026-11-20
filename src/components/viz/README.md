@@ -41,13 +41,27 @@ Data, committed (no runtime lookups except the panel's Commons and Wikidata sear
 
 Adding a kind (e.g. a quantity chart): a mention type and extractor in `pick/`, an item type in `model/types.ts`, an entry in `host/kinds.ts`, an item editor over `ItemEditor`, a renderer in `render/` reading `tokens.css` (add tokens there, never literals), and the two template branches in `ArticleModules.vue`.
 
-## The general tool (`general/`, route `/visual`)
+## The general tool (`general/`, route `/visual`): the article is the interface
 
-One way in (Insert → Visual, or a **Suggested visual** at the top of Insert), one pick
-mode (dates, places, tables and images all lit; a filter row narrows it and follows
-the first pick), one curate panel (`GeneralCurate`) and one frame (`VisualFrame`)
-for every form. Everything is the general object in `model/visual.ts`: sets of
-items with typed components (time, place, quantity, category, region) and a source.
+There is no side panel. **Insert → Visual** asks one thing (`KindChooser`: Dates, Places, A
+table, An image — only those in the section), or a **suggestion card** starts it
+(`SuggestionLayer` + `cards.ts`: margin cards on wide screens, a chip at the heading opening a
+bottom sheet otherwise; the Visual Editor's own `FindingBody` with a reason on dismiss). That
+kind lights up in that section and the rest dims; an empty block is inserted beside the source
+and the visual grows in it with every pick. One bar at the bottom (`EditorBar`): kind and
+count, a miniature, Undo, More (whole article, add all, form options, adjust columns, change
+form), Cancel, Done; above it, only when needed, the one question about a table or two or three
+forms. Labels are spans of their sentences (`pick/labelSpan.ts`), underlined in the text with an
+end to drag at each side, a word to tap at either edge, or Shift(+Alt)+arrows
+(`useSpanEditor.ts`). Items are edited on the visual (`VisualFrame` editing mode): click a label
+to type, click an item for Show source / Change image / Move / Remove; bars drag to reorder. A
+placed block drags by its handle (Move up / Move down on a phone). The Timeline, Map and
+Election prototypes are listed under "Earlier prototypes".
+
+### Pieces
+
+Everything is the general object in `model/visual.ts`: sets of items with typed components
+(time, place, quantity, category, region) and a source (with the label's span).
 
 - `form-rules.json` — which forms fit which components (data). `rules.ts` reads it.
 - `forms/` — one renderer per form plus its entry in `forms/index.ts` (label, how-to-read
@@ -55,12 +69,13 @@ items with typed components (time, place, quantity, category, region) and a sour
   diagram wrap the existing renderers (`bare` mode, selection owned by the frame); line and
   columns, bars, rows of small columns and the annotated image are new. "Map and timeline,
   linked" (place + time) shows both views of the same items with one selection.
-- Every item can carry an image (the curate panel's image button: the article's own images or
-  Wikimedia Commons, through the same `ImagePicker` as the timeline); the frame's card shows it.
+- Every item can carry an image (Change image on the item: the article's own images or Wikimedia
+  Commons, through the same `ImagePicker` as the timeline); the frame's card shows it.
 - `draft.ts` — what picking does (dates/places → items, a table → items by column roles,
   an image → markers), and the Compare operator (`setCompare`: the same table in a
   comparable article, as a second set). Over time and Link are noted in `model/visual.ts`.
-- `suggest.ts` — the suggestions, from counts and table detection.
+- `cards.ts` — the suggestion cards (thresholds, one per section, three per article, dismissals in
+  local storage); `suggest.ts` — the counts behind "Load example".
 - Adding a form: a row in `form-rules.json`, a renderer and its entry in `forms/index.ts`.
 
 Data: `public/snapshots/bilbao.html` (+ `.places.json`, `.labels.json` from

@@ -14,6 +14,7 @@ import {
   proposeGeneralRoles,
   type GeneralRole,
 } from '../pick/toItems'
+import { cleanLabel } from '../pick/labelSpan'
 import { defaultsOf, FORMS } from './forms'
 import { formsFor } from './rules'
 
@@ -28,16 +29,50 @@ export interface VisualDraft {
   imageId: string | null
   /** The compared article (Compare operator), by title. */
   compareWith: string | null
-  /** What pick mode lights up. */
+  /** What pick mode lights up: one kind per visual. */
   filter: PickFilter
-  /** Re-editing a placed visual (its id), or inserting a new one. */
+  /** The placed visual this draft is (a new block, or one being edited). */
   editingId: string | null
+  /** The section (its h2 id) in the spotlight; null: the whole article. */
+  scope?: string | null
+  /** A block added for this draft (Cancel removes it) or a placed one being edited (Cancel restores it). */
+  isNew?: boolean
+  /** The item whose label span is underlined in the text and can be adjusted. */
+  currentId?: string | null
+  /** A table read with doubt: the one question the bar asks, with two or three answers. */
+  question?: { text: string; answers: { label: string; col: number }[]; chosen: number } | null
+}
+
+/** How a placed visual was picked, so clicking it re-enters the same mode. */
+export interface PickState {
+  kind: PickFilter
+  scope: string | null
+  tableId: string | null
+  roles: GeneralRole[]
+  imageId: string | null
+  compareWith: string | null
 }
 
 export interface PlacedVisual {
   id: string
   visual: Visual
   placement: Placement
+  pick?: PickState
+}
+
+export const pickStateOf = (d: VisualDraft): PickState => ({
+  kind: d.filter,
+  scope: d.scope ?? null,
+  tableId: d.tableId,
+  roles: [...d.roles],
+  imageId: d.imageId,
+  compareWith: d.compareWith,
+})
+
+/** The label a span reads as, unless the editor typed their own. */
+export function setSpan(item: Item, span: { start: number; end: number }) {
+  item.source.span = span
+  if (!item.labelEdited) item.label = cleanLabel(item.source.text.slice(span.start, span.end))
 }
 
 export const emptyDraft = (filter: PickFilter = 'all'): VisualDraft => ({
@@ -118,7 +153,22 @@ export function pickTable(d: VisualDraft, a: LoadedArticle, id: string) {
   firstPick(d, 'table')
   clearPicks(d)
   d.tableId = id
-  d.roles = proposeGeneralRoles(t).map((r) => r.role)
+  const proposals = proposeGeneralRoles(t)
+  d.roles = proposals.map((r) => r.role)
+  // Doubt: a long table with several number columns. One question, the first answer applied.
+  const numeric = proposals.flatMap((p, c) =>
+    p.role === 'quantity' || p.reason === 'Another number column' ? [c] : [],
+  )
+  d.question =
+    numeric.length > 1 && !d.roles.filter((r) => r === 'time').slice(1).length
+      ? {
+          text: 'Which column is the value?',
+          answers: numeric
+            .slice(0, 3)
+            .map((c) => ({ label: t.headers[c].split(' › ').pop() || `Column ${c + 1}`, col: c })),
+          chosen: numeric[0],
+        }
+      : null
   d.visual.sets[0].items = itemsFromTable(t, d.roles)
   d.visual.sets[0].label = a.source.title
   d.visual.title ||= t.caption || t.sectionTitle
@@ -193,4 +243,19 @@ export function setCompare(d: VisualDraft, a: LoadedArticle, title: string | nul
   }))
   d.visual.sets = [d.visual.sets[0], { label: title, items }]
   d.visual.sourceNote = `Data: the tables in “${here.sectionTitle}” of ${a.source.title} and of ${title}.`
+}
+
+/** The answer to the one question: this column is the value, the other number columns are not. */
+export function chooseValueColumn(d: VisualDraft, a: LoadedArticle, col: number) {
+  const t = tableOf(a, d.tableId)
+  if (!t || !d.question) return
+  const others = d.question.answers.map((x) => x.col).filter((c) => c !== col)
+  d.roles = d.roles.map((r, c) => (c === col ? 'quantity' : others.includes(c) ? 'ignore' : r))
+  d.question = { ...d.question, chosen: col }
+  const labels = new Map(itemsOf(d).map((i) => [i.id, i.label]))
+  d.visual.sets[0].items = itemsFromTable(t, d.roles).map((i) => ({
+    ...i,
+    label: labels.get(i.id) ?? i.label,
+  }))
+  refreshForm(d)
 }

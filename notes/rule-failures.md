@@ -162,3 +162,47 @@ for the Compare operator. Rules: `pick/toItems.ts` (tables, items),
 ## Images
 
 - Inline thumbnails are 250px; drawn across the column an annotated image was blurry → every use of a file takes the largest copy the snapshot has, and the figure is never drawn at more than twice its resolution.
+
+# Label spans (simplification round, Bilbao History)
+
+Rule (`pick/labelSpan.ts`): the clause holding the date, without the date
+phrase; too short → join the clause before; a bare name or a lead-in → carry on
+to the clause with a verb. The label is the span, capitalised, without
+trailing punctuation or footnotes. On the 36 dated sentences of History, the
+default span was **right for 23** and **wrong for 13**:
+
+| Date | Sentence (short) | Span proposed | Span that would have been right |
+| --- | --- | --- | --- |
+| 1323 | "…developed, among them Portugalete in 1323, Ondarroa in 1327, Lekeitio in 1335, and Mungia and Larrabetzu in 1376." | Among them Portugalete | Portugalete … developed (not contiguous: needs the list's verb) |
+| 1327 | (same sentence) | Among them Portugalete in 1323, Ondarroa | Ondarroa |
+| 1335 | (same sentence) | Ondarroa in 1327, Lekeitio | Lekeitio |
+| 1376 | (same sentence) | Mungia and Larrabetzu | Mungia and Larrabetzu (developed) — right town, no event |
+| 1476 | "…swear fealty to the fueros of Biscay, as Ferdinand II of Aragon had already done so in 1476." | Ferdinand II of Aragon had already done so | Ferdinand II of Aragon swore fealty to the fueros (the words are in the previous clause) |
+| 1902 | "…the creation of many new factories, including the Santa Ana de Bolueta and the Altos Hornos de Vizcaya in 1902." | Including the Santa Ana de Bolueta and the Altos Hornos de Vizcaya | the Altos Hornos de Vizcaya (created) |
+| 1880 | "…grew from 11,000 in 1880 to 80,000 in 1900" | To 80,000 in 1900 | a population figure, not an event (no span is right) |
+| 1900 | (same sentence) | From 11,000 in 1880 to 80,000 | (same) |
+| 1948 | "…rebuilt in the 1940s, starting with the bridges…" | Starting with the bridges | the bridges were rebuilt |
+| 1947 | "…and the strike of the Euskalduna shipyard in 1947 was the first one to take place during the Francoist dictatorship." | It was in this context that the first social movements arose and the strike of the Euskalduna shipyard | the strike of the Euskalduna shipyard … was the first (the date sits inside the subject) |
+| 1979 | "With the approval of the Statute of Autonomy of the Basque Country in 1979, Vitoria-Gasteiz was elected the seat of the government…" | With the approval of the Statute … in 1979, Vitoria-Gasteiz was elected the seat of the government … | Approval of the Statute of Autonomy of the Basque Country (the label keeps the date) |
+| 26 August 1983 | "On 26 August 1983 during the celebration of … Aste Nagusia, the estuary overflowed…" | During the celebration of the local festivities known as Aste Nagusia | the estuary overflowed up to five metres (a plural noun, "festivities", read as the verb) |
+| 2000 | "…associations such as Bilbao Metrópoli-30 and Bilbao Ría 2000 were created…" | Many officially supported associations such as Bilbao Metrópoli-30 and Bilbao Ría | not a date: "2000" is part of a name (the date rule should skip numbers inside names) |
+
+Right (examples): "15 June 1300 → Founded Bilbao through a municipal charter
+dated in Valladolid" (the founding, not a person), "1310 → María Díaz I de
+Haro, niece of Diego López V and Lady of Biscay, grants a new municipal charter
+to the city" (long but complete), "June 1968 → The University of Bilbao, the
+first public university, was established".
+
+# Tables, one question (simplification round)
+
+- Climate table: read with no question (twelve month columns, measures as rows; "Year" left out as a total). Two taps from Insert → Visual.
+- Historical population: no question (one number column besides the ±% change).
+- Districts: three number columns (Population (2009), Area, Density) → one question, "Which column is the value?", with the three as answers; the first is applied. Enough here. The header "Area (km²)" reads "Area(km)" (the superscript 2 is lost).
+- Where one question would not be enough: a table where both the value and the name are in doubt (two text columns and two number columns), or the election results (list and constituency votes *and* list and constituency shares): that needs two answers. None on Bilbao.
+
+# Suggestion cards (simplification round)
+
+- Ranked by the share of the section's text they draw on: History timeline (0.47), Infrastructure map (0.46), Economy timeline (0.43). Ranking by count per length first put three maps on top (places are short) and left History out.
+- The population and climate tables never appear as cards while three other suggestions outrank them; they appear only once the others are made or dismissed. A table is the most direct visual on a city article; the ranking undervalues it.
+- The Infrastructure map (airport, port, stations) is valid but marginal; "Not useful here" is the expected answer.
+- The lead has dated sentences and places but no heading to sit beside, so it is never suggested.

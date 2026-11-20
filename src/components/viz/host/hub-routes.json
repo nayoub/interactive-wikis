@@ -1,6 +1,28 @@
 [
-  { "id": "timeline", "path": "/timeline", "label": "Timeline", "legacy": "/timeline-module" },
-  { "id": "map", "path": "/map", "label": "Map", "legacy": "/map-module" },
-  { "id": "election", "path": "/election", "label": "Election", "legacy": "/election-module" },
-  { "id": "visual", "path": "/visual", "label": "Visual tool" }
+  {
+    "id": "visual",
+    "path": "/visual",
+    "label": "Visual tool"
+  },
+  {
+    "id": "timeline",
+    "path": "/timeline",
+    "label": "Timeline",
+    "legacy": "/timeline-module",
+    "group": "earlier"
+  },
+  {
+    "id": "map",
+    "path": "/map",
+    "label": "Map",
+    "legacy": "/map-module",
+    "group": "earlier"
+  },
+  {
+    "id": "election",
+    "path": "/election",
+    "label": "Election",
+    "legacy": "/election-module",
+    "group": "earlier"
+  }
 ]

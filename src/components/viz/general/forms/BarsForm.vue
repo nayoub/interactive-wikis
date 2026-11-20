@@ -29,14 +29,46 @@ const max = computed(() =>
 const unit = computed(() => props.visual.sets[0]?.items[0]?.components.quantity?.unit ?? '')
 const dim = (id: string) => !!props.selectedId && props.selectedId !== id
 const pick = (id: string) => emit('select', id === props.selectedId ? null : id)
+
+// Being made: drag a bar to reorder (categories have no natural order).
+const dragging = ref<string | null>(null)
+function onDown(e: PointerEvent, id: string) {
+  if (!props.editing || e.button !== 0) return
+  dragging.value = id
+  ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+}
+function onMove(e: PointerEvent) {
+  if (!dragging.value || !root.value) return
+  const lis = Array.from(root.value.querySelectorAll<HTMLElement>(':scope > li'))
+  const ids = rows.value.map((r) => r.item.id)
+  const from = ids.indexOf(dragging.value)
+  let to = lis.findIndex((li) => e.clientY < li.getBoundingClientRect().top + li.offsetHeight / 2)
+  if (to === -1) to = ids.length - 1
+  else if (to > from) to -= 1
+  if (to === from) return
+  ids.splice(to, 0, ids.splice(from, 1)[0])
+  emit('reorder', ids)
+}
+function onUp() {
+  dragging.value = null
+}
 </script>
 
 <template>
   <ol ref="root" class="bf">
-    <li v-for="r in rows" :key="r.item.id" :class="{ 'bf--dim': dim(r.item.id) }">
+    <li
+      v-for="r in rows"
+      :key="r.item.id"
+      :class="{ 'bf--dim': dim(r.item.id) && !dragging, 'bf--drag': dragging === r.item.id }"
+    >
       <button
         type="button"
         class="bf__row"
+        :class="{ 'bf__row--editing': editing }"
+        @pointerdown="onDown($event, r.item.id)"
+        @pointermove="onMove"
+        @pointerup="onUp"
+        @pointercancel="onUp"
         :aria-pressed="selectedId === r.item.id"
         @click="pick(r.item.id)"
       >
@@ -114,6 +146,14 @@ small {
 .bf__value {
   color: var(--viz-ink-secondary);
   white-space: nowrap;
+}
+.bf__row--editing {
+  cursor: grab;
+  touch-action: none;
+}
+.bf--drag .bf__row {
+  cursor: grabbing;
+  background: var(--viz-accent-wash);
 }
 .bf--dim {
   opacity: var(--viz-dim);

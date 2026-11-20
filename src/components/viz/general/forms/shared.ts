@@ -12,8 +12,16 @@ export interface FormProps {
   skin?: 'desktop' | 'mobile'
   /** Timeline spacing (prototype control). */
   spacing?: 'proportional' | 'even'
+  /** Being made: labels editable in place, categories draggable. */
+  editing?: boolean
 }
-export type FormEmits = { select: [id: string | null] }
+export type FormEmits = {
+  select: [id: string | null]
+  /** A label typed on the visual. */
+  rename: [id: string, label: string]
+  /** Categories dragged into a new order (ids, in order). */
+  reorder: [ids: string[]]
+}
 
 /** The element's width, now and as it changes. */
 export function useWidth(el: Ref<HTMLElement | null>) {

@@ -41,6 +41,8 @@ const props = withDefaults(
     canShowSource?: boolean
     /** Inside the general tool's frame: no header, card or plain list of its own. */
     bare?: boolean
+    /** Being made (general tool): click a label to edit it in place. */
+    editLabels?: boolean
     /** The selected event, when the frame owns the selection. */
     selection?: string | null
   }>(),
@@ -56,6 +58,7 @@ const props = withDefaults(
     activeIds: () => [],
     canShowSource: true,
     bare: false,
+    editLabels: false,
     selection: undefined,
   },
 )
@@ -65,6 +68,8 @@ const emit = defineEmits<{
   select: [event: TimelineEvent]
   /** The selected event changed (for linking to a map on the same page). */
   focus: [event: TimelineEvent | null]
+  /** A label typed in place. */
+  rename: [id: string, label: string]
 }>()
 
 const sorted = computed(() => sortEvents(props.events))
@@ -257,9 +262,14 @@ function onActivate(e: MouseEvent, event: TimelineEvent) {
   if (props.fallback) return emit('select', event)
   setSelected(selectedId.value === event.id ? null : event.id)
 }
+function onRename(event: TimelineEvent, e: Event) {
+  const text = ((e.target as HTMLElement).textContent ?? '').replace(/\s+/g, ' ').trim()
+  if (text && text !== event.label) emit('rename', event.id, text)
+  else (e.target as HTMLElement).textContent = event.label
+}
 /** A click on the figure but not on an event clears the selection. */
 function onFigureClick(e: MouseEvent) {
-  if (!(e.target as Element).closest('.tl-ev__link, .tl-ev__ref')) setSelected(null)
+  if (!(e.target as Element).closest('.tl-ev__link, .tl-ev__ref, .tl-ev__edit')) setSelected(null)
 }
 
 function onKeydown(e: KeyboardEvent) {
@@ -367,7 +377,18 @@ const titleId = `tl-title-${Math.random().toString(36).slice(2, 8)}`
           }}</time>
           <small v-if="age(event)" class="tl-ev__age">{{ age(event) }}</small>
           <small class="tl-ev__label"
+            ><span
+              v-if="editLabels"
+              class="tl-ev__link tl-ev__edit"
+              contenteditable="plaintext-only"
+              role="textbox"
+              :aria-label="`Label: ${event.label}`"
+              @focus="setSelected(event.id)"
+              @keydown.enter.prevent="($event.target as HTMLElement).blur()"
+              @blur="onRename(event, $event)"
+              >{{ event.label }}</span
             ><a
+              v-else
               class="tl-ev__link"
               :href="`#tl-src-${event.sourceAnchor.mentionId}`"
               @click="onActivate($event, event)"
@@ -456,7 +477,18 @@ const titleId = `tl-title-${Math.random().toString(36).slice(2, 8)}`
               }}</time>
               <small v-if="age(event)" class="tl-ev__age">{{ age(event) }}</small>
               <small class="tl-ev__label"
+                ><span
+                  v-if="editLabels"
+                  class="tl-ev__link tl-ev__edit"
+                  contenteditable="plaintext-only"
+                  role="textbox"
+                  :aria-label="`Label: ${event.label}`"
+                  @focus="setSelected(event.id)"
+                  @keydown.enter.prevent="($event.target as HTMLElement).blur()"
+                  @blur="onRename(event, $event)"
+                  >{{ event.label }}</span
                 ><a
+                  v-else
                   class="tl-ev__link"
                   :href="`#tl-src-${event.sourceAnchor.mentionId}`"
                   @click="onActivate($event, event)"
@@ -609,6 +641,18 @@ small,
 .tl-ev__ref {
   position: relative;
   z-index: 1;
+}
+.tl-ev__edit {
+  cursor: text;
+  border-radius: var(--viz-radius);
+  outline: none;
+}
+.tl-ev__edit:hover {
+  box-shadow: inset 0 -1px 0 var(--viz-rule);
+}
+.tl-ev__edit:focus {
+  box-shadow: inset 0 0 0 var(--viz-line-width) var(--viz-accent);
+  color: var(--viz-ink);
 }
 .tl-ev--dim,
 .tl-dot--dim {

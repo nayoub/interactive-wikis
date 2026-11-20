@@ -23,10 +23,34 @@ const props = withDefaults(
     canShowSource?: boolean
     skin?: 'desktop' | 'mobile'
     spacing?: 'proportional' | 'even'
+    /** Being made: the item card edits (label, image, remove, move), the empty block prompts. */
+    editing?: boolean
+    /** In the empty block while it is being made ("Tap a date in the text"). */
+    prompt?: string
+    /** The item to select from outside (the one just picked). */
+    focusId?: string | null
   }>(),
-  { fallback: false, lang: 'en', canShowSource: true, skin: 'desktop', spacing: 'proportional' },
+  {
+    fallback: false,
+    lang: 'en',
+    canShowSource: true,
+    skin: 'desktop',
+    spacing: 'proportional',
+    editing: false,
+    prompt: '',
+    focusId: null,
+  },
 )
-const emit = defineEmits<{ show: [item: Item] }>()
+const emit = defineEmits<{
+  show: [item: Item]
+  /** Being made: */
+  select: [id: string | null]
+  rename: [id: string, label: string]
+  remove: [id: string]
+  image: [id: string]
+  move: [id: string, delta: number]
+  reorder: [ids: string[]]
+}>()
 
 const def = computed(() => FORMS[props.visual.form])
 const titleId = useId()
@@ -43,6 +67,24 @@ const listed = computed(() => {
 })
 const selected = computed(() => allItems.value.find((i) => i.id === selectedId.value) ?? null)
 const setOf = (i: Item) => props.visual.sets.find((s) => s.items.includes(i))
+
+watch(
+  () => props.focusId,
+  (id) => {
+    if (props.editing && id !== undefined) selectedId.value = id
+  },
+)
+watch(selectedId, (id) => props.editing && emit('select', id))
+const draftLabel = ref('')
+watch(
+  () => [selectedId.value, props.visual] as const,
+  () => (draftLabel.value = allItems.value.find((i) => i.id === selectedId.value)?.label ?? ''),
+  { immediate: true, deep: true },
+)
+function commitLabel() {
+  const t = draftLabel.value.replace(/\s+/g, ' ').trim()
+  if (selected.value && t && t !== selected.value.label) emit('rename', selected.value.id, t)
+}
 
 function when(i: Item) {
   const t = i.components.time
@@ -89,7 +131,10 @@ function onKeydown(e: KeyboardEvent) {
     </div>
     <small class="vf__caption">{{ visual.caption || def.caption(visual) }}</small>
 
-    <div v-if="!fallback" class="vf__figure">
+    <!-- Being made, nothing picked yet: the block says what to do. -->
+    <p v-if="editing && !allItems.length" class="vf__prompt">{{ prompt }}</p>
+
+    <div v-else-if="!fallback" class="vf__figure">
       <component
         :is="def.component"
         :visual="visual"
@@ -97,7 +142,10 @@ function onKeydown(e: KeyboardEvent) {
         :lang="lang"
         :skin="skin"
         :spacing="spacing"
+        :editing="editing"
         @select="selectedId = $event"
+        @rename="(id: string, label: string) => emit('rename', id, label)"
+        @reorder="(ids: string[]) => emit('reorder', ids)"
       />
     </div>
 
@@ -137,8 +185,58 @@ function onKeydown(e: KeyboardEvent) {
       </tbody>
     </table>
 
+    <!-- Being made: the selected item's card edits it (below the figure, never over it). -->
+    <div
+      v-if="editing && selected && !fallback"
+      class="vf__edit"
+      role="group"
+      aria-label="Edit this item"
+    >
+      <input
+        v-model="draftLabel"
+        class="vf__edit-label"
+        :aria-label="`Label for ${selected.label}`"
+        @blur="commitLabel"
+        @keydown.enter.prevent="commitLabel"
+      />
+      <small class="vf__edit-facts">{{ facts(selected) }}</small>
+      <small v-if="selected.labelEdited" class="vf__edit-facts"
+        >Your own words; still linked to its sentence.</small
+      >
+      <div class="vf__edit-actions">
+        <button v-if="selected.source.anchor" type="button" @click="emit('show', selected)">
+          <small>Show source</small>
+        </button>
+        <button
+          v-if="!selected.components.region"
+          type="button"
+          @click="emit('image', selected.id)"
+        >
+          <small>{{ selected.image ? 'Change image' : 'Add image' }}</small>
+        </button>
+        <template v-if="def.ordered || def.numbered">
+          <button type="button" @click="emit('move', selected.id, -1)">
+            <small>Move up</small>
+          </button>
+          <button type="button" @click="emit('move', selected.id, 1)">
+            <small>Move down</small>
+          </button>
+        </template>
+        <button
+          type="button"
+          class="vf__remove"
+          @click="
+            emit('remove', selected.id)
+            selectedId = null
+          "
+        >
+          <small>Remove</small>
+        </button>
+      </div>
+    </div>
+
     <SelectionCard
-      v-if="selected && !fallback"
+      v-else-if="selected && !fallback"
       :title="labelIn(selected, lang)"
       :meta="facts(selected)"
       :quote="selected.source.kind === 'sentence' ? selected.source.text : undefined"
@@ -173,7 +271,7 @@ function onKeydown(e: KeyboardEvent) {
         </button>
       </li>
     </ol>
-    <details v-else-if="!fallback" class="vf__more">
+    <details v-else-if="!fallback && allItems.length" class="vf__more">
       <summary>
         <small>All {{ allItems.length }} items</small>
       </summary>
@@ -224,6 +322,62 @@ small {
   font-size: var(--viz-small-size);
   font-weight: var(--viz-small-weight);
   line-height: var(--viz-small-line);
+}
+.vf__prompt {
+  margin: 0;
+  padding: var(--viz-space-xl) var(--viz-space-l);
+  border: var(--viz-line-width) dashed var(--viz-rule);
+  color: var(--viz-ink-secondary);
+  text-align: center;
+  font-size: var(--viz-small-size);
+}
+.vf__edit {
+  margin-top: var(--viz-space-m);
+  padding-top: var(--viz-space-s);
+  border-top: var(--viz-line-width) solid var(--viz-rule-light);
+}
+.vf__edit-label {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 2px var(--viz-space-xs);
+  border: 0;
+  border-radius: var(--viz-radius);
+  background: transparent;
+  color: var(--viz-ink);
+  font-family: var(--viz-font-family);
+  font-size: var(--viz-heading-size);
+  font-weight: var(--viz-heading-weight);
+  line-height: var(--viz-heading-line);
+}
+.vf__edit-label:hover {
+  box-shadow: inset 0 -1px 0 var(--viz-rule);
+}
+.vf__edit-label:focus {
+  outline: none;
+  box-shadow: inset 0 0 0 var(--viz-line-width) var(--viz-accent);
+}
+.vf__edit-facts {
+  display: block;
+  color: var(--viz-ink-tertiary);
+}
+.vf__edit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--viz-space-l);
+  margin-top: var(--viz-space-xs);
+}
+.vf__edit-actions button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--viz-accent);
+  cursor: pointer;
+}
+.vf__edit-actions button:hover {
+  text-decoration: underline;
+}
+.vf__edit-actions .vf__remove {
+  color: var(--color-destructive, #d33);
 }
 .vf__caption {
   display: block;

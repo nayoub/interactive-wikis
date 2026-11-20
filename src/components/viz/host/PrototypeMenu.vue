@@ -24,6 +24,7 @@ import {
 import SettingsPopover from '@/components/settings/SettingsPopover.vue'
 import type { ModuleKind } from '../model/types'
 import { HUB, hub, type HubId } from './hub'
+import { resetDismissed } from '../general/cards'
 import { loadExample, resetPrototype } from './prototypeActions'
 import type { ModulesStore, PlacedModule } from './store'
 
@@ -36,6 +37,8 @@ const props = defineProps<{
   skin: 'desktop' | 'mobile'
   /** Label languages the page's items carry (general tool), English first. */
   languages?: { value: string; label: string }[]
+  /** Suggestion cards on this page: on/off and reset dismissed (general tool). */
+  suggestionControls?: boolean
 }>()
 const state = props.store.state
 const router = useRouter()
@@ -105,9 +108,16 @@ const shade = computed({
 })
 const has = (k: ModuleKind) => props.kinds.includes(k)
 const hasOptions = computed(
-  () => has('timeline') || has('visual') || has('map') || !!props.languages?.length,
+  () => has('timeline') || has('visual') || has('map') || !!props.languages?.length || !!props.suggestionControls,
 )
 const lang = computed({ get: () => hub.lang, set: (v: string) => (hub.lang = v) })
+const suggestions = computed({ get: () => hub.suggestions, set: (v: boolean) => (hub.suggestions = v) })
+function resetSuggestions() {
+  resetDismissed()
+  hub.suggestionsReset++
+}
+const primary = computed(() => HUB.filter((h) => !h.group))
+const earlier = computed(() => HUB.filter((h) => h.group === 'earlier'))
 </script>
 
 <template>
@@ -141,7 +151,16 @@ const lang = computed({ get: () => hub.lang, set: (v: string) => (hub.lang = v) 
         <CdxField :is-fieldset="true" class="pm__group">
           <template #label>Prototype</template>
           <CdxRadio
-            v-for="h in HUB"
+            v-for="h in primary"
+            :key="h.id"
+            v-model="prototype"
+            name="pm-prototype"
+            :input-value="h.id"
+            >{{ h.label }}</CdxRadio
+          >
+          <span v-if="earlier.length" class="pm__subhead">Earlier prototypes</span>
+          <CdxRadio
+            v-for="h in earlier"
             :key="h.id"
             v-model="prototype"
             name="pm-prototype"
@@ -178,6 +197,10 @@ const lang = computed({ get: () => hub.lang, set: (v: string) => (hub.lang = v) 
             <span class="pm__label" aria-hidden="true">Labels</span>
             <CdxToggleButtonGroup v-model="lang" :buttons="languages" aria-label="Item labels in" />
           </div>
+          <template v-if="suggestionControls">
+            <CdxToggleSwitch v-model="suggestions" align-switch>Suggestions</CdxToggleSwitch>
+            <CdxButton weight="quiet" size="small" @click="resetSuggestions">Reset dismissed suggestions</CdxButton>
+          </template>
           <CdxToggleSwitch v-if="has('visual')" v-model="monochrome" align-switch
             >Monochrome</CdxToggleSwitch
           >
@@ -228,6 +251,12 @@ const lang = computed({ get: () => hub.lang, set: (v: string) => (hub.lang = v) 
 .pm__label {
   min-width: 4.5em;
   color: var(--color-base);
+}
+.pm__subhead {
+  display: block;
+  margin: var(--spacing-50) 0 var(--spacing-25);
+  color: var(--color-subtle);
+  font-size: var(--font-size-small);
 }
 .pm__hint {
   color: var(--color-subtle);

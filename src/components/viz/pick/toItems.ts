@@ -15,17 +15,20 @@
  *     "Year" aggregate of a wide table
  *   - unit: from the header or the row label (°C, mm, %, hours, days, km²)
  */
+import { cleanLabel, defaultSpan } from './labelSpan'
 import type { DateMention, PlaceMention } from './types'
 import type { ParsedTable } from './tables'
 import type { EventImage } from '../model/types'
 import type { Item, TimeComponent } from '../model/visual'
 
+/** A date's label: a span of its own sentence (pick/labelSpan.ts), never generated text. */
 export function itemFromDate(m: DateMention): Item {
+  const span = defaultSpan(m.sentence, m.sentenceOffset[0], m.sentenceOffset[1])
   return {
     id: m.id,
-    label: m.draftLabel,
+    label: cleanLabel(m.sentence.slice(span.start, span.end)),
     components: { time: structuredClone(m.value) },
-    source: { kind: 'sentence', anchor: { ...m.anchor }, text: m.sentence },
+    source: { kind: 'sentence', anchor: { ...m.anchor }, text: m.sentence, span },
     citation: m.citation ? { ...m.citation } : undefined,
   }
 }
@@ -38,11 +41,13 @@ export function itemFromPlace(m: PlaceMention): Item {
     : year
       ? { start: { y: year }, precision: 'year' }
       : undefined
+  // A place's label is its link text in the sentence.
+  const span = { start: m.sentenceOffset[0], end: m.sentenceOffset[1] }
   return {
     id: m.id,
-    label: /^Q\d+$/.test(v.name) ? m.text : m.draftLabel,
+    label: cleanLabel(m.sentence.slice(span.start, span.end)) || m.text,
     components: { place: { ...v.coordinates }, ...(time ? { time } : {}) },
-    source: { kind: 'sentence', anchor: { ...m.anchor }, text: m.sentence },
+    source: { kind: 'sentence', anchor: { ...m.anchor }, text: m.sentence, span },
     citation: m.citation ? { ...m.citation } : undefined,
     wikidataId: v.wikidataId,
   }
