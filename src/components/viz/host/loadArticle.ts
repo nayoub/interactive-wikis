@@ -15,6 +15,7 @@
  */
 import { draftLabel } from '../pick/draftLabel'
 import { extractDates, type DateMatch } from '../pick/extractDates'
+import { proposeGeneralRoles } from '../pick/toItems'
 import {
   parseTable,
   proposeRoles,
@@ -37,6 +38,13 @@ export interface ArticleSource {
   defaultSection: { id: string; title: string }
   /** Earlier articles in a series (previous elections), newest first: parsed for their tables. */
   previous?: { slug: string; title: string }[]
+  /**
+   * The general visual tool: every data table is pickable (not only results
+   * tables), and so is every image.
+   */
+  general?: boolean
+  /** Comparable articles (another city), parsed for their tables: the Compare operator's second set. */
+  compare?: { slug: string; title: string }[]
 }
 
 export const GEHRY: ArticleSource = {
@@ -64,11 +72,19 @@ export interface LoadedArticle {
   /** Election infobox: chamber size, majority, the article's party order. */
   infobox: InfoboxElection
   previous: RelatedArticle[]
+  /** Comparable articles' tables (general tool). */
+  compare: RelatedArticle[]
+  /** Wikidata labels in other languages for the things the article links (general tool): QID → lang → label. */
+  labels: Record<string, Record<string, string>>
+  /** The languages those labels are in, for the user menu's Labels choice. */
+  labelLanguages: { value: string; label: string }[]
   /** The article's own parliament diagram, if it has one. */
   seating?: Seating
   source: ArticleSource
   images: EventImage[]
   sections: ArticleSection[]
+  /** Every section's top-level (h2) section, any depth below it: id → { id, title }. */
+  topSection: Record<string, { id: string; title: string }>
   /** {{Use dmy dates}}: write "6 May 2025", as the article does. */
   dayFirst: boolean
   /** The article's subject; `birth` from the infobox when it has one. */
@@ -101,9 +117,23 @@ export function loadArticle(source: ArticleSource = GEHRY): Promise<LoadedArticl
           ),
         ),
         seatingOf(source.slug),
-      ]).then(([html, places, previous, seating]) => ({
+        Promise.all(
+          (source.compare ?? []).map((p) =>
+            text(`${base}snapshots/${p.slug}.html`).then((html) => {
+              const body = parse(html).body
+              return { title: p.title, infobox: readInfobox(body, p.title), tables: generalTables(body, 'c') }
+            }),
+          ),
+        ),
+        text(`${base}snapshots/${source.slug}.labels.json`)
+          .then((t) => JSON.parse(t))
+          .catch(() => null),
+      ]).then(([html, places, previous, seating, compare, labels]) => ({
         ...process(html, places, source, previous),
         seating,
+        compare,
+        labels: labels?.labels ?? {},
+        labelLanguages: labels?.languages ?? [],
       })),
     )
   return cache.get(source.slug)!
@@ -141,6 +171,24 @@ function dataTables(body: HTMLElement, chamberSize: number | undefined, prefix: 
       !roles.some((r) => r === 'seats' || r === 'votes' || r === 'share')
     )
       return
+    out.push(t)
+  })
+  return out
+}
+
+/**
+ * Any data table (general tool): a wikitable or a "Historical population"
+ * box with numbers and either names or times (rules in pick/toItems.ts).
+ */
+function generalTables(body: HTMLElement, prefix: string) {
+  const out: ParsedTable[] = []
+  body.querySelectorAll<HTMLTableElement>('table.wikitable, table.table-pale').forEach((el) => {
+    if (el.closest('.infobox, .navbox, .sidebar')) return
+    const s = sectionOf(el)
+    const t = parseTable(el, `${prefix}${out.length + 1}`, s.id, s.title)
+    const roles = proposeGeneralRoles(t).map((r) => r.role)
+    if (!roles.includes('quantity') && !(roles.includes('time') && roles.filter((r) => r === 'time').length > 1)) return
+    if (!roles.includes('category') && !roles.includes('time')) return
     out.push(t)
   })
   return out
@@ -246,6 +294,7 @@ function process(
         citation: citationIn(sent),
         // The article's own wording when the link reads as a name ("Chiat/Day Building"); the
         // item's name when the link is a phrase ("his private residence" → "Gehry Residence").
+        inList: ctx.el.tagName === 'LI',
         draftLabel:
           /^\p{Lu}|^\d/u.test(link.text) || /^Q\d+$/.test(info.name) ? link.text : info.name,
       })
@@ -270,6 +319,7 @@ function process(
         sentenceOffset: [match.start - sent.start, match.end - sent.start],
         anchor: anchorFor(id, sent),
         citation: citationIn(sent),
+        inList: ctx.el.tagName === 'LI',
         draftLabel: draftLabel({
           sentence: sent.text,
           start: match.start - sent.start,
@@ -299,7 +349,8 @@ function process(
 
   // Data tables: marked for Pick, with a chip before each and an id on every row.
   const infobox = readInfobox(body, source.title)
-  const tables: TableMention[] = dataTables(body, infobox.chamberSize, 't').map((t) => {
+  const found = source.general ? generalTables(body, 't') : dataTables(body, infobox.chamberSize, 't')
+  const tables: TableMention[] = found.map((t) => {
     t.el.dataset.pickTable = t.id
     t.el.id ||= `tl-src-${t.id}`
     t.rows.forEach((r, i) => (r.el.dataset.tlId = `${t.id}-r${i}`))
@@ -351,7 +402,39 @@ function process(
       img.getAttribute('alt') ||
       ''
     images.push({ id: `img${i}`, src: img.getAttribute('src') ?? '', caption, source: 'article' })
+    // General tool: the image itself is pickable (its figure, gallery box or infobox cell).
+    if (source.general) {
+      const box = img.closest<HTMLElement>('figure, .gallerybox, .infobox-image') ?? img
+      box.classList.add('tl-mention', 'tl-pick-image')
+      box.dataset.kind = 'image'
+      box.dataset.tlId = `img${i}`
+      box.setAttribute('contenteditable', 'false')
+    }
   })
+
+  const topSection: Record<string, { id: string; title: string }> = { Lead: { id: 'Lead', title: 'Lead' } }
+  body.querySelectorAll<HTMLElement>('h2, h3, h4, h5, h6').forEach((h) => {
+    if (!h.id) return
+    let s = h.closest('section')
+    let top: HTMLElement | null = null
+    while (s) {
+      const own = s.querySelector<HTMLElement>(':scope > h2, :scope > .mw-heading > h2')
+      if (own) top = own
+      s = s.parentElement?.closest('section') ?? null
+    }
+    topSection[h.id] = top ? { id: top.id, title: top.textContent?.trim() ?? top.id } : { id: h.id, title: h.textContent?.trim() ?? h.id }
+  })
+
+  // The same file at several sizes (thumbnail in the text, larger in a gallery): give every
+  // use the largest copy the snapshot has, so a figure drawn wide is not upscaled from a thumbnail.
+  const fileOf = (src: string) => src.split('/').pop()?.replace(/^\d+px-/, '') ?? src
+  const pxOf = (src: string) => Number(src.split('/').pop()?.match(/^(\d+)px-/)?.[1] ?? 0)
+  const largest = new Map<string, string>()
+  for (const im of images) {
+    const k = fileOf(im.src)
+    if (!largest.has(k) || pxOf(im.src) > pxOf(largest.get(k)!)) largest.set(k, im.src)
+  }
+  for (const im of images) im.src = largest.get(fileOf(im.src)) ?? im.src
 
   const sections: ArticleSection[] = []
   body.querySelectorAll<HTMLElement>('section > h2, section > h3').forEach((h) => {
@@ -376,8 +459,12 @@ function process(
     tables,
     infobox,
     previous,
+    compare: [],
+    labels: {},
+    labelLanguages: [],
     source,
     dayFirst: /Template:Use_dmy_dates/.test(raw),
+    topSection,
     images,
     sections,
     subject: { name: source.title, birth },

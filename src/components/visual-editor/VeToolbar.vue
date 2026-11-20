@@ -56,7 +56,8 @@ const props = withDefaults(
      * Working Insert-menu tools (Vector "Insert ▾", Minerva "+"). Each emits
      * `insert` with its `value`. Empty → Insert stays the inert placeholder.
      */
-    insertItems?: { value: string; label: string; icon: Icon }[]
+    /** `group` starts a headed group in the menu ("Suggested visuals"). */
+    insertItems?: { value: string; label: string; icon: Icon; group?: string }[]
   }>(),
   { showSuggestionsToggle: true, insertItems: () => [] },
 )
@@ -276,16 +277,19 @@ onBeforeUnmount(() => {
           <CdxIcon :icon="cdxIconExpand" size="small" />
         </button>
         <div v-if="openMenu === 'insert'" class="ve-toolbar__menu ve-toolbar__menu--dropdown" role="menu">
-          <button
-            v-for="item in insertItems"
-            :key="item.value"
-            class="ve-toolbar__menu-item"
-            role="menuitem"
-            @click="chooseInsert(item.value)"
-          >
-            <CdxIcon :icon="item.icon" />
-            <span>{{ item.label }}</span>
-          </button>
+          <template v-for="(item, i) in insertItems" :key="item.value">
+            <div
+              v-if="item.group && item.group !== insertItems[i - 1]?.group"
+              class="ve-toolbar__menu-heading"
+              role="presentation"
+            >
+              {{ item.group }}
+            </div>
+            <button class="ve-toolbar__menu-item" role="menuitem" @click="chooseInsert(item.value)">
+              <CdxIcon :icon="item.icon" />
+              <span>{{ item.label }}</span>
+            </button>
+          </template>
         </div>
       </div>
       <button v-else class="ve-toolbar__btn ve-toolbar__btn--dropdown">
@@ -937,5 +941,25 @@ onBeforeUnmount(() => {
   height: 1px;
   margin: 4px 0;
   background: var(--border-color-subtle, #c8ccd1);
+}
+/* A menu with headed groups (Insert with suggestions): long labels wrap and it stays on screen. */
+.ve-toolbar__menu--dropdown:has(.ve-toolbar__menu-heading) {
+  width: min(22rem, calc(100vw - 32px));
+  max-height: min(70vh, 32rem);
+  overflow-y: auto;
+  left: auto;
+  right: 0;
+}
+.ve-toolbar__menu--dropdown:has(.ve-toolbar__menu-heading) .ve-toolbar__menu-item {
+  align-items: flex-start;
+  padding-block: 8px;
+  white-space: normal;
+}
+.ve-toolbar__menu-heading {
+  padding: var(--spacing-50) var(--spacing-75) var(--spacing-25);
+  color: var(--color-subtle);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-small);
 }
 </style>

@@ -38,7 +38,8 @@ const MONTHS = [
   'December',
 ]
 const MONTH = `(${MONTHS.join('|')})`
-const YEAR = '(1[89]\\d{2}|20[0-3]\\d)'
+// Years 1000–2039: a city's history starts long before a person's life does.
+const YEAR = '(1\\d{3}|20[0-3]\\d)'
 const PART = '(early|mid|late)'
 
 interface Rule {

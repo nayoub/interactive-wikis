@@ -12,8 +12,8 @@ import { setHighlight } from './passage'
 interface Options {
   root: Ref<HTMLElement | null>
   active: Ref<boolean>
-  /** Which kind of mention is pickable now ("date", "place"). */
-  kind: Ref<string | null>
+  /** Which kind(s) of mention are pickable now ("date", "place", ["date", "place", "table"]). */
+  kind: Ref<string | string[] | null>
   picked: Ref<Set<string>>
   /** Candidates whose thing is already on the result through another mention. */
   used?: Ref<Set<string>>
@@ -24,8 +24,11 @@ interface Options {
 }
 
 export function useSelectMode(opts: Options) {
-  const isCandidate = (el: Element) =>
-    opts.active.value && !!opts.kind.value && (el as HTMLElement).dataset.kind === opts.kind.value
+  const isCandidate = (el: Element) => {
+    const k = opts.kind.value
+    const mine = (el as HTMLElement).dataset.kind ?? ''
+    return opts.active.value && !!k && (Array.isArray(k) ? k.includes(mine) : mine === k)
+  }
 
   function sync() {
     const root = opts.root.value

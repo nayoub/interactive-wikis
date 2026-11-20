@@ -8,6 +8,7 @@
  *
  * The URL reflects the controls, so a link opens a prototype in an exact state:
  *   example=1|0  the example modules / none   width=phone   plain=1
+ *   lang=eu|fr   item labels (general tool)
  *   mono=1       spacing=even                 shade=1       mode=edit
  * Esc returns from the phone frame to Desktop.
  */
@@ -15,6 +16,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter, type LocationQuery } from 'vue-router'
 
 import type { ModuleKind } from '../model/types'
+import GeneralModules from '../general/GeneralModules.vue'
 import ArticleModules from './ArticleModules.vue'
 import { HUB, hub, rememberPath, type HubId } from './hub'
 import { GEHRY, loadArticle, type ArticleSource, type LoadedArticle } from './loadArticle'
@@ -27,6 +29,8 @@ const props = defineProps<{
   example: (article: LoadedArticle) => Partial<Record<ModuleKind, PlacedModule>>
   /** Which article (default: Frank Gehry). */
   source?: ArticleSource
+  /** The page: per-kind modules (timeline, map, election), or the general visual tool. */
+  host?: 'modules' | 'general'
 }>()
 
 const route = useRoute()
@@ -63,7 +67,7 @@ onMounted(() => window.addEventListener('keydown', onKeydown))
 onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 
 // ── URL ⇄ state (top document only) ────────────────────────────────────────
-const KEYS = ['example', 'width', 'plain', 'mono', 'spacing', 'shade', 'mode'] as const
+const KEYS = ['example', 'width', 'plain', 'mono', 'spacing', 'shade', 'mode', 'lang'] as const
 const one = (q: LocationQuery, k: string) => {
   const v = q[k]
   return (Array.isArray(v) ? v[0] : v) ?? null
@@ -84,6 +88,8 @@ async function applyQuery(q: LocationQuery) {
   if (example === '1') await loadExample(props.store, buildExample)
   else if (example === '0') {
     state.modules = {}
+    state.visuals = []
+    state.vdraft = null
     state.draft = null
     state.panelOpen = false
     state.fromExample = false
@@ -98,6 +104,8 @@ async function applyQuery(q: LocationQuery) {
   if (spacing) state.spacing = spacing === 'even' ? 'even' : 'proportional'
   const shade = one(q, 'shade')
   if (shade) setShade(shade === '1')
+  const lang = one(q, 'lang')
+  if (lang) hub.lang = lang
   const mode = one(q, 'mode')
   if (mode) state.mode = mode === 'edit' ? 'edit' : 'read'
 }
@@ -106,13 +114,14 @@ async function applyQuery(q: LocationQuery) {
 const wanted = computed(() => {
   const q: Record<string, string> = {}
   if (state.fromExample) q.example = '1'
-  else if (!Object.keys(state.modules).length) q.example = '0'
+  else if (!Object.keys(state.modules).length && !state.visuals.length) q.example = '0'
   if (hub.width === 'mobile') q.width = 'phone'
   if (hub.fallback) q.plain = '1'
   if (props.kinds.includes('visual') && state.monochrome) q.mono = '1'
   if (props.kinds.includes('timeline') && state.spacing === 'even') q.spacing = 'even'
   if (props.kinds.includes('map') && state.modules.map?.data.options.shadeByDate) q.shade = '1'
   if (state.mode === 'edit') q.mode = 'edit'
+  if (props.host === 'general' && hub.lang !== 'en') q.lang = hub.lang
   return q
 })
 
@@ -147,6 +156,14 @@ watch(wanted, syncUrl, { deep: true })
         title="Phone-width preview (390px). Press Escape to return to desktop width."
       />
     </div>
+    <GeneralModules
+      v-else-if="host === 'general'"
+      :store="store"
+      :hub-id="hubId"
+      :example="buildExample"
+      :force-skin="embedded ? 'mobile' : undefined"
+      :source="source ?? GEHRY"
+    />
     <ArticleModules
       v-else
       :kinds="kinds"

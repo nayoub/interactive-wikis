@@ -6,7 +6,7 @@
  *   /            → the most recently viewed prototype (the timeline the first time)
  *   /timeline, /map, /election
  *   /timeline-module, /map-module, /election-module → redirects (links already shared)
- *   /visual      → reserved for the general tool (not built yet)
+ *   /visual      → the general visual tool (general/)
  *
  * The route list is hub-routes.json, also read by vite.config.ts so every route
  * (and every old one) gets a real page on GitHub Pages.
@@ -16,12 +16,13 @@ import type { RouteRecordRaw } from 'vue-router'
 
 import routes from './hub-routes.json'
 
-export type HubId = 'timeline' | 'map' | 'election'
+export type HubId = 'timeline' | 'map' | 'election' | 'visual'
 export interface HubEntry {
   id: HubId
   path: string
   label: string
-  legacy: string
+  /** An older route that redirects here, if any. */
+  legacy?: string
 }
 export const HUB = routes as HubEntry[]
 
@@ -47,8 +48,8 @@ export function rememberPath(path: string) {
 
 /** Routes the router adds: the entry redirect and the old routes. Query and hash are kept. */
 export const hubRedirects: RouteRecordRaw[] = [
-  ...HUB.map((h) => ({
-    path: h.legacy,
+  ...HUB.filter((h) => h.legacy).map((h) => ({
+    path: h.legacy!,
     redirect: (to: { query: Record<string, unknown>; hash: string }) => ({
       path: h.path,
       query: to.query,
@@ -72,10 +73,12 @@ export interface HubState {
   width: Width
   /** Plain list: the no-script fallback rendering. */
   fallback: boolean
+  /** Item labels in another language, where items have them (general tool): "en", "eu", "fr". */
+  lang: string
 }
 
 function read(): HubState {
-  const init: HubState = { width: 'desktop', fallback: false }
+  const init: HubState = { width: 'desktop', fallback: false, lang: 'en' }
   try {
     const raw = localStorage.getItem(KEY)
     if (raw) return { ...init, ...JSON.parse(raw) }

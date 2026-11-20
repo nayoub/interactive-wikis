@@ -34,6 +34,8 @@ const props = defineProps<{
   example: () => Promise<Partial<Record<ModuleKind, PlacedModule>>>
   /** Header style of the trigger. */
   skin: 'desktop' | 'mobile'
+  /** Label languages the page's items carry (general tool), English first. */
+  languages?: { value: string; label: string }[]
 }>()
 const state = props.store.state
 const router = useRouter()
@@ -102,7 +104,10 @@ const shade = computed({
   },
 })
 const has = (k: ModuleKind) => props.kinds.includes(k)
-const hasOptions = computed(() => has('timeline') || has('visual') || has('map'))
+const hasOptions = computed(
+  () => has('timeline') || has('visual') || has('map') || !!props.languages?.length,
+)
+const lang = computed({ get: () => hub.lang, set: (v: string) => (hub.lang = v) })
 </script>
 
 <template>
@@ -168,6 +173,10 @@ const hasOptions = computed(() => has('timeline') || has('visual') || has('map')
               :buttons="spacingButtons"
               aria-label="Timeline spacing"
             />
+          </div>
+          <div v-if="languages?.length" class="pm__row">
+            <span class="pm__label" aria-hidden="true">Labels</span>
+            <CdxToggleButtonGroup v-model="lang" :buttons="languages" aria-label="Item labels in" />
           </div>
           <CdxToggleSwitch v-if="has('visual')" v-model="monochrome" align-switch
             >Monochrome</CdxToggleSwitch

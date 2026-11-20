@@ -16,7 +16,7 @@
  */
 import '../tokens.css'
 
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 import { ageAt, dateYears, formatDate, isoDate, sortEvents } from '../model/dates'
 import type { PartialDate, TimelineEvent, TimelineOptions } from '../model/types'
@@ -39,6 +39,10 @@ const props = withDefaults(
     activeIds?: string[]
     /** "Show in article" in the selected event's card (off in the editor's preview). */
     canShowSource?: boolean
+    /** Inside the general tool's frame: no header, card or plain list of its own. */
+    bare?: boolean
+    /** The selected event, when the frame owns the selection. */
+    selection?: string | null
   }>(),
   {
     title: 'Timeline',
@@ -51,6 +55,8 @@ const props = withDefaults(
     activeId: null,
     activeIds: () => [],
     canShowSource: true,
+    bare: false,
+    selection: undefined,
   },
 )
 
@@ -98,6 +104,13 @@ const lit = (id: string) =>
   props.activeId === id ||
   props.activeIds.includes(id)
 const dimmed = (id: string) => !!selectedId.value && selectedId.value !== id
+watch(
+  () => props.selection,
+  (id) => {
+    if (id !== undefined) selectedId.value = id
+  },
+  { immediate: true },
+)
 const selectedEvent = computed(() => sorted.value.find((e) => e.id === selectedId.value) ?? null)
 function setSelected(id: string | null) {
   selectedId.value = id
@@ -289,12 +302,12 @@ const titleId = `tl-title-${Math.random().toString(36).slice(2, 8)}`
   <div
     ref="rootRef"
     class="viz tl"
-    :class="[`tl--${effectiveLayout}`, `tl--${spacing}`, { 'tl--fallback': fallback }]"
+    :class="[`tl--${effectiveLayout}`, `tl--${spacing}`, { 'tl--fallback': fallback, 'tl--bare': bare }]"
     role="group"
     :aria-labelledby="titleId"
     @keydown="onKeydown"
   >
-    <div class="tl__header">
+    <div v-if="!bare" class="tl__header">
       <div :id="titleId" class="tl__title">{{ title || 'Timeline' }}</div>
       <small v-if="sorted.length" class="tl__meta">{{ yearsRange }}</small>
     </div>
@@ -302,7 +315,7 @@ const titleId = `tl-title-${Math.random().toString(36).slice(2, 8)}`
     <p v-if="!sorted.length" class="tl__empty">No events yet.</p>
 
     <!-- Plain dated list: the no-JavaScript / print rendering. -->
-    <ol class="tl-fallback">
+    <ol v-if="!bare" class="tl-fallback">
       <li v-for="event in sorted" :key="event.id">
         <a :href="`#tl-src-${event.sourceAnchor.mentionId}`" @click="onActivate($event, event)"
           ><b
@@ -468,7 +481,7 @@ const titleId = `tl-title-${Math.random().toString(36).slice(2, 8)}`
 
     <!-- The selected event: below the timeline, never over it. -->
     <SelectionCard
-      v-if="selectedEvent && !fallback"
+      v-if="selectedEvent && !fallback && !bare"
       :title="selectedEvent.label"
       :meta="[formatDate(selectedEvent.date), age(selectedEvent)].filter(Boolean).join(' · ')"
       :quote="selectedEvent.sourceText"
@@ -505,6 +518,11 @@ const titleId = `tl-title-${Math.random().toString(36).slice(2, 8)}`
   font-family: var(--viz-font-family);
 }
 
+.tl.tl--bare {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
 .tl__header {
   display: flex;
   align-items: baseline;

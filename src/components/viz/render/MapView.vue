@@ -39,6 +39,10 @@ const props = withDefaults(
     activeIds?: string[]
     /** Allow "Show in article" (off in previews). */
     canShowSource?: boolean
+    /** Inside the general tool's frame: no header, card or plain list of its own. */
+    bare?: boolean
+    /** The selected item, when the frame owns the selection. */
+    selection?: string | null
   }>(),
   {
     title: 'Map',
@@ -46,6 +50,8 @@ const props = withDefaults(
     options: () => ({ shadeByDate: false }),
     activeIds: () => [],
     canShowSource: true,
+    bare: false,
+    selection: undefined,
   },
 )
 
@@ -356,6 +362,14 @@ function openCallout(i: number) {
   openIndex.value = openIndex.value === i ? null : i
   emit('focus', openIndex.value === null ? null : sorted.value[i])
 }
+watch(
+  () => props.selection,
+  (id) => {
+    if (id === undefined) return
+    const i = sorted.value.findIndex((p) => p.id === id)
+    openIndex.value = i === -1 ? null : i
+  },
+)
 function closeCallout() {
   if (openIndex.value !== null) emit('focus', null)
   openIndex.value = null
@@ -516,12 +530,12 @@ const titleId = `map-title-${Math.random().toString(36).slice(2, 8)}`
   <div
     ref="rootRef"
     class="viz map"
-    :class="{ 'map--fallback': fallback, 'map--narrow': narrow }"
+    :class="{ 'map--fallback': fallback, 'map--narrow': narrow, 'map--bare': bare }"
     role="group"
     :aria-labelledby="titleId"
     @keydown="onKeydown"
   >
-    <div class="map__header">
+    <div v-if="!bare" class="map__header">
       <div :id="titleId" class="map__title">{{ title || 'Map' }}</div>
       <small v-if="sorted.length" class="map__meta">{{ meta }}</small>
     </div>
@@ -529,7 +543,7 @@ const titleId = `map-title-${Math.random().toString(36).slice(2, 8)}`
     <p v-if="!sorted.length" class="map__empty">No places yet.</p>
 
     <!-- Plain list grouped by country: the no-JavaScript / print rendering. -->
-    <div class="map-fallback">
+    <div v-if="!bare" class="map-fallback">
       <div v-for="[country, list] in byCountry" :key="country" class="map-fallback__group">
         <b>{{ country }}</b>
         <ul>
@@ -676,7 +690,7 @@ const titleId = `map-title-${Math.random().toString(36).slice(2, 8)}`
 
       <!-- The selected place: below the map, never over it. -->
       <SelectionCard
-        v-if="openPlace"
+        v-if="openPlace && !bare"
         :title="nameOf(openPlace)"
         :subtitle="openPlace.name !== nameOf(openPlace) ? openPlace.name : undefined"
         :meta="
@@ -725,6 +739,11 @@ const titleId = `map-title-${Math.random().toString(36).slice(2, 8)}`
 
 <style scoped>
 /* Everything here reads ../tokens.css; no literal colours, weights or sizes. */
+.map.map--bare {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
 .map {
   display: flow-root;
   min-width: 0;

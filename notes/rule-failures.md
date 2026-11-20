@@ -118,3 +118,45 @@ fixed in the rules.
 - 2025 diagram (`File:21st_Bundestag.svg`): Linke, SPD, Grüne, SSW, CDU, CSU, AfD → all matched by colour.
 - FDP has no seats in 2025, so the 2025 diagram does not seat it; in 2021 it would have fallen to the far right → placed where the most recent earlier diagram seated it (2021: between SSW and CDU).
 - The diagram is found by trying the SVGs in the Results section and infobox and keeping the one whose seats are within 10% of the infobox's chamber size. A diagram drawn by another tool (not one `<g>` per party) would not be read; the order then falls back to the results table's.
+
+# General tool (visual route, Bilbao)
+
+On *Bilbao* (snapshot via `snapshot.py --title Bilbao`), with *San Sebastián*
+for the Compare operator. Rules: `pick/toItems.ts` (tables, items),
+`general/form-rules.json` (forms), `general/suggest.ts` (suggestions).
+
+## Dates misread or missed
+
+- The date rule only knew years 1800–2039 (fine for a modern biography) → no date in Bilbao's medieval history ("15 June 1300", "1323", "1376") → widened to 1000–2039. A number like "1500 inhabitants" with no comma would now read as a year; none found in this snapshot.
+- "the very end of the thirteenth century", "the fourteenth century", "around the 11th century", "the 3rd or 2nd century BC", "6,000 years old" → not picked (centuries and ages in words) → a span of years each.
+- Sub-subsections (h4: "Napoleonic invasion and Carlist wars" under "Contemporary Bilbao") were not mapped to their top section, so their dates were counted under whichever h2 came last → fixed: every heading is mapped to its h2 from the article's own nesting.
+
+## Places without coordinates, or the wrong ones
+
+- 681 linked titles, 653 resolved to Wikidata, 372 with a coordinate (30 regions, left out). Organisations with a headquarters coordinate (Athletic Bilbao, BBVA, Iberdrola) are offered as places, as on the Gehry article.
+- Flight destinations ("Frankfurt", "Paris", "Munich", in Transport) are real places but not the city's → they made "Transport" the busiest section for the map suggestion and the map spanned Europe → the suggestion now counts only places within about 50 km of the median of the article's places.
+
+## Tables whose columns were misclassified
+
+- The population table is not a `wikitable` but a `table-pale` box (Template:Historical populations) → not lit at first → data tables now include it.
+- Climate cells carry °F in brackets ("25.1(77.2)") → the election parser's number rule rejected every temperature and precipitation row (only 5 of 13 rows read) → the first number in the cell is the value.
+- "Percentage possible sunshine" has no unit in its label (the % is implied) → read without a unit.
+- "Pop." → the measure's name came out as "Pop" → a small table of header abbreviations expands it to "Population".
+- The districts table has three number columns (Population (2009), Area, Density) → all three were read as one quantity, mixing measures in one chart → a long table keeps one quantity column; the editor can switch which.
+- The districts table's caption cell is "#" (its first header) → the suggestion was named "#, from the # table" → a caption without letters falls back to the section ("Districts").
+- "Evolution of the Basque-speaking population" (years as columns, groups as rows) → rows of small columns by year; correct in shape, but the row labels are whole sentences ("Bilinguals: Able to understand and speak both Basque and Spanish").
+
+## Units that could not be parsed
+
+- "Area (km 2)" (superscript split by a space) → no unit; the column is ignored by default anyway.
+- Units are read from a fixed list (°C, °F, mm, cm, %, hours, days, km²); anything else (inhabitants per km², euros) comes through without a unit.
+
+## Suggestions that were wrong
+
+- Timeline: "from 29 dated sentences in “Notable people”" → a list of people with birth years won over History (whose dates were missed, above) → the timeline suggestion now counts prose sentences only (not list items): "from 30 dated sentences in “History”".
+- Map: "from 42 places in “Transport”" (airports and destinations abroad) → "from 26 places in “History”" with the distance rule.
+- Every data table becomes a suggestion (seven in all); "Foreign population by country of birth" and "Districts" are valid bar charts but not what a reader of a city article would ask for first. No ranking yet.
+
+## Images
+
+- Inline thumbnails are 250px; drawn across the column an annotated image was blurry → every use of a file takes the largest copy the snapshot has, and the figure is never drawn at more than twice its resolution.
