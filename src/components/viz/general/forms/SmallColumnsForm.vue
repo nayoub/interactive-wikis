@@ -42,43 +42,55 @@ const times = computed(() =>
         : String(time.start.y).slice(-2),
     })),
 )
+/**
+ * One row per measure. Compared (a second set): the other set's row follows
+ * each measure, in the lighter step, on the same scale; the darker-than-average
+ * rule then gives way to one step per set, as in the line and bar charts.
+ */
+const compared = computed(() => props.visual.sets.length > 1)
 const rows = computed(() => {
-  const by = new Map<string, Item[]>()
-  for (const i of items.value) {
-    const c = i.components.category ?? i.components.quantity?.measure ?? ''
-    if (!by.has(c)) by.set(c, [])
-    by.get(c)!.push(i)
+  const catOf = (i: Item) => i.components.category ?? i.components.quantity?.measure ?? ''
+  const order = [...new Set(items.value.map(catOf))]
+  const out: {
+    key: string
+    name: string
+    setLabel: string
+    alt: number
+    unit: string
+    cells: Map<number, Item>
+    mean: number
+    min: number
+    max: number
+  }[] = []
+  for (const name of order) {
+    const per = props.visual.sets.map((s) => s.items.filter((i) => catOf(i) === name))
+    const all = per.flat().map((i) => i.components.quantity!.value)
+    const min = Math.min(0, ...all)
+    const max = Math.max(0, ...all)
+    per.forEach((list, k) => {
+      if (!list.length) return
+      const values = list.map((i) => i.components.quantity!.value)
+      out.push({
+        key: `${k}:${name}`,
+        name,
+        setLabel: props.visual.sets[k].label,
+        alt: k,
+        unit: list[0].components.quantity?.unit ?? '',
+        cells: new Map(list.map((i) => [timeKey(i), i])),
+        mean: values.reduce((s, v) => s + v, 0) / values.length,
+        min,
+        max,
+      })
+    })
   }
-  return [...by.entries()].map(([name, list]) => {
-    const values = list.map((i) => i.components.quantity!.value)
-    const mean = values.reduce((s, v) => s + v, 0) / values.length
-    const min = Math.min(0, ...values)
-    const max = Math.max(0, ...values)
-    const lo = list.reduce((a, b) =>
-      b.components.quantity!.value < a.components.quantity!.value ? b : a,
-    )
-    const hi = list.reduce((a, b) =>
-      b.components.quantity!.value > a.components.quantity!.value ? b : a,
-    )
-    return {
-      name,
-      unit: list[0].components.quantity?.unit ?? '',
-      cells: new Map(list.map((i) => [timeKey(i), i])),
-      mean,
-      min,
-      max,
-      lo: lo.id,
-      hi: hi.id,
-    }
-  })
+  return out
 })
-
 const narrow = computed(() => width.value > 0 && width.value < 560)
 const geo = computed(() => {
   const W = width.value
   if (!W || !times.value.length) return null
   const labelW = narrow.value ? 0 : Math.min(200, W * 0.32)
-  const valueW = 76
+  const valueW = 96
   const plotW = W - labelW - valueW
   const step = plotW / times.value.length
   return { W, labelW, plotW, step, colW: Math.max(2, step * 0.7) }
@@ -107,9 +119,13 @@ function pick(id: string) {
           narrow || geo.step < 26 ? tm.short : tm.label
         }}</small>
       </div>
-      <div v-for="r in rows" :key="r.name" class="sc2__row">
+      <div v-for="r in rows" :key="r.key" class="sc2__row" :class="{ 'sc2__row--alt': r.alt > 0 }">
         <small class="sc2__name" :style="narrow ? {} : { width: `${geo.labelW}px` }"
-          >{{ r.name }}<span v-if="r.unit" class="sc2__unit"> ({{ r.unit }})</span></small
+          ><template v-if="r.alt === 0"
+            >{{ r.name }}<span v-if="r.unit" class="sc2__unit"> ({{ r.unit }})</span></template
+          ><span v-if="compared" class="sc2__set" :class="{ 'sc2__set--alt': r.alt > 0 }">{{
+            r.alt === 0 ? ` · ${r.setLabel}` : r.setLabel
+          }}</span></small
         >
         <div class="sc2__fig">
           <!-- eslint-disable-next-line vuejs-accessibility/click-events-have-key-events, vuejs-accessibility/no-static-element-interactions -->
@@ -126,7 +142,7 @@ function pick(id: string) {
                 v-if="r.cells.get(tm.key)"
                 class="sc2__col"
                 :class="{
-                  'sc2__col--high': r.cells.get(tm.key)!.components.quantity!.value > r.mean,
+                  'sc2__col--high': compared ? r.alt === 0 : r.cells.get(tm.key)!.components.quantity!.value > r.mean,
                   'sc2--dim': dim(r.cells.get(tm.key)!.id),
                   'sc2__col--on': selectedId === r.cells.get(tm.key)!.id,
                 }"
@@ -148,9 +164,7 @@ function pick(id: string) {
             </template>
           </svg>
           <small class="sc2__range"
-            >{{
-              fmt(Math.min(...[...r.cells.values()].map((i) => i.components.quantity!.value)))
-            }}
+            >{{ fmt(Math.min(...[...r.cells.values()].map((i) => i.components.quantity!.value))) }}
             to
             {{
               fmt(Math.max(...[...r.cells.values()].map((i) => i.components.quantity!.value)))
@@ -219,6 +233,16 @@ function pick(id: string) {
   cursor: pointer;
   transition: opacity var(--viz-transition);
 }
+.sc2__row--alt {
+  border-top: 0;
+  padding-top: 0;
+}
+.sc2__set {
+  color: var(--viz-ink-tertiary);
+}
+.sc2__set--alt {
+  padding-inline-start: var(--viz-space-l);
+}
 .sc2__col--high {
   fill: var(--viz-strong);
 }
@@ -233,7 +257,7 @@ function pick(id: string) {
   opacity: var(--viz-dim);
 }
 .sc2__range {
-  width: 72px;
+  width: 92px;
   color: var(--viz-ink-tertiary);
   white-space: nowrap;
 }

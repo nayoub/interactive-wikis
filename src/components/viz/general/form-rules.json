@@ -3,7 +3,7 @@
   "rules": [
     { "components": ["time"], "forms": ["timeline"] },
     { "components": ["place"], "forms": ["map"] },
-    { "components": ["place", "time"], "forms": ["map", "timeline"] },
+    { "components": ["place", "time"], "forms": ["map", "timeline", "linked"] },
     { "components": ["quantity", "time"], "forms": ["line", "columns"] },
     {
       "components": ["category", "quantity"],

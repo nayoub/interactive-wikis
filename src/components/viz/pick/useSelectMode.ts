@@ -21,13 +21,22 @@ interface Options {
   toggle: (id: string) => void
   /** Sentence offsets for hover highlighting. */
   sentenceOf: (id: string) => { start: number; end: number } | null
+  /** Only these candidates light up (a spotlight on one section). */
+  within?: (el: HTMLElement) => boolean
+  /** Re-light when this changes (the spotlight moved). */
+  scope?: Ref<unknown>
 }
 
 export function useSelectMode(opts: Options) {
   const isCandidate = (el: Element) => {
     const k = opts.kind.value
     const mine = (el as HTMLElement).dataset.kind ?? ''
-    return opts.active.value && !!k && (Array.isArray(k) ? k.includes(mine) : mine === k)
+    return (
+      opts.active.value &&
+      !!k &&
+      (Array.isArray(k) ? k.includes(mine) : mine === k) &&
+      (!opts.within || opts.within(el as HTMLElement))
+    )
   }
 
   function sync() {
@@ -100,7 +109,14 @@ export function useSelectMode(opts: Options) {
   }
 
   watch(
-    [opts.root, opts.active, opts.kind, opts.picked, () => opts.used?.value],
+    [
+      opts.root,
+      opts.active,
+      opts.kind,
+      opts.picked,
+      () => opts.used?.value,
+      () => opts.scope?.value,
+    ],
     ([root], _old, onCleanup) => {
       sync()
       if (!root || !opts.active.value) {

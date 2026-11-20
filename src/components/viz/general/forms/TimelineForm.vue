@@ -19,6 +19,8 @@ const events = computed(() => toTimelineEvents(props.visual.sets[0]?.items ?? []
     :skin="skin"
     :options="{ showAge: false, showGaps: visual.options.showGaps !== false }"
     :selection="selectedId"
+    :edit-labels="editing"
     @focus="emit('select', $event?.id ?? null)"
+    @rename="(id, label) => emit('rename', id, label)"
   />
 </template>

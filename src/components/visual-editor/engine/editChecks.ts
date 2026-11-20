@@ -152,6 +152,8 @@ export function addReferenceChecks(root: Element, addedParagraphs: Set<Element>)
 export function feedbackFormFor(finding: Finding, action: string):
   | { description: string; options: readonly { value: string; label: string }[] }
   | null {
+  // A finding can bring its own reason form for dismissing (the visual tool's suggestion cards).
+  if (action === 'dismiss' && finding.data?.dismissForm) return finding.data.dismissForm
   // Experimental checks that ask for a reason even as suggestions (`allowInSuggestions`).
   if (finding.type === 'leadLength' && action === 'dismiss') {
     return { description: 'Other editors would value learning why you made this choice.', options: X.leadLength.declineOptions }

@@ -136,6 +136,8 @@ for the Compare operator. Rules: `pick/toItems.ts` (tables, items),
 - 681 linked titles, 653 resolved to Wikidata, 372 with a coordinate (30 regions, left out). Organisations with a headquarters coordinate (Athletic Bilbao, BBVA, Iberdrola) are offered as places, as on the Gehry article.
 - Flight destinations ("Frankfurt", "Paris", "Munich", in Transport) are real places but not the city's → they made "Transport" the busiest section for the map suggestion and the map spanned Europe → the suggestion now counts only places within about 50 km of the median of the article's places.
 
+- Places in comparisons: "Cityscape" links *Michigan Avenue Bridge* (Chicago) and *Santiago de Compostela* in sentences about Bilbao's own bridges and churches → both are offered as places and, picked with the rest, stretch the map to another continent → a place the sentence compares Bilbao with, not a place in Bilbao.
+
 ## Tables whose columns were misclassified
 
 - The population table is not a `wikitable` but a `table-pale` box (Template:Historical populations) → not lit at first → data tables now include it.
@@ -160,3 +162,107 @@ for the Compare operator. Rules: `pick/toItems.ts` (tables, items),
 ## Images
 
 - Inline thumbnails are 250px; drawn across the column an annotated image was blurry → every use of a file takes the largest copy the snapshot has, and the figure is never drawn at more than twice its resolution.
+
+# Label spans (simplification round, Bilbao History)
+
+Rule (`pick/labelSpan.ts`): the clause holding the date, without the date
+phrase; too short → join the clause before; a bare name or a lead-in → carry on
+to the clause with a verb. The label is the span, capitalised, without
+trailing punctuation or footnotes. On the 36 dated sentences of History, the
+default span was **right for 23** and **wrong for 13**:
+
+| Date | Sentence (short) | Span proposed | Span that would have been right |
+| --- | --- | --- | --- |
+| 1323 | "…developed, among them Portugalete in 1323, Ondarroa in 1327, Lekeitio in 1335, and Mungia and Larrabetzu in 1376." | Among them Portugalete | Portugalete … developed (not contiguous: needs the list's verb) |
+| 1327 | (same sentence) | Among them Portugalete in 1323, Ondarroa | Ondarroa |
+| 1335 | (same sentence) | Ondarroa in 1327, Lekeitio | Lekeitio |
+| 1376 | (same sentence) | Mungia and Larrabetzu | Mungia and Larrabetzu (developed) — right town, no event |
+| 1476 | "…swear fealty to the fueros of Biscay, as Ferdinand II of Aragon had already done so in 1476." | Ferdinand II of Aragon had already done so | Ferdinand II of Aragon swore fealty to the fueros (the words are in the previous clause) |
+| 1902 | "…the creation of many new factories, including the Santa Ana de Bolueta and the Altos Hornos de Vizcaya in 1902." | Including the Santa Ana de Bolueta and the Altos Hornos de Vizcaya | the Altos Hornos de Vizcaya (created) |
+| 1880 | "…grew from 11,000 in 1880 to 80,000 in 1900" | To 80,000 in 1900 | a population figure, not an event (no span is right) |
+| 1900 | (same sentence) | From 11,000 in 1880 to 80,000 | (same) |
+| 1948 | "…rebuilt in the 1940s, starting with the bridges…" | Starting with the bridges | the bridges were rebuilt |
+| 1947 | "…and the strike of the Euskalduna shipyard in 1947 was the first one to take place during the Francoist dictatorship." | It was in this context that the first social movements arose and the strike of the Euskalduna shipyard | the strike of the Euskalduna shipyard … was the first (the date sits inside the subject) |
+| 1979 | "With the approval of the Statute of Autonomy of the Basque Country in 1979, Vitoria-Gasteiz was elected the seat of the government…" | With the approval of the Statute … in 1979, Vitoria-Gasteiz was elected the seat of the government … | Approval of the Statute of Autonomy of the Basque Country (the label keeps the date) |
+| 26 August 1983 | "On 26 August 1983 during the celebration of … Aste Nagusia, the estuary overflowed…" | During the celebration of the local festivities known as Aste Nagusia | the estuary overflowed up to five metres (a plural noun, "festivities", read as the verb) |
+| 2000 | "…associations such as Bilbao Metrópoli-30 and Bilbao Ría 2000 were created…" | Many officially supported associations such as Bilbao Metrópoli-30 and Bilbao Ría | not a date: "2000" is part of a name (the date rule should skip numbers inside names) |
+
+Right (examples): "15 June 1300 → Founded Bilbao through a municipal charter
+dated in Valladolid" (the founding, not a person), "1310 → María Díaz I de
+Haro, niece of Diego López V and Lady of Biscay, grants a new municipal charter
+to the city" (long but complete), "June 1968 → The University of Bilbao, the
+first public university, was established".
+
+# Tables, one question (simplification round)
+
+- Climate table: read with no question (twelve month columns, measures as rows; "Year" left out as a total). Two taps from Insert → Visual.
+- Historical population: no question (one number column besides the ±% change).
+- Districts: three number columns (Population (2009), Area, Density) → one question, "Which column is the value?", with the three as answers; the first is applied. Enough here. The header "Area (km²)" reads "Area(km)" (the superscript 2 is lost).
+- Where one question would not be enough: a table where both the value and the name are in doubt (two text columns and two number columns), or the election results (list and constituency votes *and* list and constituency shares): that needs two answers. None on Bilbao.
+
+# Suggestion cards (simplification round)
+
+- Ranked by the share of the section's text they draw on: History timeline (0.47), Infrastructure map (0.46), Economy timeline (0.43). Ranking by count per length first put three maps on top (places are short) and left History out.
+- The population and climate tables never appear as cards while three other suggestions outrank them; they appear only once the others are made or dismissed. A table is the most direct visual on a city article; the ranking undervalues it.
+- The Infrastructure map (airport, port, stations) is valid but marginal; "Not useful here" is the expected answer.
+- The lead has dated sentences and places but no heading to sit beside, so it is never suggested.
+
+# Follow-up round (PR 8 follow-up)
+
+## Non-events: years that are part of a name
+
+Rule (`host/loadArticle.ts`, general tool only): a bare year is not a date
+chip when it sits inside a link's text but not at its start, or right after
+two or more capitalised words. Removed on Bilbao:
+
+| Year | Context | Right? |
+| --- | --- | --- |
+| 2000 | "Bilbao Ría 2000" | yes: a name |
+| 2018 | "Best European City 2018" | miss: the name of an award Bilbao received in 2018; the date is real |
+| 2018 | "Urbanism Awards 2018" | miss: same |
+| 2010 | "World Cities Summit 2010" | yes, by luck: the same sentence already dates the prize, "18 May 2010" |
+
+Kept (the year leads the link, so it is an event): "2018 MTV Europe Music
+Awards", "2008 financial crisis". The capitalised-words rule cannot tell an
+award's name from an organisation's; it errs towards dropping the chip.
+
+## Quantities over time in a sentence
+
+Rule: two or more "<number> [inhabitants|people|…] in <year>" pairs in one
+prose sentence → a series; its years are chart evidence, not date chips, and
+the sentence gets a "Show as a chart" chip (a line, one point per pair, the
+sentence as the source of each point). The measure is the subject before the
+verb ("The population increased …" → "Population"); without one, "Value".
+
+- Found on Bilbao: one, "from 11,000 in 1880 to 80,000 in 1900" (History).
+- What the rule would miss (none on Bilbao): one pair plus a change in words
+  ("10,000 in 1850, and doubled by 1900"), and pairs in list items (skipped on
+  purpose: lists are usually tables in disguise).
+  "347,342 people as of 2024" and "1,037,847 people" in Demographics have one
+  pair or none, so no series.
+
+## Label spans, recounted
+
+With 1880, 1900 (series) and Bilbao Ría 2000 (a name) no longer dates, History
+has **33** eligible dated sentences; the default span is **right for 23**,
+**wrong for 10** (1323, 1327, 1335, 1376, 1476, 1902, 1948, 1947, 1979,
+26 August 1983 — as in the table above).
+
+## Map suggestion: which places count
+
+Rule (`general/cards.ts`): the subject's type comes from its infobox class
+(settlement, country, island, region, river, mountain, lake, park … → a
+place). For a place: linked places within about 50 km (0.5°) of the subject's
+own coordinates (the infobox's `.geo`, else the median of the places). For a
+person, an organisation or a work: every linked place with coordinates. On
+Bilbao, the airport's destinations (London, Frankfurt …) are left out.
+
+## Chips on tables
+
+All five Bilbao tables qualify (a time or category column and a number
+column): Climate, Historical population, Foreign population by country of
+birth, Districts, Basque-speaking population. The foreign-population and
+Basque-speaking tables make weaker figures (the first is a list of
+countries, the second has groups as rows and census years as columns, which
+the rules read as small columns at best); "Not useful here" is the expected
+answer there.
