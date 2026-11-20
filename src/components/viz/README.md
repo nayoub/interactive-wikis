@@ -19,7 +19,12 @@ Shared:
 - `model/` — plain data (`types.ts`: `BaseItem`, `TimelineEvent`, `Place`, `ModuleData`…) and logic on it (`dates.ts`, `places.ts`).
 - `host/` — the page: `ModulesPrototype` (control strip, phone-width iframe), `ArticleModules` (article, VE toolbar with Insert per kind, select mode, curator, placed blocks, timeline↔map links), `kinds.ts` (everything that differs between kinds), `loadArticle.ts` (the Frank Gehry snapshot), `examples.ts`, `store.ts` (one localStorage store per route).
 
-Data, committed (no runtime lookups except the panel's Commons and Wikidata searches):
+Street map: the map draws OpenStreetMap tiles (`tile.openstreetmap.org`, credited on the map) over the
+drawn base, toned down by `--viz-tiles-filter`, so readers can zoom to city and street level. The
+drawn Natural Earth base stays underneath as the fallback while tiles load or offline. (Wikimedia's
+own tiles refuse requests from other sites, and CARTO's need an API key.)
+
+Data, committed (no runtime lookups except the panel's Commons and Wikidata searches and the street-map tiles):
 
 - `public/snapshots/frank-gehry.html` — `src/prototypes/timeline-module/scripts/snapshot.py`
 - `public/snapshots/frank-gehry.places.json` — `src/prototypes/map-module/scripts/places.py` (Wikidata)

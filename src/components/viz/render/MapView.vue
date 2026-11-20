@@ -182,6 +182,39 @@ const coarseLayer = computed(() => {
 })
 const fineScale = computed(() => loaded.fine?.scale ?? 1)
 
+// ── Street map: OpenStreetMap tiles over the Natural Earth base ─────────────
+// Cities, streets and names come from the tiles; the drawn base stays underneath
+// as the fallback while tiles load or when offline. Tiles are toned down by a
+// token filter so the base stays weaker than the marks.
+const TILE = 256
+const MAX_ZOOM = 19
+const failed = reactive(new Set<string>())
+const tiles = computed(() => {
+  if (!width.value) return []
+  const z = Math.max(0, Math.min(MAX_ZOOM, Math.round(Math.log2(view.k / TILE))))
+  const n = 2 ** z
+  const size = view.k / n // on-screen size of one tile
+  const b = viewBounds.value
+  const out: { key: string; src: string; left: number; top: number; size: number }[] = []
+  const y0 = Math.max(0, Math.floor(b.y0 * n))
+  const y1 = Math.min(n - 1, Math.floor(b.y1 * n))
+  for (let tx = Math.floor(b.x0 * n); tx <= Math.floor(b.x1 * n); tx++) {
+    const x = ((tx % n) + n) % n // wrap around the antimeridian
+    for (let ty = y0; ty <= y1; ty++) {
+      const key = `${z}/${x}/${ty}`
+      if (failed.has(key)) continue
+      out.push({
+        key: `${key}@${tx}`,
+        src: `https://tile.openstreetmap.org/${key}.png`,
+        left: (tx / n - view.cx) * view.k + width.value / 2,
+        top: (ty / n - view.cy) * view.k + height.value / 2,
+        size,
+      })
+    }
+  }
+  return out
+})
+
 // ── Clusters: merge dots that would overlap; area ∝ count ──────────────────
 interface Cluster {
   ids: number[] // indexes into `sorted`
@@ -414,7 +447,8 @@ function onWheel(e: WheelEvent) {
   e.preventDefault()
   zoomAt(local(e), Math.exp(-e.deltaY * 0.01))
 }
-const clampK = (k: number) => Math.max(fitted.value.k * 0.5, Math.min(fitted.value.k * 400, k))
+// From half the fitted view out to street level (tile zoom 18).
+const clampK = (k: number) => Math.max(fitted.value.k * 0.5, Math.min(256 * 2 ** 18, k))
 function zoomAt(at: { x: number; y: number }, factor: number) {
   const wx = view.cx + (at.x - width.value / 2) / view.k
   const wy = view.cy + (at.y - height.value / 2) / view.k
@@ -423,6 +457,13 @@ function zoomAt(at: { x: number; y: number }, factor: number) {
   view.cy = wy - (at.y - height.value / 2) / view.k
 }
 const zoomBy = (f: number) => zoomAt({ x: width.value / 2, y: height.value / 2 }, f)
+/** Centre on a place and zoom to its streets (tile zoom 16), or closer by 4× if already there. */
+function zoomToPlace(i: number) {
+  const p = world.value[i]
+  view.cx = p.x
+  view.cy = p.y
+  view.k = clampK(Math.max(view.k * 4, 256 * 2 ** 16))
+}
 function showAll() {
   Object.assign(view, fitted.value)
   closeCallout()
@@ -554,6 +595,25 @@ const titleId = `map-title-${Math.random().toString(36).slice(2, 8)}`
           </g>
         </svg>
 
+        <div class="map__tiles" aria-hidden="true">
+          <img
+            v-for="t in tiles"
+            :key="t.key"
+            class="map__tile"
+            :src="t.src"
+            alt=""
+            draggable="false"
+            decoding="async"
+            :style="{
+              left: `${t.left}px`,
+              top: `${t.top}px`,
+              width: `${t.size + 0.5}px`,
+              height: `${t.size + 0.5}px`,
+            }"
+            @error="failed.add(t.key.split('@')[0])"
+          />
+        </div>
+
         <ol class="map__list">
           <li v-for="(p, i) in sorted" :key="p.id" :data-place-id="p.id" class="map__item">
             <template v-if="clusterOf.get(i) && visible(clusterOf.get(i)!)">
@@ -630,18 +690,31 @@ const titleId = `map-title-${Math.random().toString(36).slice(2, 8)}`
             >{{ openPlace.country ?? 'Unknown country'
             }}<template v-if="year(openPlace)"> · {{ year(openPlace) }}</template></small
           >
-          <button
-            v-if="openPlace.sourceAnchor && canShowSource"
-            type="button"
-            class="map__callout-link"
-            @click="emit('select', openPlace)"
-          >
-            <small>Show in article</small>
-          </button>
-          <small v-else-if="!openPlace.sourceAnchor" class="map__callout-meta"
+          <div class="map__callout-actions">
+            <button
+              v-if="openPlace.sourceAnchor && canShowSource"
+              type="button"
+              class="map__callout-link"
+              @click="emit('select', openPlace)"
+            >
+              <small>Show in article</small>
+            </button>
+            <button type="button" class="map__callout-link" @click="zoomToPlace(openIndex!)">
+              <small>Zoom in here</small>
+            </button>
+          </div>
+          <small v-if="!openPlace.sourceAnchor" class="map__callout-meta"
             >Not mentioned in the article text.</small
           >
         </div>
+
+        <small class="map__attribution"
+          >©
+          <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener"
+            >OpenStreetMap</a
+          >
+          contributors</small
+        >
 
         <div class="map__controls">
           <CdxButton size="small" weight="quiet" aria-label="Zoom in" @click="zoomBy(1.6)">
@@ -857,8 +930,37 @@ small,
 .map__label {
   position: absolute;
   white-space: nowrap;
-  color: var(--viz-ink-secondary);
+  color: var(--viz-ink);
   pointer-events: none;
+  /* A halo of paper so names stay legible over the street map. */
+  text-shadow:
+    0 0 2px var(--viz-label-halo),
+    0 0 2px var(--viz-label-halo),
+    0 0 3px var(--viz-label-halo);
+}
+.map__tiles {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  filter: var(--viz-tiles-filter);
+  opacity: var(--viz-tiles-opacity);
+}
+.map__tile {
+  position: absolute;
+  max-width: none;
+  user-select: none;
+}
+.map__attribution {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  padding: 0 var(--viz-space-xs);
+  background: var(--viz-label-halo);
+  color: var(--viz-ink-tertiary);
+}
+.map .map__attribution a {
+  color: inherit;
 }
 .map__label--lit {
   color: var(--viz-accent);
@@ -912,6 +1014,11 @@ small,
 }
 .map__callout-meta {
   color: var(--viz-ink-tertiary);
+}
+.map__callout-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--viz-space-l);
 }
 .map__callout-link {
   margin-top: var(--viz-space-s);
