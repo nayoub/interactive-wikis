@@ -26,7 +26,15 @@ import type {
 } from './types'
 
 export type FormId =
-  'timeline' | 'map' | 'line' | 'columns' | 'bars' | 'seats' | 'smallColumns' | 'annotated'
+  | 'timeline'
+  | 'map'
+  | 'linked'
+  | 'line'
+  | 'columns'
+  | 'bars'
+  | 'seats'
+  | 'smallColumns'
+  | 'annotated'
 
 export type ComponentKind = 'time' | 'place' | 'quantity' | 'category' | 'parent' | 'region'
 

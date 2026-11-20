@@ -148,9 +148,7 @@ function pick(id: string) {
             </template>
           </svg>
           <small class="sc2__range"
-            >{{
-              fmt(Math.min(...[...r.cells.values()].map((i) => i.components.quantity!.value)))
-            }}
+            >{{ fmt(Math.min(...[...r.cells.values()].map((i) => i.components.quantity!.value))) }}
             to
             {{
               fmt(Math.max(...[...r.cells.values()].map((i) => i.components.quantity!.value)))

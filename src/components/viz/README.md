@@ -53,7 +53,10 @@ items with typed components (time, place, quantity, category, region) and a sour
 - `forms/` — one renderer per form plus its entry in `forms/index.ts` (label, how-to-read
   caption, settings, order, numbered, compare, preview thumbnail). Timeline, map and seat
   diagram wrap the existing renderers (`bare` mode, selection owned by the frame); line and
-  columns, bars, rows of small columns and the annotated image are new.
+  columns, bars, rows of small columns and the annotated image are new. "Map and timeline,
+  linked" (place + time) shows both views of the same items with one selection.
+- Every item can carry an image (the curate panel's image button: the article's own images or
+  Wikimedia Commons, through the same `ImagePicker` as the timeline); the frame's card shows it.
 - `draft.ts` — what picking does (dates/places → items, a table → items by column roles,
   an image → markers), and the Compare operator (`setCompare`: the same table in a
   comparable article, as a second set). Over time and Link are noted in `model/visual.ts`.
