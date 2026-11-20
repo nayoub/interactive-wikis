@@ -83,6 +83,8 @@ export interface LoadedArticle {
   source: ArticleSource
   images: EventImage[]
   sections: ArticleSection[]
+  /** Text length of each top-level section (h2 id → characters), for ranking suggestions. */
+  sectionLength: Record<string, number>
   /** Every section's top-level (h2) section, any depth below it: id → { id, title }. */
   topSection: Record<string, { id: string; title: string }>
   /** {{Use dmy dates}}: write "6 May 2025", as the article does. */
@@ -359,7 +361,9 @@ function process(
     pick.setAttribute('contenteditable', 'false')
     pick.innerHTML =
       `<button type="button" class="tl-mention tl-table-chip" data-kind="table" data-tl-id="${t.id}">` +
-      '<span class="tl-table-chip__use">Use this table</span><span class="tl-table-chip__using">Using this table</span></button>'
+      (source.general
+        ? '<span class="tl-table-chip__use">Use this</span><span class="tl-table-chip__using">In use</span></button>'
+        : '<span class="tl-table-chip__use">Use this table</span><span class="tl-table-chip__using">Using this table</span></button>')
     t.el.before(pick)
     const label = t.caption || t.sectionTitle
     return {
@@ -406,6 +410,7 @@ function process(
     if (source.general) {
       const box = img.closest<HTMLElement>('figure, .gallerybox, .infobox-image') ?? img
       box.classList.add('tl-mention', 'tl-pick-image')
+      box.id ||= `tl-img-${i}`
       box.dataset.kind = 'image'
       box.dataset.tlId = `img${i}`
       box.setAttribute('contenteditable', 'false')
@@ -436,6 +441,12 @@ function process(
   }
   for (const im of images) im.src = largest.get(fileOf(im.src)) ?? im.src
 
+  const sectionLength: Record<string, number> = {}
+  body.querySelectorAll<HTMLElement>('section').forEach((sec) => {
+    const h = sec.querySelector<HTMLElement>(':scope > h2, :scope > .mw-heading > h2')
+    if (h?.id) sectionLength[h.id] = (sec.textContent ?? '').length
+  })
+
   const sections: ArticleSection[] = []
   body.querySelectorAll<HTMLElement>('section > h2, section > h3').forEach((h) => {
     sections.push({
@@ -465,6 +476,7 @@ function process(
     source,
     dayFirst: /Template:Use_dmy_dates/.test(raw),
     topSection,
+    sectionLength,
     images,
     sections,
     subject: { name: source.title, birth },

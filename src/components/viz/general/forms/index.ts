@@ -9,6 +9,7 @@ import type { FormId, Item, Visual } from '../../model/visual'
 import AnnotatedForm from './AnnotatedForm.vue'
 import BarsForm from './BarsForm.vue'
 import LineForm from './LineForm.vue'
+import LinkedForm from './LinkedForm.vue'
 import SeatsForm from './SeatsForm.vue'
 import SmallColumnsForm from './SmallColumnsForm.vue'
 import TimelineForm from './TimelineForm.vue'
@@ -22,8 +23,10 @@ export interface FormSetting {
 
 export interface FormDef {
   id: FormId
-  /** In the form chooser. */
+  /** In the form chooser and the bar. */
   label: string
+  /** What an item is called in the bar's count: ["event", "events"]. */
+  noun: [string, string]
   component: Component
   /** The frame's one-line "how to read it". */
   caption: (v: Visual) => string
@@ -64,6 +67,7 @@ const MapForm = defineAsyncComponent(() => import('./MapForm.vue'))
 export const FORMS: Record<FormId, FormDef> = {
   timeline: {
     id: 'timeline',
+    noun: ['event', 'events'],
     label: 'Timeline',
     component: TimelineForm,
     caption: () => 'Events in order of date; select one for its sentence in the article.',
@@ -80,6 +84,7 @@ export const FORMS: Record<FormId, FormDef> = {
   },
   map: {
     id: 'map',
+    noun: ['place', 'places'],
     label: 'Map',
     component: MapForm,
     caption: (v) =>
@@ -99,8 +104,33 @@ export const FORMS: Record<FormId, FormDef> = {
       )
     },
   },
+  linked: {
+    id: 'linked',
+    noun: ['place', 'places'],
+    label: 'Map and timeline, linked',
+    component: LinkedForm,
+    caption: () =>
+      'The same places on a map and in order of date; select one in either to light it in both.',
+    settings: [{ key: 'showGaps', label: 'Time between events', type: 'toggle', default: true }],
+    order: byTime,
+    thumb: (items) => {
+      const pts = items.filter((i) => i.components.place).slice(0, 12)
+      const dots = pts.map(
+        (_, k) =>
+          `<circle cx="${8 + (k % 4) * 10}" cy="${12 + Math.floor(k / 4) * 10}" r="2.5" ${S}/>`,
+      )
+      const line = Array.from(
+        { length: Math.min(5, pts.length) },
+        (_, k) => `<circle cx="70" cy="${8 + k * 8}" r="2.5" ${S}/>`,
+      )
+      return svg(
+        `<rect x="2" y="2" width="48" height="44" style="fill:var(--viz-land)"/>${dots.join('')}<line x1="70" x2="70" y1="4" y2="44" ${R}/>${line.join('')}`,
+      )
+    },
+  },
   line: {
     id: 'line',
+    noun: ['value', 'values'],
     label: 'Line',
     component: LineForm,
     caption: (v) =>
@@ -116,6 +146,7 @@ export const FORMS: Record<FormId, FormDef> = {
   },
   columns: {
     id: 'columns',
+    noun: ['value', 'values'],
     label: 'Columns',
     component: LineForm,
     caption: (v) =>
@@ -132,6 +163,7 @@ export const FORMS: Record<FormId, FormDef> = {
   },
   bars: {
     id: 'bars',
+    noun: ['value', 'values'],
     label: 'Bars',
     component: BarsForm,
     caption: (v) =>
@@ -153,6 +185,7 @@ export const FORMS: Record<FormId, FormDef> = {
   },
   seats: {
     id: 'seats',
+    noun: ['party', 'parties'],
     label: 'Seat diagram',
     component: SeatsForm,
     caption: () => 'Each dot is a seat, in the order given; select a block for its row.',
@@ -168,6 +201,7 @@ export const FORMS: Record<FormId, FormDef> = {
   },
   smallColumns: {
     id: 'smallColumns',
+    noun: ['value', 'values'],
     label: 'Rows of small columns',
     component: SmallColumnsForm,
     caption: () =>
@@ -193,6 +227,7 @@ export const FORMS: Record<FormId, FormDef> = {
   },
   annotated: {
     id: 'annotated',
+    noun: ['point', 'points'],
     label: 'Annotated image',
     component: AnnotatedForm,
     caption: () => 'Numbered points on the image, listed below; select either to see the other.',

@@ -6,7 +6,7 @@
 import type { LoadedArticle } from '../host/loadArticle'
 import type { PlacedModule } from '../host/store'
 import type { ModuleKind, Placement } from '../model/types'
-import { addMarker, setCompare, type PlacedVisual, type VisualDraft } from './draft'
+import { addMarker, pickStateOf, setCompare, type PlacedVisual, type VisualDraft } from './draft'
 import { suggestions } from './suggest'
 
 const top = (sectionId: string, sectionTitle: string): Placement => ({
@@ -28,7 +28,13 @@ export function generalExample(
 ): Partial<Record<ModuleKind, PlacedModule>> & { visuals: PlacedVisual[] } {
   const visuals: PlacedVisual[] = []
   const add = (d: VisualDraft, id: string, placement: Placement) =>
-    visuals.push({ id, visual: JSON.parse(JSON.stringify(d.visual)), placement })
+    visuals.push({
+      id,
+      visual: JSON.parse(JSON.stringify(d.visual)),
+      placement,
+      // How it was picked, so clicking it in edit mode re-enters the same mode.
+      pick: { ...pickStateOf(d), scope: d.filter === 'date' ? placement.sectionId : null },
+    })
   for (const s of suggestions(article)) {
     const placement = where[s.id]
     if (!placement || s.id === 'image') continue
@@ -49,6 +55,7 @@ export function generalExample(
         .find((s) => s.id === 'image')!
         .build()
       d.imageId = img.id
+      d.filter = 'image'
       d.visual.form = 'annotated'
       d.visual.title = img.caption.split(/[.;]/)[0]
       d.visual.sourceNote = 'Points placed by the editor.'

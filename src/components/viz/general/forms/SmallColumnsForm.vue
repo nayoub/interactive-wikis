@@ -78,7 +78,7 @@ const geo = computed(() => {
   const W = width.value
   if (!W || !times.value.length) return null
   const labelW = narrow.value ? 0 : Math.min(200, W * 0.32)
-  const valueW = 76
+  const valueW = 96
   const plotW = W - labelW - valueW
   const step = plotW / times.value.length
   return { W, labelW, plotW, step, colW: Math.max(2, step * 0.7) }
@@ -148,9 +148,7 @@ function pick(id: string) {
             </template>
           </svg>
           <small class="sc2__range"
-            >{{
-              fmt(Math.min(...[...r.cells.values()].map((i) => i.components.quantity!.value)))
-            }}
+            >{{ fmt(Math.min(...[...r.cells.values()].map((i) => i.components.quantity!.value))) }}
             to
             {{
               fmt(Math.max(...[...r.cells.values()].map((i) => i.components.quantity!.value)))
@@ -233,7 +231,7 @@ function pick(id: string) {
   opacity: var(--viz-dim);
 }
 .sc2__range {
-  width: 72px;
+  width: 92px;
   color: var(--viz-ink-tertiary);
   white-space: nowrap;
 }
