@@ -1,0 +1,101 @@
+/*
+ * Visualization tokens — one restrained style for article modules (timeline,
+ * map; a quantity chart next). Renderers use only these variables; they
+ * never hard-code a colour, weight or size. Every value maps to a Codex token,
+ * so light/dark themes and Codex upgrades follow automatically.
+ *
+ * Principles: the classic Wikipedia look. One hue (Codex progressive blue) plus
+ * neutrals, distinguished by lightness only. One line weight, one dot size, one
+ * image size and crop, two text styles. Thin rules; no cards, shadows or pills.
+ */
+.viz {
+  /* Colour — neutrals, darkest to lightest */
+  --viz-ink: var(--color-base); /* primary text, axis, dots */
+  --viz-ink-secondary: var(--color-subtle); /* labels */
+  --viz-ink-tertiary: var(--color-placeholder); /* ages, gaps, ruler years */
+  --viz-rule: var(--border-color-base); /* leaders */
+  --viz-rule-light: var(--border-color-subtle); /* frame rules */
+  --viz-paper: var(--background-color-base); /* behind labels that interrupt a line */
+  --viz-image-empty: var(--background-color-neutral-subtle);
+
+  /* Colour — the one hue */
+  --viz-accent: var(--color-progressive); /* hover, active, focus */
+  --viz-accent-wash: var(--background-color-progressive-subtle); /* highlighted passage */
+  --viz-accent-wash-strong: var(--background-color-progressive-subtle--active);
+
+  /* Lines and marks */
+  --viz-line-width: var(--border-width-base, 1px);
+  --viz-line-style-elided: dotted; /* where even spacing skips time */
+  --viz-dot-size: 7px;
+  --viz-focus-width: var(--border-width-thick, 2px);
+  --viz-radius: 0; /* square corners everywhere */
+
+  /* Layout geometry (read by renderers in px) */
+  --viz-slot-min: 80px; /* narrowest per-event slot before a horizontal layout falls back to vertical */
+  --viz-leader-base: 16px; /* first leader jog, from the axis */
+  --viz-leader-step: 7px; /* spacing between jog levels */
+  --viz-px-per-year: 6px; /* vertical proportional spacing */
+  --viz-gap-even: 32px; /* vertical even spacing, where time was skipped */
+  --viz-gap-years: 8; /* gaps of at least this many years are labelled */
+
+  /* Images: one size, one crop */
+  --viz-image-width: 96px;
+  --viz-image-height: 64px;
+  --viz-image-fit: cover;
+
+  /* Space */
+  --viz-space-xs: var(--spacing-25);
+  --viz-space-s: var(--spacing-50);
+  --viz-space-m: var(--spacing-75);
+  --viz-space-l: var(--spacing-100);
+  --viz-space-xl: var(--spacing-150);
+  --viz-space-xxl: var(--spacing-200);
+
+  /* Type — two Codex text styles, used whole */
+  --viz-font-family: var(--font-family-base);
+  /* Heading 4: titles and dates */
+  --viz-heading-size: var(--font-size-large);
+  --viz-heading-weight: var(--font-weight-bold);
+  --viz-heading-line: var(--line-height-large);
+  /* Small: labels, ages, gaps, ruler */
+  --viz-small-size: var(--font-size-small);
+  --viz-small-weight: var(--font-weight-normal);
+  --viz-small-line: var(--line-height-small);
+
+  /* Order by lightness: four steps of the one hue, oldest lightest (map "shade by date"). */
+  --viz-step-1: var(--background-color-progressive-subtle--active);
+  --viz-step-2: var(--border-color-option-blue);
+  --viz-step-3: var(--color-progressive);
+  --viz-step-4: var(--color-progressive--active);
+
+  /* Map base: always weaker than the marks */
+  --viz-land: var(--background-color-neutral-subtle);
+  --viz-coast: var(--border-color-muted);
+  --viz-water: var(--viz-paper); /* lakes: the same as the sea, which is the page */
+  /* Street map (vector tiles, ../render/vectorBase.ts): neutrals only, weaker than the marks */
+  --viz-map-land: var(--background-color-base);
+  --viz-map-water: var(--background-color-neutral);
+  --viz-map-green: var(--background-color-neutral-subtle); /* parks, woods: no green */
+  --viz-map-building: var(--background-color-interactive-subtle--hover);
+  --viz-map-road: var(--background-color-neutral);
+  --viz-map-road-major: var(--border-color-muted);
+  --viz-map-road-motorway: var(--border-color-subtle);
+  --viz-map-boundary: var(--border-color-subtle);
+  --viz-map-label: var(--color-placeholder);
+  --viz-map-label-strong: var(--color-subtle);
+  --viz-label-halo: var(--viz-paper); /* keeps place names legible over the tiles */
+  --viz-map-aspect: 0.6; /* height / width on wide columns */
+  --viz-map-aspect-narrow: 1; /* roughly square on phones */
+  --viz-map-margin: 0.14; /* fraction of the extent kept around the places */
+  --viz-map-min-span: 0.004; /* smallest extent, in world widths (≈150 km): never street level */
+
+  /* Count by area: a cluster's area is proportional to how many places it holds */
+  --viz-cluster-unit: 9px; /* radius of a one-place cluster; n places → unit × √n */
+  --viz-cluster-ink: var(--viz-paper); /* the number inside */
+  --viz-label-gap: 4px; /* between a dot and its label */
+
+  /* Motion */
+  --viz-transition: 120ms;
+  --viz-highlight-hold: 3s;
+  --viz-highlight-fade: 1.6s;
+}

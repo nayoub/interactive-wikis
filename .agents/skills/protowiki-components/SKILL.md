@@ -189,6 +189,14 @@ The `@/` prefix resolves to `src/`.
 | `Dashboard`           | (none)                                                                                                                                                                                                                                 | `#banner`, `#mobile`, `#primary`, `#sidebar`                                                                                        |
 | `DashboardModule`     | `title?`, `to?`, `cta?`, `subtle?`                                                                                                                                                                                                     | default, `#cta`                                                                                                                     |
 
+## Article modules kit (`src/components/viz/`)
+
+Timeline and map modules an editor builds from an article in the Visual Editor
+(pick things in the text → curate → render), with one shared style-token file.
+Used by `src/prototypes/timeline-module/` and `src/prototypes/map-module/`. Its
+structure, data files and how to add a kind are in
+[`src/components/viz/README.md`](../../../src/components/viz/README.md).
+
 ## When to reach beyond this list
 
 If you need a UI primitive (button, form field, dialog, toast, table,

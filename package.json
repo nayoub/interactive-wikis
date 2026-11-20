@@ -25,6 +25,7 @@
     "@wikimedia/codex": "^2.7.0",
     "@wikimedia/codex-design-tokens": "^2.7.0",
     "@wikimedia/codex-icons": "^2.7.0",
+    "maplibre-gl": "5.24.1",
     "vue": "^3.5.13",
     "vue-router": "^4.5.0"
   },
