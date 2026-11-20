@@ -4,11 +4,16 @@ import { computed, ref } from 'vue'
 import { CdxButton, CdxIcon, CdxToggleButtonGroup, CdxToggleSwitch } from '@wikimedia/codex'
 import { cdxIconClose, cdxIconSettings } from '@wikimedia/codex-icons'
 
-import { loadArticle } from './article/loadArticle'
-import { resetState, signal, state } from './store'
-import { buildExample } from './example'
+import type { ModuleKind } from '../model/types'
+import type { ModulesStore, PlacedModule } from './store'
 
-const props = defineProps<{ narrow: boolean }>()
+const props = defineProps<{
+  narrow: boolean
+  store: ModulesStore
+  /** Builds the example modules ("Load example"). */
+  example: () => Promise<Partial<Record<ModuleKind, PlacedModule>>>
+}>()
+const state = props.store.state
 
 const modeButtons = [
   { value: 'read', label: 'Read' },
@@ -38,13 +43,13 @@ const loading = ref(false)
 async function loadExample() {
   loading.value = true
   try {
-    const article = await loadArticle()
-    state.timeline = buildExample(article)
-    state.placement = { kind: 'sectionTop', sectionId: 'Career', sectionTitle: 'Career' }
+    const modules = await props.example()
+    state.modules = modules
     state.draft = null
     state.panelOpen = false
     state.mode = 'read'
-    signal('timeline')
+    const first = (Object.keys(modules) as ModuleKind[])[0]
+    if (first) props.store.signal(first)
   } finally {
     loading.value = false
   }
@@ -74,7 +79,7 @@ const expanded = computed(() => !props.narrow || open.value)
       <small class="pc__label">Prototype controls</small>
       <CdxToggleButtonGroup v-model="mode" :buttons="modeButtons" />
       <CdxButton :disabled="loading" @click="loadExample">Load example</CdxButton>
-      <CdxButton weight="quiet" action="destructive" @click="resetState">Reset</CdxButton>
+      <CdxButton weight="quiet" action="destructive" @click="store.reset()">Reset</CdxButton>
       <span class="pc__group">
         <small>Spacing</small>
         <CdxToggleButtonGroup v-model="spacing" :buttons="spacingButtons" />

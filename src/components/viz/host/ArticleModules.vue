@@ -1,11 +1,23 @@
 <script setup lang="ts">
 /**
- * The Frank Gehry article with the timeline tool: read view, a VE-style edit
- * mode (shared VeToolbar with a working Insert menu), select mode, the
- * curation panel, and the placed timeline block.
+ * The host: an article (Frank Gehry snapshot) with article modules — a
+ * timeline, a map — in a VE-style editor. Generic over kinds: Insert lists one
+ * entry per kind, Pick lights up that kind's mentions, the same Curator lists
+ * the items, and each placed module is a block rendered by its kind's renderer.
+ * When a timeline and a map share a page, an event and a place about the same
+ * thing are linked: selecting one lights the other.
  */
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
-import { CdxButton, CdxIcon, CdxMessage, CdxProgressBar } from '@wikimedia/codex'
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  reactive,
+  ref,
+  shallowRef,
+  watch,
+} from 'vue'
+import { CdxButton, CdxIcon, CdxMessage, CdxProgressBar, CdxToggleSwitch } from '@wikimedia/codex'
 import { cdxIconArrowUp } from '@wikimedia/codex-icons'
 
 import ArticleRenderer from '@/components/article/ArticleRenderer.vue'
@@ -15,36 +27,50 @@ import VeToolbar from '@/components/visual-editor/VeToolbar.vue'
 import VisualEditorPageLayout from '@/components/visual-editor/VisualEditorPageLayout.vue'
 import { globalSkin } from '@/theme'
 
-import { loadArticle, type LoadedArticle } from './loadArticle'
-import TimelineBlock from './TimelineBlock.vue'
-import { timelineIcon } from './timelineIcon'
 // Pick
-import { findDuplicate } from '../pick/duplicates'
 import { scrollToEl, showPassage } from '../pick/passage'
 import { END_MATTER } from '../pick/textIndex'
-import type { DateMention } from '../pick/types'
+import type { Mention } from '../pick/types'
 import { useSelectMode } from '../pick/useSelectMode'
 // Curate
-import TimelineCurator from '../curate/TimelineCurator.vue'
-import { eventFromMention } from '../curate/fromMention'
+import Curator from '../curate/Curator.vue'
+import EventEditor from '../curate/EventEditor.vue'
+import PlaceEditor from '../curate/PlaceEditor.vue'
+import PlaceSearch from '../curate/PlaceSearch.vue'
 // Render
+import MapView from '../render/MapView.vue'
 import TimelineView from '../render/TimelineView.vue'
 // Model
-import { formatDate, sameDate } from '../model/dates'
-import {
-  DEFAULT_OPTIONS,
-  type PartialDate,
-  type Placement,
-  type TimelineEvent,
+import { formatDate } from '../model/dates'
+import type {
+  BaseItem,
+  ModuleData,
+  ModuleKind,
+  PartialDate,
+  Place,
+  Placement,
+  TimelineEvent,
 } from '../model/types'
-import { state } from '../store'
+// Host
+import { KINDS } from './kinds'
+import { loadArticle, type LoadedArticle } from './loadArticle'
+import ModuleBlock from './ModuleBlock.vue'
+import { DEFAULTS, type ModulesStore } from './store'
 
-const props = defineProps<{ forceSkin?: 'desktop' | 'mobile' }>()
+const props = defineProps<{
+  /** Which modules this page offers, in Insert-menu order. */
+  kinds: ModuleKind[]
+  store: ModulesStore
+  forceSkin?: 'desktop' | 'mobile'
+}>()
 
+const state = props.store.state
 const skin = computed(() => props.forceSkin ?? globalSkin.value)
 const isMobile = computed(() => skin.value === 'mobile')
 const editing = computed(() => state.mode === 'edit')
 const panelOpen = computed(() => editing.value && state.panelOpen && !!state.draft)
+const draftKind = computed<ModuleKind | null>(() => (panelOpen.value ? state.draft!.kind : null))
+const draftSpec = computed(() => (draftKind.value ? KINDS[draftKind.value] : null))
 
 // Viewport width: decides sidebar vs sheet, and whether floats make way.
 const vw = ref(typeof window === 'undefined' ? 1280 : window.innerWidth)
@@ -64,9 +90,14 @@ loadArticle()
   .then((a) => (article.value = a))
   .catch((e) => (loadError.value = String(e?.message ?? e)))
 
-const mentionsById = computed(() => new Map((article.value?.mentions ?? []).map((m) => [m.id, m])))
+const mentionsById = computed(() => {
+  const out = new Map<string, Mention<unknown>>()
+  if (!article.value) return out
+  for (const k of props.kinds) for (const m of KINDS[k].mentions(article.value)) out.set(m.id, m)
+  return out
+})
 const draftLabels = computed(
-  () => new Map((article.value?.mentions ?? []).map((m) => [m.id, m.draftLabel])),
+  () => new Map([...mentionsById.value.values()].map((m) => [m.id, m.draftLabel])),
 )
 const sections = computed(() =>
   (article.value?.sections ?? []).filter((s) => !END_MATTER.has(s.id) && s.id !== 'Gallery'),
@@ -78,15 +109,27 @@ function setBodyEl(el: unknown) {
   if (next !== bodyEl.value) bodyEl.value = next
 }
 
-// ── Placement: a mount node inside the article HTML, the block teleports into it ──
-const mountEl = ref<HTMLElement | null>(null)
+// ── Placement: a mount node per module inside the article HTML; its block teleports in ──
+const mountEls = reactive<Partial<Record<ModuleKind, HTMLElement | null>>>({})
 const DEFAULT_PLACEMENT: Placement = {
   kind: 'sectionTop',
   sectionId: 'Career',
   sectionTitle: 'Career',
 }
+const placementKey = (p: Placement) =>
+  p.kind === 'after' ? `after:${p.anchorId}` : `top:${p.sectionId}`
 
-function insertMount(body: HTMLElement, mount: HTMLElement, placement: Placement) {
+function insertAt(
+  body: HTMLElement,
+  mount: HTMLElement,
+  placement: Placement,
+  after: HTMLElement | null,
+) {
+  // Two modules at the same spot: the later one goes right after the earlier one.
+  if (after) {
+    if (after.nextElementSibling !== mount) after.after(mount)
+    return
+  }
   if (placement.kind === 'after') {
     const anchor = body.querySelector(`#${CSS.escape(placement.anchorId)}`)
     if (anchor?.parentElement) {
@@ -105,30 +148,35 @@ function insertMount(body: HTMLElement, mount: HTMLElement, placement: Placement
   } else if (next !== mount) holder.after(mount)
 }
 
-const showBlock = computed(() => !!state.timeline && !!state.placement)
-function ensureMount() {
+function ensureMounts() {
   const body = bodyEl.value
-  if (!body || !showBlock.value) {
-    mountEl.value?.remove()
-    mountEl.value = null
-    return
+  const lastAt = new Map<string, HTMLElement>()
+  for (const kind of props.kinds) {
+    const placed = state.modules[kind]
+    let mount = mountEls[kind] ?? null
+    if (!body || !placed) {
+      mount?.remove()
+      mountEls[kind] = null
+      continue
+    }
+    if (!mount || !body.contains(mount)) {
+      mount = document.createElement('div')
+      mount.className = 'tl-mount'
+      mount.dataset.module = kind
+      mount.setAttribute('contenteditable', 'false')
+    }
+    const key = placementKey(placed.placement)
+    insertAt(body, mount, placed.placement, lastAt.get(key) ?? null)
+    lastAt.set(key, mount)
+    mountEls[kind] = mount
   }
-  let mount = mountEl.value
-  if (!mount || !body.contains(mount)) {
-    mount = document.createElement('div')
-    mount.className = 'tl-mount'
-    mount.setAttribute('contenteditable', 'false')
-  }
-  insertMount(body, mount, state.placement!)
-  mountEl.value = mount
 }
-watch([bodyEl, () => state.placement, showBlock, skin], () => nextTick(ensureMount), {
+watch([bodyEl, () => state.modules, skin], () => nextTick(ensureMounts), {
   deep: true,
   flush: 'post',
 })
-
 // Minerva's section accordion moves nodes after mount; re-seat once it settles.
-watch(bodyEl, (el) => el && setTimeout(ensureMount, 50))
+watch(bodyEl, (el) => el && setTimeout(ensureMounts, 50))
 
 // ── Cursor (where Insert puts things) ──────────────────────────────────────
 const cursorPlacement = ref<Placement | null>(null)
@@ -168,8 +216,9 @@ onBeforeUnmount(() => document.removeEventListener('selectionchange', onSelectio
 // ── Edit mode / insert / curate ────────────────────────────────────────────
 const draftPlacement = ref<Placement>(DEFAULT_PLACEMENT)
 const sheetExpanded = ref(false)
-
-const insertItems = [{ value: 'timeline', label: 'Timeline', icon: timelineIcon }]
+const insertItems = computed(() =>
+  props.kinds.map((k) => ({ value: k, label: KINDS[k].title, icon: KINDS[k].icon })),
+)
 
 function enterEdit() {
   state.mode = 'edit'
@@ -180,15 +229,17 @@ function exitEdit() {
 }
 
 function onInsert(value: string) {
-  if (value !== 'timeline') return
-  // One timeline per article in this prototype: Insert opens the existing one.
-  if (state.timeline) return openReEdit()
+  const kind = value as ModuleKind
+  if (!props.kinds.includes(kind)) return
+  // One module of each kind per article in this prototype: Insert opens the existing one.
+  if (state.modules[kind]) return openReEdit(kind)
   draftPlacement.value = cursorPlacement.value ?? DEFAULT_PLACEMENT
-  if (!state.draft || state.draft.editingPlaced) {
+  if (!state.draft || state.draft.editingPlaced || state.draft.kind !== kind) {
     state.draft = {
-      title: 'Timeline',
-      events: [],
-      options: { ...DEFAULT_OPTIONS },
+      kind,
+      title: KINDS[kind].title,
+      items: [],
+      options: { ...DEFAULTS[kind] },
       editingPlaced: false,
     }
   }
@@ -198,13 +249,15 @@ function onInsert(value: string) {
   document.getSelection()?.removeAllRanges()
 }
 
-function openReEdit() {
-  if (!state.timeline) return
+function openReEdit(kind: ModuleKind) {
+  const placed = state.modules[kind]
+  if (!placed) return
   state.mode = 'edit'
   state.draft = {
-    title: state.timeline.title,
-    events: JSON.parse(JSON.stringify(state.timeline.events)),
-    options: { ...DEFAULT_OPTIONS, ...state.timeline.options },
+    kind,
+    title: placed.data.title,
+    items: JSON.parse(JSON.stringify(placed.data.items)),
+    options: { ...DEFAULTS[kind], ...placed.data.options },
     editingPlaced: true,
   }
   sheetExpanded.value = panelMode.value === 'sheet'
@@ -214,99 +267,114 @@ function openReEdit() {
 function commit() {
   const draft = state.draft
   if (!draft) return
-  state.timeline = { title: draft.title, events: draft.events, options: { ...draft.options } }
-  if (!draft.editingPlaced) state.placement = draftPlacement.value
+  const data: ModuleData = { title: draft.title, items: draft.items, options: { ...draft.options } }
+  const placement = draft.editingPlaced
+    ? state.modules[draft.kind]!.placement
+    : draftPlacement.value
+  state.modules = { ...state.modules, [draft.kind]: { data, placement } }
+  const kind = draft.kind
   state.draft = null
   state.panelOpen = false
-  nextTick(() =>
-    setTimeout(() => {
-      if (mountEl.value) scrollToEl(mountEl.value, 'start', 72)
-    }, 80),
-  )
+  scrollToModule(kind)
 }
-
 function discard() {
   state.draft = null
   state.panelOpen = false
 }
-
 function closePanel() {
   state.panelOpen = false
 }
-
-function removeTimeline() {
-  state.timeline = null
-  state.placement = null
+function removeModule(kind: ModuleKind) {
+  const next = { ...state.modules }
+  delete next[kind]
+  state.modules = next
 }
-
-function moveTimeline(sectionId: string) {
+function moveModule(kind: ModuleKind, sectionId: string) {
   const s = sections.value.find((x) => x.id === sectionId)
-  if (s) state.placement = { kind: 'sectionTop', sectionId: s.id, sectionTitle: s.title }
+  const placed = state.modules[kind]
+  if (s && placed) {
+    state.modules = {
+      ...state.modules,
+      [kind]: {
+        ...placed,
+        placement: { kind: 'sectionTop', sectionId: s.id, sectionTitle: s.title },
+      },
+    }
+  }
+  scrollToModule(kind)
+}
+function scrollToModule(kind: ModuleKind, offset = 72) {
   nextTick(() =>
     setTimeout(() => {
-      if (mountEl.value) scrollToEl(mountEl.value, 'start', 72)
+      ensureMounts()
+      const m = mountEls[kind]
+      if (m) scrollToEl(m, 'start', offset)
     }, 80),
   )
 }
 
-// Select mode
-const pickedIds = computed(() => new Set((state.draft?.events ?? []).map((e) => e.id)))
-
-/** The picked event a mention would duplicate: same date, and either a full date or largely the same sentence. */
-function duplicateOf(m: DateMention): TimelineEvent | null {
-  const events = state.draft?.events ?? []
-  return findDuplicate(
-    { id: m.id, sentence: m.sentence },
-    events.map((e) => ({ ...e, sentence: e.sourceText })),
-    (e) => sameDate(e.date, m.value),
-    m.value.precision === 'day',
-  )
-}
+// ── Select mode (Pick) ─────────────────────────────────────────────────────
+const draftItems = computed<BaseItem[]>(() => state.draft?.items ?? [])
+const pickedIds = computed(() => new Set(draftItems.value.map((e) => e.id)))
 const usedIds = computed(() => {
   const out = new Set<string>()
-  if (!panelOpen.value) return out
-  for (const m of article.value?.mentions ?? []) {
-    if (!pickedIds.value.has(m.id) && duplicateOf(m)) out.add(m.id)
+  const spec = draftSpec.value
+  if (!spec || !article.value) return out
+  for (const m of spec.mentions(article.value)) {
+    if (!pickedIds.value.has(m.id) && spec.duplicateOf(m, draftItems.value)) out.add(m.id)
   }
   return out
 })
 
-/** A tap on a chip whose event is already there asks first. */
-const pendingDuplicate = ref<{ mention: DateMention; existing: TimelineEvent } | null>(null)
+/** A tap on a chip whose thing is already there asks first. */
+const pendingDuplicate = ref<{ mention: Mention<unknown>; existing: BaseItem } | null>(null)
 function toggleMention(id: string) {
   const draft = state.draft
+  const spec = draftSpec.value
   const mention = mentionsById.value.get(id)
-  if (!draft || !mention) return
-  const i = draft.events.findIndex((e) => e.id === id)
+  if (!draft || !spec || !mention) return
+  const i = draft.items.findIndex((e) => e.id === id)
   if (i !== -1) {
-    draft.events.splice(i, 1)
+    draft.items.splice(i, 1)
     return
   }
-  const existing = duplicateOf(mention)
+  const existing = spec.duplicateOf(mention, draft.items)
   if (existing) {
     pendingDuplicate.value = { mention, existing }
     return
   }
-  draft.events.push(eventFromMention(mention))
+  draft.items.push(spec.fromMention(mention))
 }
 function confirmDuplicate() {
   const p = pendingDuplicate.value
-  if (p && state.draft) state.draft.events.push(eventFromMention(p.mention))
+  if (p && state.draft && draftSpec.value)
+    state.draft.items.push(draftSpec.value.fromMention(p.mention))
   pendingDuplicate.value = null
 }
 watch(panelOpen, (open) => !open && (pendingDuplicate.value = null))
+const pendingWhat = computed(() => {
+  const p = pendingDuplicate.value
+  if (!p) return ''
+  const v = p.mention.value as { name?: string; precision?: string }
+  return draftSpec.value?.picks === 'date'
+    ? formatDate(p.mention.value as never)
+    : (v.name ?? p.mention.text)
+})
+
 useSelectMode({
   root: bodyEl,
   active: panelOpen,
+  kind: computed(() => draftSpec.value?.picks ?? null),
   picked: pickedIds,
   used: usedIds,
   toggle: toggleMention,
   describe: (id) => {
-    const m: DateMention | undefined = mentionsById.value.get(id)
+    const m = mentionsById.value.get(id)
+    const what = draftSpec.value?.title.toLowerCase() ?? 'module'
     if (!m) return id
-    if (pickedIds.value.has(id)) return `${m.text}: on the timeline, tap to remove`
-    if (usedIds.value.has(id)) return `${m.text}: already on the timeline from another sentence`
-    return `${m.text}: tap to add to the timeline`
+    if (pickedIds.value.has(id)) return `${m.text}: on the ${what}, tap to remove`
+    if (usedIds.value.has(id)) return `${m.text}: already on the ${what} from another sentence`
+    return `${m.text}: tap to add to the ${what}`
   },
   sentenceOf: (id) => {
     const m = mentionsById.value.get(id)
@@ -314,76 +382,109 @@ useSelectMode({
   },
 })
 
-function showSourceFromPanel(event: TimelineEvent) {
+function addSearched(place: Place) {
+  const draft = state.draft
+  if (!draft) return
+  if ((draft.items as Place[]).some((p) => p.wikidataId === place.wikidataId)) return
+  draft.items.push(place)
+}
+
+function showSourceFromPanel(item: BaseItem) {
   if (panelMode.value === 'sheet') sheetExpanded.value = false
-  if (bodyEl.value) showPassage(bodyEl.value, event.sourceAnchor, event.sourceText)
+  if (bodyEl.value && item.sourceAnchor)
+    showPassage(bodyEl.value, item.sourceAnchor, item.sourceText)
 }
 
 // ── Reader: jump to source and back ────────────────────────────────────────
-const blockRef = ref<InstanceType<typeof TimelineBlock> | null>(null)
-const backTo = ref<string | null>(null)
-const activeEventId = ref<string | null>(null)
+const backTo = ref<{ kind: ModuleKind; id: string } | null>(null)
+const selected = ref<{ kind: ModuleKind; id: string } | null>(null)
 let jumpedAt = 0
+const timelineRef = ref<InstanceType<typeof TimelineView> | null>(null)
+const mapRef = ref<InstanceType<typeof MapView> | null>(null)
 
-function onSelectEvent(event: TimelineEvent) {
-  if (!bodyEl.value) return
-  activeEventId.value = event.id
-  if (showPassage(bodyEl.value, event.sourceAnchor, event.sourceText)) {
-    backTo.value = event.id
+function jumpToSource(kind: ModuleKind, item: BaseItem) {
+  if (!bodyEl.value || !item.sourceAnchor) return
+  selected.value = { kind, id: item.id }
+  if (showPassage(bodyEl.value, item.sourceAnchor, item.sourceText)) {
+    backTo.value = { kind, id: item.id }
     jumpedAt = Date.now()
   }
 }
-function backToTimeline() {
-  const id = backTo.value
+function backToModule() {
+  const b = backTo.value
   backTo.value = null
-  const target = mountEl.value?.querySelector(`[data-event-id="${id}"]`) ?? mountEl.value
+  if (!b) return
+  const mount = mountEls[b.kind]
+  const target =
+    mount?.querySelector(`[data-event-id="${b.id}"], [data-place-id="${b.id}"]`) ?? mount
   if (target) scrollToEl(target, 'center')
-  if (id) setTimeout(() => blockRef.value?.focusEvent(id), 350)
+  setTimeout(() => {
+    if (b.kind === 'timeline') timelineRef.value?.focusEvent(b.id)
+    else mapRef.value?.focusPlace(b.id)
+  }, 350)
 }
 function onScroll() {
-  if (!backTo.value || Date.now() - jumpedAt < 1500 || !mountEl.value) return
-  const r = mountEl.value.getBoundingClientRect()
+  const b = backTo.value
+  const mount = b ? mountEls[b.kind] : null
+  if (!b || Date.now() - jumpedAt < 1500 || !mount) return
+  const r = mount.getBoundingClientRect()
   if (r.bottom > 0 && r.top < window.innerHeight * 0.6) backTo.value = null
 }
 onMounted(() => window.addEventListener('scroll', onScroll, { passive: true }))
 onBeforeUnmount(() => window.removeEventListener('scroll', onScroll))
 watch([editing, () => state.signal.n], () => {
   backTo.value = null
-  activeEventId.value = null
+  selected.value = null
 })
+
+// ── Timeline ↔ map: the same thing in both lights up in both ─────────────────
+/** Event ↔ place when the place is named in the event's sentence (by its name, its link text, or one of the sentence's links). */
+function sameThing(e: TimelineEvent, p: Place): boolean {
+  if (e.sourceAnchor && p.sourceAnchor && e.sourceText === p.sourceText) return true
+  const names = [p.name, p.label].filter((s) => s && s.length > 3)
+  return names.some((n) => e.sourceText.includes(n) || (e.sourceLinks ?? []).includes(n))
+}
+const shown = (kind: ModuleKind) => {
+  // While re-editing a placed module, its block previews the draft live.
+  if (panelOpen.value && state.draft?.editingPlaced && state.draft.kind === kind) return state.draft
+  return state.modules[kind]?.data ?? null
+}
+const linked = computed(() => {
+  const events = (shown('timeline')?.items ?? []) as TimelineEvent[]
+  const places = (shown('map')?.items ?? []) as Place[]
+  const pairs: [string, string][] = []
+  for (const e of events) for (const p of places) if (sameThing(e, p)) pairs.push([e.id, p.id])
+  return pairs
+})
+const activeIds = (kind: ModuleKind) => {
+  const s = selected.value
+  if (!s) return []
+  if (s.kind === kind) return [s.id]
+  return linked.value
+    .filter(([e, p]) => (s.kind === 'timeline' ? e === s.id : p === s.id))
+    .map(([e, p]) => (kind === 'timeline' ? e : p))
+}
 
 // ── Prototype signals (Load example, Reset) ────────────────────────────────
 watch(
   () => state.signal.n,
   () => {
     if (state.signal.kind === 'top') window.scrollTo({ top: 0 })
-    else
-      nextTick(() =>
-        setTimeout(() => {
-          ensureMount()
-          if (mountEl.value) scrollToEl(mountEl.value, 'start', 56)
-        }, 120),
-      )
+    else scrollToModule(state.signal.kind, 56)
   },
 )
 
 /** Birth date for ages: the infobox's, else a first event that says "born". */
 const birth = computed<PartialDate | undefined>(() => {
   if (article.value?.subject.birth) return article.value.subject.birth
-  const events = state.draft?.events ?? state.timeline?.events ?? []
-  const first = [...events].sort((a, b) => a.date.start.y - b.date.start.y)[0]
+  const events = ((shown('timeline') ?? state.draft)?.items ?? []) as TimelineEvent[]
+  const first = [...events].filter((e) => e.date).sort((a, b) => a.date.start.y - b.date.start.y)[0]
   return first && /\bborn\b/i.test(first.sourceText) ? first.date.start : undefined
 })
 
-const blockTimeline = computed(() => {
-  // While re-editing, the placed block previews the draft live.
-  if (panelOpen.value && state.draft?.editingPlaced)
-    return { title: state.draft.title, events: state.draft.events, options: state.draft.options }
-  return state.timeline
-})
-
-const pickedSummary = computed(() =>
-  (state.draft?.events ?? []).map((e) => formatDate(e.date)).join(', '),
+const pickedSummary = computed(() => draftItems.value.map((e) => e.label).join(', '))
+const backLabel = computed(() =>
+  backTo.value ? `Back to ${KINDS[backTo.value.kind].title.toLowerCase()}` : '',
 )
 </script>
 
@@ -423,7 +524,7 @@ const pickedSummary = computed(() =>
               :show-suggestions-toggle="false"
               :can-undo="false"
               :can-redo="false"
-              :can-publish="!!state.timeline && !panelOpen"
+              :can-publish="Object.keys(state.modules).length > 0 && !panelOpen"
               :review="false"
               :insert-items="insertItems"
               @insert="onInsert"
@@ -449,28 +550,32 @@ const pickedSummary = computed(() =>
           </ArticleWrapper>
         </div>
 
-        <TimelineCurator
-          v-if="panelOpen && article && state.draft"
+        <Curator
+          v-if="panelOpen && article && state.draft && draftSpec"
+          :key="state.draft.kind"
           v-model:draft="state.draft"
           v-model:placement="draftPlacement"
           v-model:expanded="sheetExpanded"
           :mode="panelMode"
+          :title="draftSpec.title"
+          :noun="draftSpec.noun"
+          :picks="draftSpec.picks"
+          :order="draftSpec.sort"
           :images="article.images"
           :sections="sections"
-          :draft-labels="draftLabels"
           :subject="article.subject.name"
-          :can-show-age="!!birth"
+          :editing-placed="state.draft.editingPlaced"
           :cursor-placement="cursorPlacement"
           @close="closePanel"
           @discard="discard"
           @commit="commit"
-          @show-source="showSourceFromPanel"
         >
           <template #notice>
             <div v-if="pendingDuplicate" class="tl-dup" role="alert">
               <p class="tl-dup__text">
-                <b>{{ formatDate(pendingDuplicate.mention.value) }}</b> is already on the timeline:
-                “{{ pendingDuplicate.existing.label }}”. Add it again from this sentence?
+                <b>{{ pendingWhat }}</b> is already on the {{ draftSpec.title.toLowerCase() }}: “{{
+                  pendingDuplicate.existing.label
+                }}”. Add it again from this sentence?
               </p>
               <div class="tl-dup__actions">
                 <CdxButton size="small" weight="quiet" @click="pendingDuplicate = null"
@@ -480,43 +585,115 @@ const pickedSummary = computed(() =>
               </div>
             </div>
           </template>
+
+          <template #add>
+            <PlaceSearch v-if="state.draft.kind === 'map'" @add="addSearched" />
+          </template>
+
+          <template #item="{ item, remove, chooseImage }">
+            <EventEditor
+              v-if="state.draft.kind === 'timeline'"
+              :model-value="item as TimelineEvent"
+              :draft-label="draftLabels.get(item.id)"
+              @remove="remove"
+              @choose-image="chooseImage"
+              @show-source="showSourceFromPanel(item)"
+            />
+            <PlaceEditor
+              v-else
+              :model-value="item as Place"
+              :draft-label="draftLabels.get(item.id)"
+              @remove="remove"
+              @choose-image="chooseImage"
+              @show-source="showSourceFromPanel(item)"
+            />
+          </template>
+
+          <template #options>
+            <template v-if="state.draft.kind === 'timeline'">
+              <CdxToggleSwitch v-if="birth" v-model="state.draft.options.showAge" align-switch
+                >Age at each event</CdxToggleSwitch
+              >
+              <CdxToggleSwitch v-model="state.draft.options.showGaps" align-switch
+                >Time between events</CdxToggleSwitch
+              >
+            </template>
+            <CdxToggleSwitch v-else v-model="state.draft.options.shadeByDate" align-switch
+              >Shade by date</CdxToggleSwitch
+            >
+          </template>
+
           <template #preview="{ wide }">
             <TimelineView
-              :events="state.draft.events"
+              v-if="state.draft.kind === 'timeline'"
+              :events="state.draft.items as TimelineEvent[]"
               :title="state.draft.title"
               :spacing="state.spacing"
-              :options="state.draft.options"
+              :options="state.draft.options as never"
               :birth="birth"
               :skin="wide ? 'desktop' : skin"
               :layout="wide ? 'horizontal' : 'vertical'"
             />
+            <MapView
+              v-else
+              :places="state.draft.items as Place[]"
+              :title="state.draft.title"
+              :options="state.draft.options as never"
+              :can-show-source="false"
+            />
           </template>
-        </TimelineCurator>
+        </Curator>
       </div>
     </VisualEditorPageLayout>
 
-    <Teleport v-if="mountEl && blockTimeline" :to="mountEl">
-      <TimelineBlock
-        ref="blockRef"
-        :timeline="blockTimeline"
-        :editing="editing"
-        :active="panelOpen && !!state.draft?.editingPlaced"
-        :skin="skin"
-        :spacing="state.spacing"
-        :fallback="state.fallback"
-        :sections="sections"
-        :birth="birth"
-        :active-event-id="activeEventId"
-        @edit="openReEdit"
-        @remove="removeTimeline"
-        @move="moveTimeline"
-        @select="onSelectEvent"
-      />
-    </Teleport>
+    <template v-for="kind in kinds" :key="kind">
+      <Teleport v-if="mountEls[kind] && shown(kind)" :to="mountEls[kind]!">
+        <ModuleBlock
+          :title="KINDS[kind].title"
+          :editing="editing"
+          :active="panelOpen && !!state.draft?.editingPlaced && state.draft.kind === kind"
+          :sections="sections"
+          @edit="openReEdit(kind)"
+          @remove="removeModule(kind)"
+          @move="moveModule(kind, $event)"
+        >
+          <TimelineView
+            v-if="kind === 'timeline'"
+            :ref="(el: any) => (timelineRef = el)"
+            :events="shown(kind)!.items as TimelineEvent[]"
+            :title="shown(kind)!.title"
+            :spacing="state.spacing"
+            :fallback="state.fallback"
+            :skin="skin"
+            :options="shown(kind)!.options as never"
+            :birth="birth"
+            :active-ids="activeIds('timeline')"
+            @select="jumpToSource('timeline', $event)"
+          />
+          <MapView
+            v-else
+            :ref="(el: any) => (mapRef = el)"
+            :places="shown(kind)!.items as Place[]"
+            :title="shown(kind)!.title"
+            :fallback="state.fallback"
+            :options="shown(kind)!.options as never"
+            :active-ids="activeIds('map')"
+            @select="jumpToSource('map', $event)"
+            @focus="
+              selected = $event
+                ? { kind: 'map', id: $event.id }
+                : selected?.kind === 'map'
+                  ? null
+                  : selected
+            "
+          />
+        </ModuleBlock>
+      </Teleport>
+    </template>
 
     <div v-if="backTo && !editing" class="tl-back" :class="{ 'tl-back--mobile': isMobile }">
-      <CdxButton action="progressive" @click="backToTimeline">
-        <CdxIcon :icon="cdxIconArrowUp" /> Back to timeline
+      <CdxButton action="progressive" @click="backToModule">
+        <CdxIcon :icon="cdxIconArrowUp" /> {{ backLabel }}
       </CdxButton>
     </div>
     <span class="tl-sr" aria-live="polite">{{
@@ -604,7 +781,7 @@ const pickedSummary = computed(() =>
 .tl-mount {
   display: flow-root;
 }
-.tl-page--selecting .mw-parser-output a:not(.tl-ev__link) {
+.tl-page--selecting .mw-parser-output a:not(.tl-ev__link):not(.tl-mention--candidate) {
   color: inherit;
 }
 .tl-page--selecting
@@ -617,7 +794,7 @@ const pickedSummary = computed(() =>
   opacity: 0.6;
 }
 /* Chips: same metrics as the text (no bold, zero net padding), so picking never reflows. */
-.tl-page--selecting .tl-mention {
+.tl-page.tl-page--selecting .mw-parser-output .tl-mention--candidate {
   padding: 1px 3px;
   margin: -1px -3px;
   border-radius: var(--border-radius-base, 2px);
@@ -631,22 +808,23 @@ const pickedSummary = computed(() =>
     color 120ms,
     box-shadow 240ms;
 }
-.tl-page--selecting .tl-mention:hover {
+.tl-page.tl-page--selecting .mw-parser-output .tl-mention--candidate:hover {
   background-color: var(--background-color-progressive-subtle--hover);
 }
-.tl-page--selecting .tl-mention:focus-visible {
+.tl-page.tl-page--selecting .mw-parser-output .tl-mention--candidate:focus-visible {
   outline: 2px solid var(--outline-color-progressive--focus, #36c);
   outline-offset: 1px;
 }
-.tl-page--selecting .tl-mention--picked {
+.tl-page.tl-page--selecting .mw-parser-output .tl-mention--candidate.tl-mention--picked,
+.tl-page.tl-page--selecting .mw-parser-output a.tl-mention--candidate.tl-mention--picked:visited {
   background-color: var(--background-color-progressive);
   color: var(--color-inverted-fixed, #fff);
 }
-.tl-page--selecting .tl-mention--picked:hover {
+.tl-page.tl-page--selecting .mw-parser-output .tl-mention--picked:hover {
   background-color: var(--background-color-progressive--hover);
 }
 /* A ring that ripples out on tap: feedback without moving any text. */
-.tl-page--selecting .tl-mention--pop {
+.tl-page.tl-page--selecting .mw-parser-output .tl-mention--pop {
   animation: tl-ring 420ms ease-out;
 }
 @keyframes tl-ring {
@@ -667,7 +845,7 @@ const pickedSummary = computed(() =>
 }
 
 /* Already on the timeline via another sentence: still tappable, visibly spent. */
-.tl-page--selecting .tl-mention--used {
+.tl-page.tl-page--selecting .mw-parser-output .tl-mention--used {
   background-color: transparent;
   color: var(--color-progressive);
   box-shadow: inset 0 -1px 0 var(--border-color-progressive);

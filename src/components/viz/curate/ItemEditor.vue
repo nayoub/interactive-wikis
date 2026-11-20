@@ -1,21 +1,22 @@
 <script setup lang="ts">
 /**
- * One picked event in the curation list. Reads as the event itself — date,
- * label, source — and becomes editable where you touch it. Tools appear on
- * hover (always visible on touch).
+ * One curated item, whatever it is: a head (the kind's own — a date, a place
+ * name) and optional details from the `head`/`details` slots, then what every
+ * item has: an editable label, an image, the source sentence and a way back to
+ * it. Reads as the item itself and becomes editable where you touch it; tools
+ * appear on hover (always visible on touch).
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { CdxButton, CdxCheckbox, CdxIcon, CdxSelect, CdxTextInput } from '@wikimedia/codex'
+import { CdxButton, CdxIcon } from '@wikimedia/codex'
 import { cdxIconArrowNext, cdxIconClose, cdxIconImage, cdxIconTrash } from '@wikimedia/codex-icons'
 
-import { MONTH_NAMES, formatDate } from '../model/dates'
-import type { Precision, Qualifier, TimelineEvent } from '../model/types'
+import type { BaseItem } from '../model/types'
 
-const props = defineProps<{ draftLabel?: string }>()
-const event = defineModel<TimelineEvent>({ required: true })
+const props = defineProps<{ draftLabel?: string; noun: string }>()
+const item = defineModel<BaseItem>({ required: true })
 const emit = defineEmits<{ remove: []; chooseImage: []; showSource: [] }>()
+defineSlots<{ head(): unknown; details(): unknown }>()
 
-const dateOpen = ref(false)
 const sourceOpen = ref(false)
 
 // Label: a borderless, self-sizing textarea.
@@ -36,97 +37,25 @@ onMounted(() => {
 })
 onBeforeUnmount(() => ro?.disconnect())
 function onLabel(e: Event) {
-  event.value.label = (e.target as HTMLTextAreaElement).value.replace(/\n/g, ' ')
+  item.value.label = (e.target as HTMLTextAreaElement).value.replace(/\n/g, ' ')
   fit()
 }
 onMounted(fit)
 watch(
-  () => event.value.label,
+  () => item.value.label,
   () => nextTick(fit),
 )
-const labelEdited = computed(() => !!props.draftLabel && props.draftLabel !== event.value.label)
+const labelEdited = computed(() => !!props.draftLabel && props.draftLabel !== item.value.label)
 
-// Date
-const precisionItems = [
-  { value: 'year', label: 'Year' },
-  { value: 'month', label: 'Month' },
-  { value: 'day', label: 'Day' },
-]
-const monthItems = MONTH_NAMES.map((m, i) => ({ value: i + 1, label: m }))
-const precision = computed({
-  get: () => event.value.date.precision,
-  set: (p: Precision) => {
-    const d = event.value.date
-    d.precision = p
-    if (p === 'year') {
-      delete d.start.m
-      delete d.start.d
-    } else {
-      d.start.m ??= 1
-      if (p === 'day') d.start.d ??= 1
-      else delete d.start.d
-    }
-  },
-})
-function num(v: string | number, min: number, max: number) {
-  const n = Math.round(Number(v))
-  return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : min
-}
-const year = computed({
-  get: () => String(event.value.date.start.y),
-  set: (v) => (event.value.date.start.y = num(v, 1, 2100)),
-})
-const month = computed({
-  get: () => event.value.date.start.m ?? 1,
-  set: (v: number) => (event.value.date.start.m = v),
-})
-const day = computed({
-  get: () => String(event.value.date.start.d ?? 1),
-  set: (v) => (event.value.date.start.d = num(v, 1, 31)),
-})
-const isRange = computed({
-  get: () => !!event.value.date.end,
-  set: (on: boolean) => {
-    if (on) event.value.date.end = { y: event.value.date.start.y + 1 }
-    else delete event.value.date.end
-  },
-})
-const endYear = computed({
-  get: () => String(event.value.date.end?.y ?? ''),
-  set: (v) => {
-    if (event.value.date.end) event.value.date.end.y = num(v, event.value.date.start.y, 2100)
-  },
-})
-const qualifierItems = [
-  { value: '', label: 'Exact' },
-  { value: 'early', label: 'Early' },
-  { value: 'mid', label: 'Mid' },
-  { value: 'late', label: 'Late' },
-  { value: 'spring', label: 'Spring' },
-  { value: 'summer', label: 'Summer' },
-  { value: 'fall', label: 'Fall' },
-  { value: 'winter', label: 'Winter' },
-]
-const qualifier = computed({
-  get: () => event.value.date.qualifier ?? '',
-  set: (v: string) => {
-    if (v) event.value.date.qualifier = v as Qualifier
-    else delete event.value.date.qualifier
-  },
-})
 const credit = computed(() => {
-  const img = event.value.image
+  const img = item.value.image
   return img?.source === 'commons' ? `${img.artist} · ${img.license}` : ''
 })
-const circa = computed({
-  get: () => !!event.value.date.circa,
-  set: (v: boolean) => (event.value.date.circa = v),
-})
 
-/** Source sentence split around the matched date, so it can be marked. */
+/** Source sentence split around the matched text, so it can be marked. */
 const sourceParts = computed(() => {
-  const s = event.value.sourceText
-  const d = event.value.sourceDateText
+  const s = item.value.sourceText
+  const d = item.value.sourceDateText
   const i = d ? s.indexOf(d) : -1
   if (i === -1) return [s, '', '']
   return [s.slice(0, i), d, s.slice(i + d.length)]
@@ -136,66 +65,28 @@ const sourceParts = computed(() => {
 <template>
   <div class="ev">
     <div class="ev__head">
-      <button
-        type="button"
-        class="ev__date"
-        :aria-expanded="dateOpen"
-        :aria-label="`${formatDate(event.date)}. Adjust date`"
-        @click="dateOpen = !dateOpen"
-      >
-        {{ formatDate(event.date) }}
-      </button>
+      <slot name="head" />
       <div class="ev__tools">
         <CdxButton
           weight="quiet"
           size="small"
-          :aria-label="event.image ? 'Change image' : 'Add image'"
+          :aria-label="item.image ? 'Change image' : 'Add image'"
           @click="emit('chooseImage')"
         >
           <CdxIcon :icon="cdxIconImage" size="small" />
         </CdxButton>
-        <CdxButton weight="quiet" size="small" aria-label="Remove event" @click="emit('remove')">
+        <CdxButton
+          weight="quiet"
+          size="small"
+          :aria-label="`Remove ${noun}`"
+          @click="emit('remove')"
+        >
           <CdxIcon :icon="cdxIconTrash" size="small" />
         </CdxButton>
       </div>
     </div>
 
-    <div v-if="dateOpen" class="ev__dates">
-      <CdxSelect v-model:selected="precision" class="ev__precision" :menu-items="precisionItems" />
-      <CdxTextInput
-        v-if="precision === 'day'"
-        v-model="day"
-        class="ev__num ev__num--day"
-        input-type="number"
-        aria-label="Day"
-      />
-      <CdxSelect
-        v-if="precision !== 'year'"
-        v-model:selected="month"
-        class="ev__month"
-        :menu-items="monthItems"
-      />
-      <CdxSelect
-        v-if="precision === 'year'"
-        v-model:selected="qualifier"
-        class="ev__month"
-        aria-label="Part of the year or decade"
-        :menu-items="qualifierItems"
-      />
-      <CdxTextInput v-model="year" class="ev__num" input-type="number" aria-label="Year" />
-      <span v-if="isRange" class="ev__until">to</span>
-      <CdxTextInput
-        v-if="isRange"
-        v-model="endYear"
-        class="ev__num"
-        input-type="number"
-        aria-label="Until year"
-      />
-      <div class="ev__flags">
-        <CdxCheckbox v-model="circa" inline>c.</CdxCheckbox>
-        <CdxCheckbox v-model="isRange" inline>Span</CdxCheckbox>
-      </div>
-    </div>
+    <slot name="details" />
 
     <div class="ev__body">
       <div class="ev__text">
@@ -203,7 +94,7 @@ const sourceParts = computed(() => {
           ref="labelRef"
           class="ev__label"
           rows="1"
-          :value="event.label"
+          :value="item.label"
           aria-label="Label"
           @input="onLabel"
         />
@@ -211,25 +102,25 @@ const sourceParts = computed(() => {
           v-if="labelEdited"
           type="button"
           class="ev__link ev__revert"
-          @click="event.label = draftLabel!"
+          @click="item.label = draftLabel!"
         >
           Use drafted label
         </button>
       </div>
-      <div v-if="event.image" class="ev__image">
+      <div v-if="item.image" class="ev__image">
         <button
           type="button"
           class="ev__thumb"
           aria-label="Change image"
           @click="emit('chooseImage')"
         >
-          <img :src="event.image.src" :alt="event.image.caption" :title="event.image.fileTitle" />
+          <img :src="item.image.src" :alt="item.image.caption" :title="item.image.fileTitle" />
         </button>
         <button
           type="button"
           class="ev__unimage"
           aria-label="Remove image"
-          @click="event.image = undefined"
+          @click="item.image = undefined"
         >
           <CdxIcon :icon="cdxIconClose" size="x-small" />
         </button>
@@ -237,24 +128,29 @@ const sourceParts = computed(() => {
     </div>
 
     <small v-if="credit" class="ev__credit">
-      Image: <a :href="event.image!.pageUrl" target="_blank" rel="noopener">{{ credit }}</a>
+      Image: <a :href="item.image!.pageUrl" target="_blank" rel="noopener">{{ credit }}</a>
     </small>
-    <small class="ev__source" :class="{ 'ev__source--open': sourceOpen }">
-      <button
-        type="button"
-        class="ev__quote"
-        :aria-expanded="sourceOpen"
-        @click="sourceOpen = !sourceOpen"
-      >
-        {{ sourceParts[0] }}<mark>{{ sourceParts[1] }}</mark
-        >{{ sourceParts[2] }}
-      </button>
-    </small>
-    <small class="ev__where">
-      {{ event.sourceAnchor.sectionTitle }}
-      <button type="button" class="ev__link" @click="emit('showSource')">
-        Show in article <CdxIcon :icon="cdxIconArrowNext" size="x-small" />
-      </button>
+    <template v-if="item.sourceAnchor">
+      <small class="ev__source" :class="{ 'ev__source--open': sourceOpen }">
+        <button
+          type="button"
+          class="ev__quote"
+          :aria-expanded="sourceOpen"
+          @click="sourceOpen = !sourceOpen"
+        >
+          {{ sourceParts[0] }}<mark>{{ sourceParts[1] }}</mark
+          >{{ sourceParts[2] }}
+        </button>
+      </small>
+      <small class="ev__where">
+        {{ item.sourceAnchor.sectionTitle }}
+        <button type="button" class="ev__link" @click="emit('showSource')">
+          Show in article <CdxIcon :icon="cdxIconArrowNext" size="x-small" />
+        </button>
+      </small>
+    </template>
+    <small v-else class="ev__nosource">
+      No source sentence: added by search, not picked from the article.
     </small>
   </div>
 </template>
@@ -473,6 +369,10 @@ const sourceParts = computed(() => {
 }
 .ev__credit a {
   color: inherit;
+}
+.ev__nosource {
+  color: var(--color-placeholder);
+  font-style: italic;
 }
 .ev__where {
   display: flex;

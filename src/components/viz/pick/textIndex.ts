@@ -20,7 +20,7 @@ export interface IndexedBlock {
   /** Clean-text offsets where a citation marker sat, with its label and target. */
   refs: { offset: number; label: string; href: string }[]
   /** Clean-text ranges covered by in-article links (for "name before (1980)" labels). */
-  links: { start: number; end: number; text: string }[]
+  links: { start: number; end: number; text: string; el: HTMLAnchorElement }[]
 }
 
 const SKIP_SELECTOR = 'sup.reference, sup.mw-ref, .mw-ref, style, script, .noprint, .mw-editsection'
@@ -54,7 +54,12 @@ export function indexBlock(el: HTMLElement): IndexedBlock {
     const start = text.length
     element.childNodes.forEach(walk)
     if (isLink && text.length > start)
-      links.push({ start, end: text.length, text: text.slice(start) })
+      links.push({
+        start,
+        end: text.length,
+        text: text.slice(start),
+        el: element as HTMLAnchorElement,
+      })
   }
   el.childNodes.forEach(walk)
   return { el, text, pieces, refs, links }

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * Render: draws a timeline from a plain list of events, styled only by the
- * shared visualization tokens (../viz-tokens.css). Knows nothing about the
+ * shared visualization tokens (../tokens.css). Knows nothing about the
  * article, picking or curating. Every layout is an ordered list underneath.
  *
  * - horizontal (desktop, when every event gets at least one slot): one axis.
@@ -14,7 +14,7 @@
  * puts them; "even" spaces events equally and dots the stretches it skipped.
  * Options: age at each event (needs `birth`), labelled gaps between events.
  */
-import '../viz-tokens.css'
+import '../tokens.css'
 
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 
@@ -34,6 +34,8 @@ const props = withDefaults(
     /** Subject's birth date, for ages. */
     birth?: PartialDate
     activeId?: string | null
+    /** Events to show as active (selected here, or linked from a map). */
+    activeIds?: string[]
   }>(),
   {
     title: 'Timeline',
@@ -44,6 +46,7 @@ const props = withDefaults(
     options: () => ({ showAge: false, showGaps: true }),
     birth: undefined,
     activeId: null,
+    activeIds: () => [],
   },
 )
 
@@ -78,7 +81,8 @@ onMounted(() => {
 onBeforeUnmount(() => ro?.disconnect())
 
 const hoverId = ref<string | null>(null)
-const lit = (id: string) => hoverId.value === id || props.activeId === id
+const lit = (id: string) =>
+  hoverId.value === id || props.activeId === id || props.activeIds.includes(id)
 
 /** Horizontal needs at least one slot per event plus one for the margins; otherwise vertical. */
 const fitsHorizontally = computed(() => width.value >= (n.value + 1) * geo.value.slot)
@@ -444,7 +448,7 @@ const titleId = `tl-title-${Math.random().toString(36).slice(2, 8)}`
 </template>
 
 <style scoped>
-/* Everything here reads ../viz-tokens.css; no literal colours, weights or sizes. */
+/* Everything here reads ../tokens.css; no literal colours, weights or sizes. */
 .tl {
   /* Sit beside floated figures/infoboxes (narrower), don't drop below them. */
   display: flow-root;

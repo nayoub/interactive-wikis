@@ -14,10 +14,15 @@ import {
 } from '@wikimedia/codex'
 
 import { overlap } from '../pick/duplicates'
-import type { EventImage, TimelineEvent } from '../model/types'
+import type { BaseItem, EventImage, TimelineDate } from '../model/types'
 import { searchCommons, suggestQuery } from './commons'
 
-const props = defineProps<{ images: EventImage[]; event: TimelineEvent | null; subject: string }>()
+const props = defineProps<{
+  images: EventImage[]
+  /** The item being illustrated (an event, a place). */
+  event: (BaseItem & { date?: TimelineDate; name?: string }) | null
+  subject: string
+}>()
 const open = defineModel<boolean>('open', { default: false })
 const emit = defineEmits<{ choose: [image: EventImage | undefined] }>()
 
@@ -31,7 +36,7 @@ const sources = [
 const ranked = computed(() => {
   const e = props.event
   if (!e) return { suggested: [] as EventImage[], rest: props.images }
-  const year = String(e.date.start.y)
+  const year = e.date ? String(e.date.start.y) : '∅'
   const scored = props.images.map((img) => ({
     img,
     score:
@@ -77,7 +82,8 @@ function onInput(q: string) {
 watch(open, (isOpen) => {
   if (!isOpen || !props.event) return
   source.value = props.event.image?.source === 'commons' ? 'commons' : 'article'
-  query.value = suggestQuery(props.event.sourceLinks, props.event.label, props.subject)
+  query.value =
+    props.event.name ?? suggestQuery(props.event.sourceLinks, props.event.label, props.subject)
   results.value = []
   if (source.value === 'commons') run(query.value)
 })

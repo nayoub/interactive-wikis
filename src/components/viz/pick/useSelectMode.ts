@@ -1,7 +1,8 @@
 /**
- * Select mode: every candidate in the article becomes a tappable chip, in
- * place. Generic over what the candidates are — it only knows ids. Dates
- * today; the same interaction should work for places next.
+ * Select mode: every candidate of the kind being picked becomes a tappable
+ * chip, in place. Generic over what the candidates are — it only knows ids and
+ * a kind (`data-kind` on each `.tl-mention`: "date" spans, "place" links).
+ * The same chips, the same interaction, for a timeline or a map.
  */
 import { watch, type Ref } from 'vue'
 
@@ -11,11 +12,11 @@ import { setHighlight } from './passage'
 interface Options {
   root: Ref<HTMLElement | null>
   active: Ref<boolean>
+  /** Which kind of mention is pickable now ("date", "place"). */
+  kind: Ref<string | null>
   picked: Ref<Set<string>>
   /** Candidates whose thing is already on the result through another mention. */
   used?: Ref<Set<string>>
-  /** Selector for candidates; each carries its id in `data-tl-id`. */
-  selector?: string
   describe: (id: string) => string
   toggle: (id: string) => void
   /** Sentence offsets for hover highlighting. */
@@ -23,27 +24,29 @@ interface Options {
 }
 
 export function useSelectMode(opts: Options) {
-  const selector = opts.selector ?? '[data-tl-id]'
+  const isCandidate = (el: Element) =>
+    opts.active.value && !!opts.kind.value && (el as HTMLElement).dataset.kind === opts.kind.value
 
   function sync() {
     const root = opts.root.value
     if (!root) return
-    root.querySelectorAll<HTMLElement>(selector).forEach((el) => {
+    root.querySelectorAll<HTMLElement>('.tl-mention').forEach((el) => {
       const id = el.dataset.tlId!
-      const on = opts.active.value
+      const on = isCandidate(el)
+      el.classList.toggle('tl-mention--candidate', on)
       el.classList.toggle('tl-mention--picked', on && opts.picked.value.has(id))
       el.classList.toggle(
         'tl-mention--used',
         on && !opts.picked.value.has(id) && !!opts.used?.value.has(id),
       )
       if (on) {
-        el.setAttribute('role', 'button')
+        if (el.tagName !== 'A') el.setAttribute('role', 'button')
         el.setAttribute('tabindex', '0')
         el.setAttribute('aria-pressed', String(opts.picked.value.has(id)))
         el.setAttribute('aria-label', opts.describe(id))
       } else {
         el.removeAttribute('role')
-        el.removeAttribute('tabindex')
+        if (el.tagName !== 'A') el.removeAttribute('tabindex')
         el.removeAttribute('aria-pressed')
         el.removeAttribute('aria-label')
       }
@@ -52,8 +55,8 @@ export function useSelectMode(opts: Options) {
 
   function candidateFrom(target: EventTarget | null) {
     const root = opts.root.value
-    const el = (target as Element | null)?.closest?.<HTMLElement>(selector)
-    return el && root?.contains(el) ? el : null
+    const el = (target as Element | null)?.closest?.<HTMLElement>('.tl-mention')
+    return el && root?.contains(el) && isCandidate(el) ? el : null
   }
 
   function onClick(e: MouseEvent) {
@@ -94,7 +97,7 @@ export function useSelectMode(opts: Options) {
   }
 
   watch(
-    [opts.root, opts.active, opts.picked, () => opts.used?.value],
+    [opts.root, opts.active, opts.kind, opts.picked, () => opts.used?.value],
     ([root], _old, onCleanup) => {
       sync()
       if (!root || !opts.active.value) {

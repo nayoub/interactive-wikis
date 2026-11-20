@@ -1,7 +1,10 @@
 /**
  * Plain data shared by Pick, Curate and Render. No behaviour, no Vue.
- * The timeline stores its own events; it links to passages but is not a live view of them.
+ * A module (timeline, map) stores its own items; they link to passages but are
+ * not a live view of them.
  */
+
+export type ModuleKind = 'timeline' | 'map'
 
 export type Precision = 'year' | 'month' | 'day'
 
@@ -55,18 +58,38 @@ export interface EventImage {
 /** @deprecated name kept for older call sites */
 export type ArticleImage = EventImage
 
-export interface TimelineEvent {
+/** What every curated item has, whatever it is a picture of. */
+export interface BaseItem {
   id: string
-  date: TimelineDate
+  /** Short, editor-editable. */
   label: string
+  /** The sentence it was picked from ('' when added without one). */
   sourceText: string
-  /** The matched date text inside `sourceText`, for emphasis when showing the source. */
+  /** The matched text inside `sourceText`, for emphasis when showing the source. */
   sourceDateText: string
-  sourceAnchor: SourceAnchor
+  /** Where the sentence is; absent for items added by search. */
+  sourceAnchor?: SourceAnchor
   /** Link texts in the source sentence (entities), e.g. for an image search. */
   sourceLinks?: string[]
   citation?: Citation
   image?: EventImage
+}
+
+export interface TimelineEvent extends BaseItem {
+  date: TimelineDate
+  sourceAnchor: SourceAnchor
+}
+
+export interface Place extends BaseItem {
+  name: string
+  coordinates: { lat: number; lon: number }
+  country?: string
+  /** Completion or opening, from the sentence when it says, else from Wikidata. */
+  date?: TimelineDate
+  dateFrom?: 'sentence' | 'wikidata'
+  wikidataId: string
+  /** The article title the link pointed to (absent for searched places). */
+  linkTitle?: string
 }
 
 export interface TimelineOptions {
@@ -76,16 +99,26 @@ export interface TimelineOptions {
   showGaps: boolean
 }
 
-export const DEFAULT_OPTIONS: TimelineOptions = { showAge: false, showGaps: true }
-
-export interface Timeline {
-  title: string
-  events: TimelineEvent[]
-  options: TimelineOptions
+export interface MapOptions {
+  /** Dots take one of four lightness steps by period, oldest lightest. */
+  shadeByDate: boolean
 }
 
-export interface Draft extends Timeline {
-  /** True when re-editing the placed timeline rather than inserting a new one. */
+export const DEFAULT_OPTIONS: TimelineOptions = { showAge: false, showGaps: true }
+export const DEFAULT_MAP_OPTIONS: MapOptions = { shadeByDate: false }
+
+export interface ModuleData<T extends BaseItem = BaseItem, O = Record<string, boolean>> {
+  title: string
+  items: T[]
+  options: O
+}
+
+export type Timeline = ModuleData<TimelineEvent, TimelineOptions>
+export type MapData = ModuleData<Place, MapOptions>
+
+export interface Draft extends ModuleData {
+  kind: ModuleKind
+  /** True when re-editing the placed module rather than inserting a new one. */
   editingPlaced: boolean
 }
 

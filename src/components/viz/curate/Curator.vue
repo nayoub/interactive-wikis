@@ -1,35 +1,39 @@
-<script setup lang="ts">
+<script setup lang="ts" generic="T extends BaseItem">
 /**
- * Curate: the panel that lists, edits and orders picked items (date-sorted),
- * says where the result goes, and inserts it. It does not draw the result —
- * the host passes a renderer through the `preview` slot, so the same panel can
- * curate a map or a chart.
+ * Curate: the panel that lists, edits and orders picked items, says where the
+ * result goes, and inserts it. Generic over the kind of item: the host passes
+ * the item editor (`item` slot), display options (`options`), an optional way
+ * to add items not in the text (`add`), and a renderer (`preview`). Used
+ * unchanged by the timeline and the map.
  */
 import { computed, ref } from 'vue'
-import { CdxButton, CdxDialog, CdxIcon, CdxSelect, CdxToggleSwitch } from '@wikimedia/codex'
+import { CdxButton, CdxDialog, CdxIcon, CdxSelect } from '@wikimedia/codex'
 import { cdxIconFullscreen } from '@wikimedia/codex-icons'
 
-import { sortEvents } from '../model/dates'
-import type { ArticleSection, Draft, EventImage, Placement, TimelineEvent } from '../model/types'
+import type { ArticleSection, BaseItem, EventImage, ModuleData, Placement } from '../model/types'
 import CurationPanel from './CurationPanel.vue'
-import EventEditor from './EventEditor.vue'
 import ImagePicker from './ImagePicker.vue'
 
 const props = defineProps<{
   /** Sidebar beside the article, or a bottom sheet over it. */
   mode: 'side' | 'sheet'
+  /** "Timeline", "Map". */
+  title: string
+  /** What an item is called: ["event", "events"], ["place", "places"]. */
+  noun: [string, string]
+  /** What the reader taps in the text: "date", "place". */
+  picks: string
+  /** List order for this kind (dates for a timeline, dates-then-names for a map). */
+  order: (items: T[]) => T[]
   images: EventImage[]
   sections: ArticleSection[]
-  /** Machine-drafted label per item id, so edits can be undone. */
-  draftLabels: Map<string, string>
   subject: string
-  /** Ages need a birth date; without one the switch is hidden. */
-  canShowAge: boolean
+  editingPlaced: boolean
   /** Where the caret was when Insert was chosen (null: none). */
   cursorPlacement: Placement | null
 }>()
 
-const draft = defineModel<Draft>('draft', { required: true })
+const draft = defineModel<ModuleData<T>>('draft', { required: true })
 const placement = defineModel<Placement>('placement', { required: true })
 const expanded = defineModel<boolean>('expanded', { default: false })
 
@@ -37,41 +41,45 @@ const emit = defineEmits<{
   close: []
   discard: []
   commit: []
-  showSource: [event: TimelineEvent]
 }>()
 
 defineSlots<{
+  item(props: { item: T; remove: () => void; chooseImage: () => void }): unknown
+  options(): unknown
+  add(): unknown
   preview(props: { wide: boolean }): unknown
   notice(): unknown
 }>()
 
-const tab = ref<'events' | 'preview'>('events')
-const tabs = [
-  { id: 'events', label: 'Events' },
-  { id: 'preview', label: 'Preview' },
-] as const
+const tab = ref<'items' | 'preview'>('items')
+const tabs = computed(() => [
+  { id: 'items' as const, label: props.noun[1][0].toUpperCase() + props.noun[1].slice(1) },
+  { id: 'preview' as const, label: 'Preview' },
+])
 
-const sorted = computed(() => sortEvents(draft.value.events))
-const count = computed(() => draft.value.events.length)
-const countLabel = computed(() => (count.value === 1 ? '1 event' : `${count.value} events`))
+const sorted = computed(() => props.order(draft.value.items))
+const count = computed(() => draft.value.items.length)
+const countLabel = computed(
+  () => `${count.value} ${count.value === 1 ? props.noun[0] : props.noun[1]}`,
+)
 
-function eventRef(id: string) {
-  return draft.value.events.find((e) => e.id === id)!
+function itemRef(id: string) {
+  return draft.value.items.find((e) => e.id === id)!
 }
 function remove(id: string) {
-  draft.value.events = draft.value.events.filter((e) => e.id !== id)
+  draft.value.items = draft.value.items.filter((e) => e.id !== id)
 }
 
 // Image picking
 const pickerOpen = ref(false)
 const pickerFor = ref<string | null>(null)
-const pickerEvent = computed(() => (pickerFor.value ? eventRef(pickerFor.value) : null))
+const pickerItem = computed(() => (pickerFor.value ? itemRef(pickerFor.value) : null))
 function chooseImage(id: string) {
   pickerFor.value = id
   pickerOpen.value = true
 }
 function onImage(img: EventImage | undefined) {
-  if (pickerEvent.value) pickerEvent.value.image = img
+  if (pickerItem.value) pickerItem.value.image = img
 }
 
 // Placement
@@ -115,15 +123,18 @@ const placementValue = computed({
 
 const widePreview = ref(false)
 const hint = computed(() =>
-  count.value ? 'Tap more dates, or open to edit' : 'Tap any highlighted date in the article',
+  count.value
+    ? `Tap more ${props.picks}s, or open to edit`
+    : `Tap any highlighted ${props.picks} in the article`,
 )
+const lower = computed(() => props.title.toLowerCase())
 </script>
 
 <template>
   <CurationPanel
     v-model:expanded="expanded"
     :mode="mode"
-    title="Timeline"
+    :title="title"
     :count="count"
     :count-label="countLabel"
     :hint="hint"
@@ -131,7 +142,7 @@ const hint = computed(() =>
   >
     <template #notice><slot name="notice" /></template>
 
-    <div class="tp__tabs" role="tablist" aria-label="Timeline panel">
+    <div class="tp__tabs" role="tablist" :aria-label="`${title} panel`">
       <button
         v-for="t in tabs"
         :id="`tp-tab-${t.id}`"
@@ -149,30 +160,30 @@ const hint = computed(() =>
     </div>
 
     <div
-      v-show="tab === 'events'"
-      id="tp-panel-events"
+      v-show="tab === 'items'"
+      id="tp-panel-items"
       role="tabpanel"
-      aria-labelledby="tp-tab-events"
+      aria-labelledby="tp-tab-items"
       class="tp__pane"
     >
       <input
         v-model="draft.title"
         class="tp__title"
-        placeholder="Untitled timeline"
-        aria-label="Timeline title"
+        :placeholder="`Untitled ${lower}`"
+        :aria-label="`${title} title`"
       />
+      <slot name="add" />
       <div v-if="!count" class="tp__empty">
-        <p>Tap any highlighted date in the article.</p>
-        <small>Each date brings its sentence with it. Tap again to remove it.</small>
+        <p>Tap any highlighted {{ picks }} in the article.</p>
+        <small>Each {{ picks }} brings its sentence with it. Tap again to remove it.</small>
       </div>
       <ol v-else class="tp__list">
-        <li v-for="event in sorted" :key="event.id" class="tp__item">
-          <EventEditor
-            :model-value="eventRef(event.id)"
-            :draft-label="draftLabels.get(event.id)"
-            @remove="remove(event.id)"
-            @choose-image="chooseImage(event.id)"
-            @show-source="emit('showSource', event)"
+        <li v-for="item in sorted" :key="item.id" class="tp__item">
+          <slot
+            name="item"
+            :item="itemRef(item.id)"
+            :remove="() => remove(item.id)"
+            :choose-image="() => chooseImage(item.id)"
           />
         </li>
       </ol>
@@ -185,14 +196,7 @@ const hint = computed(() =>
       aria-labelledby="tp-tab-preview"
       class="tp__pane"
     >
-      <div class="tp__options">
-        <CdxToggleSwitch v-if="canShowAge" v-model="draft.options.showAge" align-switch
-          >Age at each event</CdxToggleSwitch
-        >
-        <CdxToggleSwitch v-model="draft.options.showGaps" align-switch
-          >Time between events</CdxToggleSwitch
-        >
-      </div>
+      <div class="tp__options"><slot name="options" /></div>
       <slot name="preview" :wide="false" />
       <CdxButton
         v-if="mode === 'side' && count"
@@ -207,7 +211,7 @@ const hint = computed(() =>
 
     <template #footer>
       <CdxSelect
-        v-if="!draft.editingPlaced"
+        v-if="!editingPlaced"
         v-model:selected="placementValue"
         class="tp__placement"
         aria-label="Where to insert"
@@ -216,10 +220,10 @@ const hint = computed(() =>
       />
       <div class="tp__actions">
         <CdxButton weight="quiet" @click="emit('discard')">{{
-          draft.editingPlaced ? 'Cancel' : 'Discard'
+          editingPlaced ? 'Cancel' : 'Discard'
         }}</CdxButton>
         <CdxButton action="progressive" weight="primary" :disabled="!count" @click="emit('commit')">
-          {{ draft.editingPlaced ? 'Done' : 'Insert' }}
+          {{ editingPlaced ? 'Done' : 'Insert' }}
         </CdxButton>
       </div>
     </template>
@@ -228,7 +232,7 @@ const hint = computed(() =>
   <ImagePicker
     v-model:open="pickerOpen"
     :images="images"
-    :event="pickerEvent"
+    :event="pickerItem"
     :subject="subject"
     @choose="onImage"
   />

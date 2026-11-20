@@ -1,6 +1,6 @@
 /*
- * Visualization tokens — one restrained style for article modules (timeline
- * now; map and quantity chart next). Renderers use only these variables; they
+ * Visualization tokens — one restrained style for article modules (timeline,
+ * map; a quantity chart next). Renderers use only these variables; they
  * never hard-code a colour, weight or size. Every value maps to a Codex token,
  * so light/dark themes and Codex upgrades follow automatically.
  *
@@ -61,6 +61,25 @@
   --viz-small-size: var(--font-size-small);
   --viz-small-weight: var(--font-weight-normal);
   --viz-small-line: var(--line-height-small);
+
+  /* Order by lightness: four steps of the one hue, oldest lightest (map "shade by date"). */
+  --viz-step-1: var(--background-color-progressive-subtle--active);
+  --viz-step-2: var(--border-color-option-blue);
+  --viz-step-3: var(--color-progressive);
+  --viz-step-4: var(--color-progressive--active);
+
+  /* Map base: always weaker than the marks */
+  --viz-land: var(--background-color-neutral-subtle);
+  --viz-coast: var(--border-color-muted);
+  --viz-map-aspect: 0.6; /* height / width on wide columns */
+  --viz-map-aspect-narrow: 1; /* roughly square on phones */
+  --viz-map-margin: 0.14; /* fraction of the extent kept around the places */
+  --viz-map-min-span: 0.004; /* smallest extent, in world widths (≈150 km): never street level */
+
+  /* Count by area: a cluster's area is proportional to how many places it holds */
+  --viz-cluster-unit: 9px; /* radius of a one-place cluster; n places → unit × √n */
+  --viz-cluster-ink: var(--viz-paper); /* the number inside */
+  --viz-label-gap: 4px; /* between a dot and its label */
 
   /* Motion */
   --viz-transition: 120ms;
