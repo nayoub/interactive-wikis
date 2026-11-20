@@ -7,22 +7,30 @@
   var key = 'protowiki-gh-pages-path'
   var stored = sessionStorage.getItem(key)
   if (!stored) return
-  // dist/404.html includes this script after the preview redirect preamble. On a
-  // pr-preview deep link, do not consume storage here — wait for the redirect to
-  // the preview index, which runs this script again on …/pr-N/.
-  if (/^(.+\/pr-preview\/pr-\d+)\/.+/.test(l.pathname)) return
+  // dist/404.html includes this script after the redirect preamble. On a
+  // pr-preview or codex/<variant> deep link, do not consume storage here — wait
+  // for the redirect to that base's index, which runs this script again.
+  var m = l.pathname.match(
+    /^(.+\/pr-preview\/pr-\d+(?:\/codex\/[\w.-]+)?|.*\/codex\/[\w.-]+)(?:\/(.*))?$/,
+  )
+  if (m && m[2]) return
   sessionStorage.removeItem(key)
+  // Only a pr-preview or codex/<variant> base index restores a path. Anywhere
+  // else the stored path is stale (left by an earlier preview visit): appending
+  // it to this page's own path would send the router to a route that does not
+  // exist and render a blank page.
+  if (!m) return
   var base = l.pathname.replace(/\/$/, '') || l.pathname
   h.replaceState(null, '', base + stored)
 })(location, history)
 </script>
 
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/ProtoWiki/pr-preview/pr-6/images/ProtoWiki.svg" />
+    <link rel="icon" type="image/svg+xml" href="/interactive-wikis/pr-preview/pr-6/images/ProtoWiki.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ProtoWiki</title>
-    <script type="module" crossorigin src="/ProtoWiki/pr-preview/pr-6/assets/index-B_J5Z4kG.js"></script>
-    <link rel="stylesheet" crossorigin href="/ProtoWiki/pr-preview/pr-6/assets/index-D1CCTnnD.css">
+    <script type="module" crossorigin src="/interactive-wikis/pr-preview/pr-6/assets/index-DfYRpmjA.js"></script>
+    <link rel="stylesheet" crossorigin href="/interactive-wikis/pr-preview/pr-6/assets/index-P-iDnMCV.css">
   </head>
   <body>
     <div id="app"></div>

@@ -1,0 +1,46 @@
+{
+ "file": "File:Bundestag_2021.svg",
+ "total": 736,
+ "parties": [
+  {
+   "label": "The Left",
+   "color": "#be3075",
+   "seats": 39
+  },
+  {
+   "label": "SPD",
+   "color": "#eb001f",
+   "seats": 206
+  },
+  {
+   "label": "Greens",
+   "color": "#64a12d",
+   "seats": 118
+  },
+  {
+   "label": "SSW",
+   "color": "#003c8f",
+   "seats": 1
+  },
+  {
+   "label": "FDP",
+   "color": "#ffed00",
+   "seats": 92
+  },
+  {
+   "label": "CDU",
+   "color": "#000000",
+   "seats": 152
+  },
+  {
+   "label": "CSU",
+   "color": "#008ac5",
+   "seats": 45
+  },
+  {
+   "label": "AfD",
+   "color": "#009ee0",
+   "seats": 83
+  }
+ ]
+}
