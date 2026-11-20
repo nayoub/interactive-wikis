@@ -15,13 +15,14 @@ definePage({
  * fixed toolbars, bottom sheets and Minerva behave as on a phone.
  */
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 
 import PrototypeControls from './PrototypeControls.vue'
-import TimelineArticle from './TimelineArticle.vue'
+import TimelineArticle from './article/TimelineArticle.vue'
 import { state } from './store'
 
 const route = useRoute()
+const router = useRouter()
 const embedded = route.query.embed === '1'
 
 const narrow = ref(false)
@@ -35,7 +36,8 @@ onMounted(() => {
 onBeforeUnmount(() => mql?.removeEventListener('change', onChange))
 
 const showFrame = computed(() => !embedded && !narrow.value && state.width === 'mobile')
-const frameSrc = computed(() => `${route.path}?embed=1`)
+// Through the router, so the app's base path (e.g. /interactive-wikis/ on Pages) is included.
+const frameSrc = computed(() => router.resolve({ path: route.path, query: { embed: '1' } }).href)
 </script>
 
 <template>

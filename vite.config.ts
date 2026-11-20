@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { fileURLToPath, URL } from 'node:url'
 import { resolve } from 'node:path'
 
@@ -92,6 +92,16 @@ export default defineConfig(async ({ command, isPreview }) => {
             return
           }
           copyFileSync(index, fallback)
+          // A real page per top-level prototype route (`<name>.html`), so GitHub
+          // Pages answers `/<base>/<name>` with 200 rather than the 404 fallback
+          // (link previews, fetch-based tools and crawlers see a real page).
+          // Nested routes still go through 404.html.
+          const prototypes = resolve(__dirname, 'src/prototypes')
+          for (const entry of readdirSync(prototypes, { withFileTypes: true })) {
+            if (entry.isDirectory() && existsSync(resolve(prototypes, entry.name, 'index.vue'))) {
+              copyFileSync(index, resolve(dist, `${entry.name}.html`))
+            }
+          }
           const html = readFileSync(fallback, 'utf8')
           const preamble = `<script>${ghPagesPreview404Script}</script>`
           writeFileSync(

@@ -8,9 +8,14 @@ import { computed, ref } from 'vue'
 import { CdxButton, CdxIcon, CdxMenuButton } from '@wikimedia/codex'
 import { cdxIconEdit, cdxIconMove, cdxIconTrash } from '@wikimedia/codex-icons'
 
-import type { ArticleSection } from '../article/loadArticle'
-import TimelineView from '../timeline/TimelineView.vue'
-import type { Timeline, TimelineEvent } from '../timeline/types'
+import TimelineView from '../render/TimelineView.vue'
+import {
+  DEFAULT_OPTIONS,
+  type ArticleSection,
+  type PartialDate,
+  type Timeline,
+  type TimelineEvent,
+} from '../model/types'
 
 const props = defineProps<{
   timeline: Timeline
@@ -21,6 +26,7 @@ const props = defineProps<{
   spacing: 'proportional' | 'even'
   fallback: boolean
   sections: ArticleSection[]
+  birth?: PartialDate
   activeEventId?: string | null
 }>()
 
@@ -88,6 +94,8 @@ function onMove(id: string) {
         :spacing="spacing"
         :fallback="fallback"
         :skin="skin"
+        :options="timeline.options ?? DEFAULT_OPTIONS"
+        :birth="birth"
         :active-id="activeEventId"
         @select="emit('select', $event)"
       />

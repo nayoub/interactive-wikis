@@ -1,14 +1,15 @@
 <script setup lang="ts">
 /**
- * Shell for "pick from the article, then curate": a sidebar on desktop, a
- * bottom sheet with a peek state on mobile. Knows nothing about timelines.
+ * Shell for "pick from the article, then curate": a sidebar beside the article
+ * on wide screens, a bottom sheet with a peek state on phones and narrow
+ * desktops. Knows nothing about timelines.
  */
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { CdxButton, CdxIcon } from '@wikimedia/codex'
 import { cdxIconClose, cdxIconCollapse, cdxIconExpand } from '@wikimedia/codex-icons'
 
 const props = defineProps<{
-  skin: 'desktop' | 'mobile'
+  mode: 'side' | 'sheet'
   title: string
   /** Running count, always visible. */
   count: number
@@ -20,7 +21,7 @@ const expanded = defineModel<boolean>('expanded', { default: false })
 const emit = defineEmits<{ close: [] }>()
 
 function toggle() {
-  if (props.skin === 'mobile') expanded.value = !expanded.value
+  if (props.mode === 'sheet') expanded.value = !expanded.value
 }
 
 // Desktop: a sticky sidebar that always fits the viewport, so its footer
@@ -28,7 +29,7 @@ function toggle() {
 const asideRef = ref<HTMLElement | null>(null)
 const visibleHeight = ref<string | undefined>(undefined)
 function measure() {
-  if (props.skin !== 'desktop' || !asideRef.value) return (visibleHeight.value = undefined)
+  if (props.mode !== 'side' || !asideRef.value) return (visibleHeight.value = undefined)
   const top = Math.max(0, asideRef.value.getBoundingClientRect().top)
   visibleHeight.value = `${window.innerHeight - top}px`
 }
@@ -48,12 +49,12 @@ onBeforeUnmount(() => {
     ref="asideRef"
     :style="{ height: visibleHeight }"
     class="cp"
-    :class="[`cp--${skin}`, { 'cp--expanded': skin === 'desktop' || expanded }]"
+    :class="[`cp--${mode}`, { 'cp--expanded': mode === 'side' || expanded }]"
     :aria-label="title"
   >
     <header class="cp__header">
       <button
-        v-if="skin === 'mobile'"
+        v-if="mode === 'sheet'"
         type="button"
         class="cp__peek"
         :aria-expanded="expanded"
@@ -76,10 +77,11 @@ onBeforeUnmount(() => {
         </CdxButton>
       </template>
     </header>
-    <div v-show="skin === 'desktop' || expanded" class="cp__body">
+    <div class="cp__notice"><slot name="notice" /></div>
+    <div v-show="mode === 'side' || expanded" class="cp__body">
       <slot />
     </div>
-    <footer v-show="skin === 'desktop' || expanded" class="cp__footer">
+    <footer v-show="mode === 'side' || expanded" class="cp__footer">
       <slot name="footer" />
     </footer>
   </aside>
@@ -95,7 +97,7 @@ onBeforeUnmount(() => {
   z-index: 80;
 }
 
-.cp--desktop {
+.cp--side {
   position: sticky;
   top: 0;
   align-self: flex-start;
@@ -106,7 +108,7 @@ onBeforeUnmount(() => {
   box-sizing: border-box;
 }
 
-.cp--mobile {
+.cp--sheet {
   position: fixed;
   inset-inline: 0;
   bottom: 0;
@@ -115,7 +117,18 @@ onBeforeUnmount(() => {
   border-top-right-radius: 12px;
   box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.18);
 }
-.cp--mobile.cp--expanded {
+.cp--sheet {
+  /* On a narrow desktop the sheet stays a readable width, centred. */
+  max-width: 640px;
+  margin-inline: auto;
+}
+.cp__notice:empty {
+  display: none;
+}
+.cp__notice {
+  padding: var(--spacing-75) var(--spacing-100) 0;
+}
+.cp--sheet.cp--expanded {
   height: 82vh;
 }
 
@@ -127,7 +140,7 @@ onBeforeUnmount(() => {
   padding: var(--spacing-75) var(--spacing-100);
   border-bottom: var(--border-width-base, 1px) solid var(--border-color-subtle);
 }
-.cp--mobile .cp__header {
+.cp--sheet .cp__header {
   padding: 0;
 }
 
@@ -199,7 +212,7 @@ onBeforeUnmount(() => {
   border-top: var(--border-width-base, 1px) solid var(--border-color-subtle);
   background: var(--background-color-base);
 }
-.cp--mobile .cp__footer {
+.cp--sheet .cp__footer {
   padding-bottom: max(var(--spacing-75), env(safe-area-inset-bottom));
 }
 </style>

@@ -1,16 +1,20 @@
 /**
  * Plain, deterministic date extraction. No model, no network: regexes over the
- * clean text of each prose block, run once on the frozen snapshot.
+ * clean text of each prose block, run once on the frozen snapshot. Keeps the
+ * precision the text used — a season stays a season, a decade a decade.
  *
- * Recognised (longest match wins, no overlaps):
+ * Recognised (earlier rules win, no overlaps):
  *   - Full dates: "February 28, 1929", "28 February 1929"
- *   - Month + year: "November 2016", "October 2013"
- *   - Year ranges: "1947–1952", "1947–52", "from 1994 to 1996", "between 1994 and 1996"
- *   - Decades: "the 1970s", "the 2020s"
- *   - Seasons / qualifiers: "fall of 1956", "late 2014", "early 1990"
+ *   - Month + year: "November 2016", "early October 2013"
+ *   - Year spans: "1947–1952", "1947–52", "from 1994 to 1996", "between 1994 and 1996"
+ *   - Decades: "the 1970s", "the early 1990s"
+ *   - Seasons: "the fall of 1956", "spring 2001"
+ *   - Qualified years: "late 2014", "early 1990", "mid-2008"
+ *   - Approximate: "c. 1956", "circa 1956", "around 1956"
  *   - Bare years 1800–2039, unless they look like money, measures or big numbers
+ * Not recognised: dates without a year ("In December"), ages ("at age 28").
  */
-import type { PartialDate, TimelineDate } from '../timeline/types'
+import type { Qualifier, TimelineDate } from '../model/types'
 
 export interface DateMatch {
   start: number
@@ -35,6 +39,7 @@ const MONTHS = [
 ]
 const MONTH = `(${MONTHS.join('|')})`
 const YEAR = '(1[89]\\d{2}|20[0-3]\\d)'
+const PART = '(early|mid|late)'
 
 interface Rule {
   re: RegExp
@@ -42,6 +47,8 @@ interface Rule {
 }
 
 const month = (name: string) => MONTHS.indexOf(name) + 1
+const qual = (s?: string) =>
+  s ? (s.toLowerCase().replace('autumn', 'fall') as Qualifier) : undefined
 
 const RULES: Rule[] = [
   {
@@ -70,28 +77,36 @@ const RULES: Rule[] = [
     },
   },
   {
-    // November 2016
-    re: new RegExp(`\\b(?:(?:early|mid|late)[ -])?${MONTH},? ${YEAR}\\b`, 'g'),
-    build: (m) => ({ start: { y: +m[2], m: month(m[1]) }, precision: 'month' }),
+    // November 2016 (an "early"/"late" before a month is kept in the text, not the date)
+    re: new RegExp(`\\b(?:(?:early|mid|late)[ -])?${MONTH},? ${YEAR}\\b`, 'gi'),
+    build: (m) => ({
+      start: { y: +m[2], m: month(m[1][0].toUpperCase() + m[1].slice(1).toLowerCase()) },
+      precision: 'month',
+    }),
   },
   {
-    // the 1970s, the early 1990s
-    re: /\b(?:the )?(?:(early|mid|late)[ -])?(1[89]\d0|20[0-3]0)s\b/g,
+    // the 1970s, the early 1990s, the mid-2000s
+    re: new RegExp(`\\b(?:the )?(?:${PART}[ -])?(1[89]\\d0|20[0-3]0)s\\b`, 'gi'),
     build: (m) => ({
       start: { y: +m[2] },
       end: { y: +m[2] + 9 },
       precision: 'year',
-      circa: !!m[1],
+      qualifier: qual(m[1]),
     }),
   },
   {
-    // fall of 1956, the spring of 2001
-    re: new RegExp(`\\b(?:the )?(?:spring|summer|fall|autumn|winter) of ${YEAR}\\b`, 'gi'),
-    build: (m) => ({ start: { y: +m[1] }, precision: 'year' }),
+    // the fall of 1956, spring 2001
+    re: new RegExp(`\\b(?:the )?(spring|summer|fall|autumn|winter)(?: of)? ${YEAR}\\b`, 'gi'),
+    build: (m) => ({ start: { y: +m[2] }, precision: 'year', qualifier: qual(m[1]) }),
   },
   {
     // late 2014, early 1990, mid-2008
-    re: new RegExp(`\\b(?:early|late|mid)[ -]${YEAR}\\b`, 'gi'),
+    re: new RegExp(`\\b${PART}[ -]${YEAR}\\b`, 'gi'),
+    build: (m) => ({ start: { y: +m[2] }, precision: 'year', qualifier: qual(m[1]) }),
+  },
+  {
+    // c. 1956, circa 1956, around 1956
+    re: new RegExp(`(?:\\bc\\.|\\bca\\.|\\bcirca|\\baround|\\babout) ${YEAR}\\b`, 'gi'),
     build: (m) => ({ start: { y: +m[1] }, precision: 'year', circa: true }),
   },
   {
@@ -126,8 +141,4 @@ export function extractDates(text: string): DateMatch[] {
     }
   }
   return out.sort((a, b) => a.start - b.start)
-}
-
-export function sameDay(a: PartialDate, b: PartialDate) {
-  return a.y === b.y && a.m === b.m && a.d === b.d
 }

@@ -6,34 +6,21 @@
  *   - the sentence, section, citation and a trimmed draft label for each
  *   - the article's own images (the only images a timeline may use)
  */
-import { draftLabel } from '../selection/draftLabel'
-import { extractDates } from '../selection/extractDates'
-import { indexBlock, proseBlocks, rangeFor, sentences } from '../selection/textIndex'
-import type { ArticleImage, Citation, SourceAnchor, TimelineDate } from '../timeline/types'
+import { draftLabel } from '../pick/draftLabel'
+import { extractDates } from '../pick/extractDates'
+import { indexBlock, proseBlocks, rangeFor, sentences } from '../pick/textIndex'
+import type { ArticleSection, EventImage, PartialDate } from '../model/types'
+import type { DateMention } from '../pick/types'
 
-export interface DateMention {
-  id: string
-  text: string
-  date: TimelineDate
-  sentence: string
-  /** Mention offsets within `sentence`. */
-  sentenceOffset: [number, number]
-  anchor: SourceAnchor
-  citation?: Citation
-  draftLabel: string
-}
-
-export interface ArticleSection {
-  id: string
-  title: string
-  level: 2 | 3
-}
+export type { DateMention }
 
 export interface LoadedArticle {
   html: string
   mentions: DateMention[]
-  images: ArticleImage[]
+  images: EventImage[]
   sections: ArticleSection[]
+  /** The article's subject; `birth` from the infobox when it has one. */
+  subject: { name: string; birth?: PartialDate }
 }
 
 let cached: Promise<LoadedArticle> | null = null
@@ -107,7 +94,8 @@ function process(raw: string): LoadedArticle {
       mentions.push({
         id,
         text: match.text,
-        date: match.date,
+        value: match.date,
+        links: links.map((l) => l.text),
         sentence: sent.text,
         sentenceOffset: [match.start - sent.start, match.end - sent.start],
         anchor: {
@@ -139,7 +127,7 @@ function process(raw: string): LoadedArticle {
     }
   }
 
-  const images: ArticleImage[] = []
+  const images: EventImage[] = []
   body.querySelectorAll<HTMLImageElement>('img').forEach((img, i) => {
     const width = Number(img.getAttribute('width') ?? 0)
     if (width && width < 100) return
@@ -150,7 +138,7 @@ function process(raw: string): LoadedArticle {
       img.closest('.infobox-image')?.querySelector('.infobox-caption')?.textContent?.trim() ||
       img.getAttribute('alt') ||
       ''
-    images.push({ id: `img${i}`, src: img.getAttribute('src') ?? '', caption })
+    images.push({ id: `img${i}`, src: img.getAttribute('src') ?? '', caption, source: 'article' })
   })
 
   const sections: ArticleSection[] = []
@@ -162,5 +150,18 @@ function process(raw: string): LoadedArticle {
     })
   })
 
-  return { html: body.innerHTML, mentions, images, sections }
+  // Infobox birth date (hCard `bday`, ISO).
+  const bday = body.querySelector('.infobox .bday')?.textContent?.trim() ?? ''
+  const bm = bday.match(/^(\d{4})(?:-(\d{2}))?(?:-(\d{2}))?$/)
+  const birth = bm
+    ? { y: +bm[1], m: bm[2] ? +bm[2] : undefined, d: bm[3] ? +bm[3] : undefined }
+    : undefined
+
+  return {
+    html: body.innerHTML,
+    mentions,
+    images,
+    sections,
+    subject: { name: 'Frank Gehry', birth },
+  }
 }

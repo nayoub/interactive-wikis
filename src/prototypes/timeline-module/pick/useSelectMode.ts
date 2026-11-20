@@ -12,6 +12,8 @@ interface Options {
   root: Ref<HTMLElement | null>
   active: Ref<boolean>
   picked: Ref<Set<string>>
+  /** Candidates whose thing is already on the result through another mention. */
+  used?: Ref<Set<string>>
   /** Selector for candidates; each carries its id in `data-tl-id`. */
   selector?: string
   describe: (id: string) => string
@@ -30,6 +32,10 @@ export function useSelectMode(opts: Options) {
       const id = el.dataset.tlId!
       const on = opts.active.value
       el.classList.toggle('tl-mention--picked', on && opts.picked.value.has(id))
+      el.classList.toggle(
+        'tl-mention--used',
+        on && !opts.picked.value.has(id) && !!opts.used?.value.has(id),
+      )
       if (on) {
         el.setAttribute('role', 'button')
         el.setAttribute('tabindex', '0')
@@ -88,7 +94,7 @@ export function useSelectMode(opts: Options) {
   }
 
   watch(
-    [opts.root, opts.active, opts.picked],
+    [opts.root, opts.active, opts.picked, () => opts.used?.value],
     ([root], _old, onCleanup) => {
       sync()
       if (!root || !opts.active.value) {
