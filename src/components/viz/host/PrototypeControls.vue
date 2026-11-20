@@ -10,6 +10,8 @@ import type { ModulesStore, PlacedModule } from './store'
 const props = defineProps<{
   narrow: boolean
   store: ModulesStore
+  /** Which modules the page offers (controls that only matter to one kind show only with it). */
+  kinds: ModuleKind[]
   /** Builds the example modules ("Load example"). */
   example: () => Promise<Partial<Record<ModuleKind, PlacedModule>>>
 }>()
@@ -38,6 +40,7 @@ const mode = computed({
 const spacing = computed({ get: () => state.spacing, set: (v) => (state.spacing = v) })
 const width = computed({ get: () => state.width, set: (v) => (state.width = v) })
 const fallback = computed({ get: () => state.fallback, set: (v) => (state.fallback = v) })
+const monochrome = computed({ get: () => state.monochrome, set: (v) => (state.monochrome = v) })
 
 const loading = ref(false)
 async function loadExample() {
@@ -80,11 +83,14 @@ const expanded = computed(() => !props.narrow || open.value)
       <CdxToggleButtonGroup v-model="mode" :buttons="modeButtons" />
       <CdxButton :disabled="loading" @click="loadExample">Load example</CdxButton>
       <CdxButton weight="quiet" action="destructive" @click="store.reset()">Reset</CdxButton>
-      <span class="pc__group">
+      <span v-if="kinds.includes('timeline')" class="pc__group">
         <small>Spacing</small>
         <CdxToggleButtonGroup v-model="spacing" :buttons="spacingButtons" />
       </span>
       <CdxToggleSwitch v-model="fallback">Plain list</CdxToggleSwitch>
+      <CdxToggleSwitch v-if="kinds.includes('visual')" v-model="monochrome"
+        >Monochrome</CdxToggleSwitch
+      >
       <span v-if="!narrow" class="pc__group">
         <small>Width</small>
         <CdxToggleButtonGroup v-model="width" :buttons="widthButtons" />

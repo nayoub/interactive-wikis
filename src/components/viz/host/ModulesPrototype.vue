@@ -10,7 +10,7 @@ import { useRoute, useRouter } from 'vue-router'
 
 import type { ModuleKind } from '../model/types'
 import ArticleModules from './ArticleModules.vue'
-import { loadArticle, type LoadedArticle } from './loadArticle'
+import { GEHRY, loadArticle, type ArticleSource, type LoadedArticle } from './loadArticle'
 import PrototypeControls from './PrototypeControls.vue'
 import type { ModulesStore, PlacedModule } from './store'
 
@@ -18,6 +18,8 @@ const props = defineProps<{
   kinds: ModuleKind[]
   store: ModulesStore
   example: (article: LoadedArticle) => Partial<Record<ModuleKind, PlacedModule>>
+  /** Which article (default: Frank Gehry). */
+  source?: ArticleSource
 }>()
 
 const route = useRoute()
@@ -37,12 +39,18 @@ onBeforeUnmount(() => mql?.removeEventListener('change', onChange))
 const showFrame = computed(() => !embedded && !narrow.value && props.store.state.width === 'mobile')
 // Through the router, so the app's base path (e.g. /interactive-wikis/ on Pages) is included.
 const frameSrc = computed(() => router.resolve({ path: route.path, query: { embed: '1' } }).href)
-const buildExample = async () => props.example(await loadArticle())
+const buildExample = async () => props.example(await loadArticle(props.source ?? GEHRY))
 </script>
 
 <template>
   <div class="tm" :class="{ 'tm--framed': showFrame }">
-    <PrototypeControls v-if="!embedded" :narrow="narrow" :store="store" :example="buildExample" />
+    <PrototypeControls
+      v-if="!embedded"
+      :narrow="narrow"
+      :store="store"
+      :kinds="kinds"
+      :example="buildExample"
+    />
     <div v-if="showFrame" class="tm__stage">
       <iframe class="tm__device" :src="frameSrc" title="Phone-width preview (390px)" />
     </div>
@@ -51,6 +59,7 @@ const buildExample = async () => props.example(await loadArticle())
       :kinds="kinds"
       :store="store"
       :force-skin="embedded ? 'mobile' : undefined"
+      :source="source"
     />
   </div>
 </template>

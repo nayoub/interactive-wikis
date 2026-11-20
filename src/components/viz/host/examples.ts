@@ -4,7 +4,8 @@
  * trims of the source sentence (no new claims); images are the article's own.
  */
 import { eventFromMention, placeFromMention } from '../curate/fromMention'
-import type { MapData, Placement, Timeline } from '../model/types'
+import { applyTable } from '../curate/visual'
+import type { MapData, ModuleKind, Placement, Timeline } from '../model/types'
 import type { LoadedArticle } from './loadArticle'
 import type { PlacedModule } from './store'
 
@@ -129,4 +130,92 @@ export function bothExamples(
     timeline: { data: buildTimeline(article), placement: top('Career', 'Career') },
     map: { data: buildMap(article), placement: top('Architectural_style', 'Architectural style') },
   }
+}
+
+// ── 2025 German federal election: results, the run-up, places ──────────────
+const ELECTION_EVENTS = [
+  {
+    date: '6 November 2024',
+    sentence: 'dismissed FDP leader',
+    label: 'Scholz dismissed FDP leader Christian Lindner from the government',
+  },
+  {
+    date: '11 December 2024',
+    sentence: 'motion of confidence',
+    label: 'Scholz submitted a motion of confidence to the Bundestag',
+  },
+  {
+    date: '23 February 2025',
+    sentence: 'to elect the 630 members',
+    label: 'Federal election held for the 630 members of the 21st Bundestag',
+  },
+  {
+    date: '9 April 2025',
+    sentence: 'secured a ruling coalition',
+    label: 'CDU/CSU and SPD secured a coalition agreement',
+  },
+  {
+    date: '6 May 2025',
+    sentence: 'Friedrich Merz was elected',
+    label: 'Friedrich Merz elected chancellor',
+  },
+]
+const ELECTION_PLACES = [
+  'Berlin-Treptow_–_Köpenick',
+  'Berlin-Lichtenberg_(electoral_district)',
+  'Berlin-Marzahn_–_Hellersdorf',
+  'Leipzig_II',
+  'Erfurt_–_Weimar_–_Weimarer_Land_II',
+  'Rostock_–_Landkreis_Rostock_II',
+  'Bremen_II_–_Bremerhaven',
+  'Rottal-Inn_(electoral_district)',
+]
+
+export function electionExample(article: LoadedArticle): Partial<Record<ModuleKind, PlacedModule>> {
+  const out: Partial<Record<ModuleKind, PlacedModule>> = {}
+  const events = ELECTION_EVENTS.flatMap((pick) => {
+    const m = article.mentions.find(
+      (x) => x.text === pick.date && x.sentence.includes(pick.sentence),
+    )
+    if (!m) return []
+    const e = eventFromMention(m)
+    e.label = pick.label
+    return [e]
+  })
+  if (events.length)
+    out.timeline = {
+      data: {
+        title: 'From the coalition collapse to a new government',
+        items: events,
+        options: { showAge: false, showGaps: true },
+      },
+      placement: top('Snap_election', 'Snap election'),
+    }
+  const results = article.tables.find((t) => t.anchor.sectionId === 'Results')
+  if (results) {
+    const { items, spec } = applyTable(article, results.value, null, null)
+    out.visual = {
+      data: {
+        title: 'Seats in the Bundestag',
+        items,
+        options: {},
+        spec: { ...spec, form: 'seats', years: true },
+      },
+      placement: top('Results', 'Results'),
+    }
+  }
+  const places = ELECTION_PLACES.flatMap((title) => {
+    const m = article.places.find((x) => x.value.title === title)
+    return m ? [placeFromMention(m)] : []
+  })
+  if (places.length)
+    out.map = {
+      data: {
+        title: 'Constituencies named in the article',
+        items: places,
+        options: { shadeByDate: false },
+      },
+      placement: top('Results_by_state', 'Results by state'),
+    }
+  return out
 }

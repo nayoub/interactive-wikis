@@ -94,8 +94,27 @@
   --viz-cluster-ink: var(--viz-paper); /* the number inside */
   --viz-label-gap: 4px; /* between a dot and its label */
 
+  /*
+   * Election results (seat diagram, bars). Party colours are the one exception
+   * to the single hue: they come from the article's party-colour data, are used
+   * only for seats and bars, and never alone (every party is labelled).
+   */
+  --viz-seat-min: 10px; /* closest dot centres; below this one dot stands for two seats */
+  --viz-seat-max: 12px; /* loosest dot centres on wide columns */
+  --viz-hemicycle-inner: 0.4; /* inner radius / outer radius */
+  --viz-label-room: 104px; /* beside the hemicycle, for direct labels */
+  --viz-narrow: 560px; /* below this width labels move to a list under the diagram */
+  --viz-dim: 0.18; /* other parties while one is selected */
+  --viz-party-outline: var(--border-color-interactive); /* around colours too close to the page */
+  --viz-contrast-min: 3; /* colour vs page contrast below which a mark is outlined */
+  --viz-bar-height: 12px;
+  --viz-bar-value-room: 5em; /* after the longest bar, for its value */
+  --viz-others: var(--color-placeholder); /* "Others": always neutral */
+  --viz-majority: var(--viz-ink); /* the majority tick */
+
   /* Motion */
   --viz-transition: 120ms;
+  --viz-transition-step: 450ms; /* stepping between elections */
   --viz-highlight-hold: 3s;
   --viz-highlight-fade: 1.6s;
 }

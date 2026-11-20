@@ -26,8 +26,20 @@ const QUALIFIER_LABEL: Record<Qualifier, string> = {
   winter: 'Winter',
 }
 
+/**
+ * Day–month order follows the article ({{Use dmy dates}} → "6 May 2025";
+ * otherwise "May 6, 2025"). Set by the host when an article loads.
+ */
+let dayFirst = false
+export function setDayFirst(on: boolean) {
+  dayFirst = on
+}
+
 function part(p: PartialDate, precision: TimelineDate['precision']): string {
-  if (precision === 'day' && p.m && p.d) return `${MONTH_NAMES[p.m - 1]} ${p.d}, ${p.y}`
+  if (precision === 'day' && p.m && p.d)
+    return dayFirst
+      ? `${p.d} ${MONTH_NAMES[p.m - 1]} ${p.y}`
+      : `${MONTH_NAMES[p.m - 1]} ${p.d}, ${p.y}`
   if ((precision === 'day' || precision === 'month') && p.m) return `${MONTH_NAMES[p.m - 1]} ${p.y}`
   return String(p.y)
 }

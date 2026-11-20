@@ -31,6 +31,8 @@ const props = defineProps<{
   editingPlaced: boolean
   /** Where the caret was when Insert was chosen (null: none). */
   cursorPlacement: Placement | null
+  /** Under "Tap any highlighted …" when nothing is picked yet. */
+  emptyNote?: string
 }>()
 
 const draft = defineModel<ModuleData<T>>('draft', { required: true })
@@ -49,6 +51,8 @@ defineSlots<{
   add(): unknown
   preview(props: { wide: boolean }): unknown
   notice(): unknown
+  /** Replaces the item list (a kind with its own list: a Visual's columns, forms and parties). */
+  list(): unknown
 }>()
 
 const tab = ref<'items' | 'preview'>('items')
@@ -123,9 +127,13 @@ const placementValue = computed({
 
 const widePreview = ref(false)
 const hint = computed(() =>
-  count.value
-    ? `Tap more ${props.picks}s, or open to edit`
-    : `Tap any highlighted ${props.picks} in the article`,
+  props.picks === 'table'
+    ? count.value
+      ? 'Open to set columns, form and order'
+      : 'Tap “Use this table” on any highlighted table'
+    : count.value
+      ? `Tap more ${props.picks}s, or open to edit`
+      : `Tap any highlighted ${props.picks} in the article`,
 )
 const lower = computed(() => props.title.toLowerCase())
 </script>
@@ -175,8 +183,11 @@ const lower = computed(() => props.title.toLowerCase())
       <slot name="add" />
       <div v-if="!count" class="tp__empty">
         <p>Tap any highlighted {{ picks }} in the article.</p>
-        <small>Each {{ picks }} brings its sentence with it. Tap again to remove it.</small>
+        <small>{{
+          emptyNote ?? `Each ${picks} brings its sentence with it. Tap again to remove it.`
+        }}</small>
       </div>
+      <slot v-else-if="$slots.list" name="list" />
       <ol v-else class="tp__list">
         <li v-for="item in sorted" :key="item.id" class="tp__item">
           <slot
