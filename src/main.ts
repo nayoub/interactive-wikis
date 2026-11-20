@@ -12,6 +12,7 @@ import './styles/wiki-skins/mobile-wiki-overrides.css'
 import './styles/dark.css'
 
 import { bootAppearance, mergedLocationQuery, wireAppearanceRouter } from '@/appearance'
+import { hubRedirects } from '@/components/viz/host/hub'
 import { loadCodexBuildInfoForDev } from '@/codex-build'
 
 /** Path under `import.meta.env.BASE_URL` (e.g. `/template-chrome`). */
@@ -52,7 +53,8 @@ async function bootstrap(): Promise<void> {
 
   const router = createRouter({
     history: createWebHistory(import.meta.env.BASE_URL),
-    routes,
+    // The base URL opens the article-module prototypes; old routes redirect (see hub.ts).
+    routes: [...hubRedirects, ...routes],
   })
 
   wireAppearanceRouter(router)

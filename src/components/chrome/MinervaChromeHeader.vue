@@ -41,10 +41,13 @@ interface Props {
   /** Minerva wordmark; defaults to **`wordmarkSrc`** then EN constant. */
   mobileWordmarkSrc?: string
   /** When true, default wordmark links to the Main Page. */
+  /** A small permanent tag beside the wordmark (e.g. "Prototype"), so a mock is never mistaken for the real site. */
+  tag?: string
   prototypingSettings?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
+  tag: undefined,
   theme: undefined,
   left: undefined,
   middle: undefined,
@@ -160,6 +163,7 @@ function isExternalHref(href: string): boolean {
             alt="Wikipedia"
           />
         </component>
+        <span v-if="props.tag && useDefaultWordmark" class="chrome-tag">{{ props.tag }}</span>
         <template v-else v-for="(item, index) in effectiveMiddle" :key="`middle-${index}`">
           <component
             v-if="item.type === 'component'"

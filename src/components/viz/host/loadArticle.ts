@@ -1,20 +1,57 @@
 /**
- * Load the frozen Frank Gehry snapshot and pre-compute what the modules pick
- * from, once per page load:
+ * Load a frozen article snapshot and pre-compute what the modules pick from,
+ * once per page load:
  *   - dates in the prose, wrapped in place as `<span class="tl-mention" data-kind="date">`
  *   - places: links whose target has a coordinate on Wikidata (from the committed
- *     build-time lookup, public/snapshots/frank-gehry.places.json), marked in place
+ *     build-time lookup, public/snapshots/<slug>.places.json), marked in place
  *     on the link itself (`data-kind="place"`)
+ *   - data tables: each gets `data-pick-table` and, before it, a "Use this table"
+ *     chip (`data-kind="table"`); party rows get ids so a module can point back
+ *     at its source row
+ *   - for series (elections): the earlier articles' tables and infoboxes, parsed
+ *     but not shown
  *   - for each: its sentence, section, citation and a drafted label
  *   - the article's own images and sections, and the subject's birth date
  */
 import { draftLabel } from '../pick/draftLabel'
 import { extractDates, type DateMatch } from '../pick/extractDates'
+import {
+  parseTable,
+  proposeRoles,
+  readInfobox,
+  type InfoboxElection,
+  type ParsedTable,
+} from '../pick/tables'
 import { indexBlock, proseBlocks, rangeFor, sentences } from '../pick/textIndex'
-import type { ArticleSection, EventImage, PartialDate } from '../model/types'
-import type { DateMention, PlaceInfo, PlaceMention } from '../pick/types'
+import type { ArticleSection, EventImage, PartialDate, Seating } from '../model/types'
+import type { DateMention, PlaceInfo, PlaceMention, TableMention } from '../pick/types'
 
-export type { DateMention, PlaceMention }
+export type { DateMention, PlaceMention, TableMention }
+
+/** Which snapshot a page shows. */
+export interface ArticleSource {
+  /** public/snapshots/<slug>.html (and <slug>.places.json, if there is one). */
+  slug: string
+  title: string
+  /** Where Insert puts a module when the caret is not in the article. */
+  defaultSection: { id: string; title: string }
+  /** Earlier articles in a series (previous elections), newest first: parsed for their tables. */
+  previous?: { slug: string; title: string }[]
+}
+
+export const GEHRY: ArticleSource = {
+  slug: 'frank-gehry',
+  title: 'Frank Gehry',
+  defaultSection: { id: 'Career', title: 'Career' },
+}
+
+/** An earlier article of a series: its data tables and infobox only. */
+export interface RelatedArticle {
+  title: string
+  tables: ParsedTable[]
+  infobox: InfoboxElection
+  seating?: Seating
+}
 
 export interface LoadedArticle {
   html: string
@@ -22,26 +59,97 @@ export interface LoadedArticle {
   mentions: DateMention[]
   /** Place mentions (map). */
   places: PlaceMention[]
+  /** Data tables (visual). */
+  tables: TableMention[]
+  /** Election infobox: chamber size, majority, the article's party order. */
+  infobox: InfoboxElection
+  previous: RelatedArticle[]
+  /** The article's own parliament diagram, if it has one. */
+  seating?: Seating
+  source: ArticleSource
   images: EventImage[]
   sections: ArticleSection[]
+  /** {{Use dmy dates}}: write "6 May 2025", as the article does. */
+  dayFirst: boolean
   /** The article's subject; `birth` from the infobox when it has one. */
   subject: { name: string; birth?: PartialDate }
 }
 
-let cached: Promise<LoadedArticle> | null = null
+const cache = new Map<string, Promise<LoadedArticle>>()
 
-export function loadArticle(): Promise<LoadedArticle> {
+export function loadArticle(source: ArticleSource = GEHRY): Promise<LoadedArticle> {
   const base = import.meta.env.BASE_URL
   const text = (url: string) =>
     fetch(url).then((r) => {
       if (!r.ok) throw new Error(`Snapshot missing: ${url} (${r.status})`)
       return r.text()
     })
-  cached ??= Promise.all([
-    text(`${base}snapshots/frank-gehry.html`),
-    text(`${base}snapshots/frank-gehry.places.json`).then((t) => JSON.parse(t).places),
-  ]).then(([html, places]) => process(html, places))
-  return cached
+  if (!cache.has(source.slug))
+    cache.set(
+      source.slug,
+      Promise.all([
+        text(`${base}snapshots/${source.slug}.html`),
+        // No lookup for this article: no places.
+        text(`${base}snapshots/${source.slug}.places.json`)
+          .then((t) => JSON.parse(t).places)
+          .catch(() => ({})),
+        Promise.all(
+          (source.previous ?? []).map((p) =>
+            Promise.all([text(`${base}snapshots/${p.slug}.html`), seatingOf(p.slug)]).then(
+              ([html, seating]) => ({ ...related(html, p.title), seating }),
+            ),
+          ),
+        ),
+        seatingOf(source.slug),
+      ]).then(([html, places, previous, seating]) => ({
+        ...process(html, places, source, previous),
+        seating,
+      })),
+    )
+  return cache.get(source.slug)!
+}
+
+/** <slug>.seating.json, when the article has a parliament diagram. */
+const seatingOf = (slug: string): Promise<Seating | undefined> =>
+  fetch(`${import.meta.env.BASE_URL}snapshots/${slug}.seating.json`)
+    .then((r) => (r.ok ? r.json() : undefined))
+    .catch(() => undefined)
+
+const parse = (raw: string) => new DOMParser().parseFromString(`<body>${raw}</body>`, 'text/html')
+
+/** Section id and title around an element. */
+function sectionOf(el: Element) {
+  const h = el
+    .closest('section')
+    ?.querySelector<HTMLElement>(':scope > h2, :scope > h3, :scope > .mw-heading > :is(h2, h3)')
+  return { id: h?.id || 'Lead', title: h?.textContent?.trim() || 'Lead' }
+}
+
+/**
+ * Data tables: wikitables with a column of names and at least one column of
+ * seats, votes or shares. Layout tables, navboxes and the infobox are not.
+ */
+function dataTables(body: HTMLElement, chamberSize: number | undefined, prefix: string) {
+  const out: ParsedTable[] = []
+  body.querySelectorAll<HTMLTableElement>('table.wikitable').forEach((el) => {
+    if (el.closest('.infobox, .navbox, .sidebar')) return
+    const s = sectionOf(el)
+    const t = parseTable(el, `${prefix}${out.length + 1}`, s.id, s.title)
+    const roles = proposeRoles(t, chamberSize).map((r) => r.role)
+    if (
+      !roles.includes('category') ||
+      !roles.some((r) => r === 'seats' || r === 'votes' || r === 'share')
+    )
+      return
+    out.push(t)
+  })
+  return out
+}
+
+function related(raw: string, title: string): RelatedArticle {
+  const body = parse(raw).body
+  const infobox = readInfobox(body, title)
+  return { title, infobox, tables: dataTables(body, infobox.chamberSize, 'x') }
 }
 
 /** The page title a Parsoid link points to ("./Walt_Disney_Concert_Hall" → "Walt_Disney_Concert_Hall"). */
@@ -55,8 +163,13 @@ function linkTitle(a: HTMLAnchorElement): string | null {
   }
 }
 
-function process(raw: string, placeIndex: Record<string, Omit<PlaceInfo, 'title'>>): LoadedArticle {
-  const doc = new DOMParser().parseFromString(`<body>${raw}</body>`, 'text/html')
+function process(
+  raw: string,
+  placeIndex: Record<string, Omit<PlaceInfo, 'title'>>,
+  source: ArticleSource,
+  previous: RelatedArticle[],
+): LoadedArticle {
+  const doc = parse(raw)
   const body = doc.body
   const base = import.meta.env.BASE_URL
 
@@ -184,10 +297,43 @@ function process(raw: string, placeIndex: Record<string, Omit<PlaceInfo, 'title'
     }
   }
 
+  // Data tables: marked for Pick, with a chip before each and an id on every row.
+  const infobox = readInfobox(body, source.title)
+  const tables: TableMention[] = dataTables(body, infobox.chamberSize, 't').map((t) => {
+    t.el.dataset.pickTable = t.id
+    t.el.id ||= `tl-src-${t.id}`
+    t.rows.forEach((r, i) => (r.el.dataset.tlId = `${t.id}-r${i}`))
+    const pick = doc.createElement('div')
+    pick.className = 'tl-table-pick'
+    pick.setAttribute('contenteditable', 'false')
+    pick.innerHTML =
+      `<button type="button" class="tl-mention tl-table-chip" data-kind="table" data-tl-id="${t.id}">` +
+      '<span class="tl-table-chip__use">Use this table</span><span class="tl-table-chip__using">Using this table</span></button>'
+    t.el.before(pick)
+    const label = t.caption || t.sectionTitle
+    return {
+      id: t.id,
+      text: label,
+      value: t,
+      sentence: '',
+      sentenceOffset: [0, 0],
+      anchor: {
+        sectionId: t.sectionId,
+        sectionTitle: t.sectionTitle,
+        mentionId: t.id,
+        sentenceStart: 0,
+        sentenceEnd: 0,
+      },
+      links: [],
+      draftLabel: label,
+    }
+  })
+
   // Other wiki pages aren't part of the prototype: open them on Wikipedia instead of a dead route.
+  const self = `./${source.title.replace(/ /g, '_')}#`
   body.querySelectorAll<HTMLAnchorElement>('a[href^="./"]').forEach((a) => {
     const href = a.getAttribute('href') ?? ''
-    if (href.startsWith('./Frank_Gehry#')) return
+    if (href.startsWith(self)) return
     a.setAttribute('href', `https://en.wikipedia.org/wiki/${href.slice(2)}`)
     a.setAttribute('target', '_blank')
     a.setAttribute('rel', 'noopener')
@@ -227,8 +373,13 @@ function process(raw: string, placeIndex: Record<string, Omit<PlaceInfo, 'title'
     html: body.innerHTML,
     mentions,
     places,
+    tables,
+    infobox,
+    previous,
+    source,
+    dayFirst: /Template:Use_dmy_dates/.test(raw),
     images,
     sections,
-    subject: { name: 'Frank Gehry', birth },
+    subject: { name: source.title, birth },
   }
 }

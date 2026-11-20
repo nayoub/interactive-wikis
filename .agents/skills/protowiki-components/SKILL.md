@@ -191,9 +191,10 @@ The `@/` prefix resolves to `src/`.
 
 ## Article modules kit (`src/components/viz/`)
 
-Timeline and map modules an editor builds from an article in the Visual Editor
-(pick things in the text → curate → render), with one shared style-token file.
-Used by `src/prototypes/timeline-module/` and `src/prototypes/map-module/`. Its
+Timeline, map and visual (results-table) modules an editor builds from an article
+in the Visual Editor (pick things in the text → curate → render), with one shared
+style-token file. Used by `src/prototypes/timeline/`,
+`src/prototypes/map/` and `src/prototypes/election/`. Its
 structure, data files and how to add a kind are in
 [`src/components/viz/README.md`](../../../src/components/viz/README.md).
 

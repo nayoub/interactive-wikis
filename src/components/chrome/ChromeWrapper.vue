@@ -46,6 +46,8 @@ interface Props {
   /** Forwarded to **`ChromeHeader`** (desktop tools only). */
   navTools?: ChromeNavTool[]
   /** Forwarded to **`ChromeHeader`**. */
+  /** A small permanent tag beside the wordmark (e.g. "Prototype"), so a mock is never mistaken for the real site. */
+  tag?: string
   prototypingSettings?: boolean
   /**
    * Forwarded to **`ChromeHeader`** — Vector bookmark → saved pages route.
@@ -55,6 +57,7 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
+  tag: undefined,
   lang: undefined,
   dir: undefined,
   skin: undefined,
@@ -99,6 +102,7 @@ provide(PROTOWIKI_CHROME_THEME, effectiveTheme)
         :nav-tools="props.navTools"
         :prototyping-settings="props.prototypingSettings"
         :saved-pages-route="props.savedPagesRoute"
+        :tag="props.tag"
       >
         <template v-if="$slots.menu" #menu>
           <slot name="menu" />

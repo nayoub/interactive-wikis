@@ -56,12 +56,15 @@ interface Props {
   /**
    * When true, appearance and user tools open prototyping settings; wordmark links to the Main Page.
    */
+  /** A small permanent tag beside the wordmark (e.g. "Prototype"), so a mock is never mistaken for the real site. */
+  tag?: string
   prototypingSettings?: boolean
   /** When set, desktop bookmark tool links here (web template cluster). */
   savedPagesRoute?: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
+  tag: undefined,
   theme: undefined,
   username: undefined,
   wordmarkSrc: undefined,
@@ -175,6 +178,7 @@ function goToSavedPages(): void {
             </span>
           </slot>
         </component>
+        <span v-if="props.tag" class="chrome-tag">{{ props.tag }}</span>
       </div>
 
       <div

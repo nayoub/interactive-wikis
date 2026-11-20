@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
- * The host: an article (Frank Gehry snapshot) with article modules — a
- * timeline, a map — in a VE-style editor. Generic over kinds: Insert lists one
+ * The host: an article snapshot with article modules — a timeline, a map, a
+ * visual from a table — in a VE-style editor. Generic over kinds: Insert lists one
  * entry per kind, Pick lights up that kind's mentions, the same Curator lists
  * the items, and each placed module is a block rendered by its kind's renderer.
  * When a timeline and a map share a page, an event and a place about the same
@@ -37,32 +37,44 @@ import Curator from '../curate/Curator.vue'
 import EventEditor from '../curate/EventEditor.vue'
 import PlaceEditor from '../curate/PlaceEditor.vue'
 import PlaceSearch from '../curate/PlaceSearch.vue'
+import VisualCurate from '../curate/VisualCurate.vue'
+import { applyTable, emptySpec, tableOf } from '../curate/visual'
 // Render
+import ElectionView from '../render/ElectionView.vue'
 import MapView from '../render/MapView.vue'
 import TimelineView from '../render/TimelineView.vue'
 // Model
-import { formatDate } from '../model/dates'
+import { formatDate, setDayFirst } from '../model/dates'
 import type {
   BaseItem,
   ModuleData,
   ModuleKind,
   PartialDate,
+  Party,
   Place,
   Placement,
   TimelineEvent,
 } from '../model/types'
 // Host
 import { KINDS } from './kinds'
-import { loadArticle, type LoadedArticle } from './loadArticle'
+import { GEHRY, loadArticle, type ArticleSource, type LoadedArticle } from './loadArticle'
+import { hub, type HubId } from './hub'
 import ModuleBlock from './ModuleBlock.vue'
-import { DEFAULTS, type ModulesStore } from './store'
+import PrototypeMenu from './PrototypeMenu.vue'
+import { DEFAULTS, type ModulesStore, type PlacedModule } from './store'
 
 const props = defineProps<{
   /** Which modules this page offers, in Insert-menu order. */
   kinds: ModuleKind[]
   store: ModulesStore
   forceSkin?: 'desktop' | 'mobile'
+  /** For the prototype menu in the header. */
+  hubId: HubId
+  example: () => Promise<Partial<Record<ModuleKind, PlacedModule>>>
+  /** Which article (default: Frank Gehry). */
+  source?: ArticleSource
 }>()
+const source = computed(() => props.source ?? GEHRY)
 
 const state = props.store.state
 const skin = computed(() => props.forceSkin ?? globalSkin.value)
@@ -86,8 +98,11 @@ const panelMode = computed<'side' | 'sheet'>(() =>
 // ── Article ────────────────────────────────────────────────────────────────
 const article = shallowRef<LoadedArticle | null>(null)
 const loadError = ref<string | null>(null)
-loadArticle()
-  .then((a) => (article.value = a))
+loadArticle(source.value)
+  .then((a) => {
+    setDayFirst(a.dayFirst)
+    article.value = a
+  })
   .catch((e) => (loadError.value = String(e?.message ?? e)))
 
 const mentionsById = computed(() => {
@@ -113,8 +128,8 @@ function setBodyEl(el: unknown) {
 const mountEls = reactive<Partial<Record<ModuleKind, HTMLElement | null>>>({})
 const DEFAULT_PLACEMENT: Placement = {
   kind: 'sectionTop',
-  sectionId: 'Career',
-  sectionTitle: 'Career',
+  sectionId: source.value.defaultSection.id,
+  sectionTitle: source.value.defaultSection.title,
 }
 const placementKey = (p: Placement) =>
   p.kind === 'after' ? `after:${p.anchorId}` : `top:${p.sectionId}`
@@ -240,6 +255,7 @@ function onInsert(value: string) {
       title: KINDS[kind].title,
       items: [],
       options: { ...DEFAULTS[kind] },
+      spec: kind === 'visual' ? emptySpec() : undefined,
       editingPlaced: false,
     }
   }
@@ -258,6 +274,7 @@ function openReEdit(kind: ModuleKind) {
     title: placed.data.title,
     items: JSON.parse(JSON.stringify(placed.data.items)),
     options: { ...DEFAULTS[kind], ...placed.data.options },
+    spec: placed.data.spec ? JSON.parse(JSON.stringify(placed.data.spec)) : undefined,
     editingPlaced: true,
   }
   sheetExpanded.value = panelMode.value === 'sheet'
@@ -267,11 +284,17 @@ function openReEdit(kind: ModuleKind) {
 function commit() {
   const draft = state.draft
   if (!draft) return
-  const data: ModuleData = { title: draft.title, items: draft.items, options: { ...draft.options } }
+  const data: ModuleData = {
+    title: draft.title,
+    items: draft.items,
+    options: { ...draft.options },
+    spec: draft.spec,
+  }
   const placement = draft.editingPlaced
     ? state.modules[draft.kind]!.placement
     : draftPlacement.value
   state.modules = { ...state.modules, [draft.kind]: { data, placement } }
+  state.fromExample = false
   const kind = draft.kind
   state.draft = null
   state.panelOpen = false
@@ -288,6 +311,7 @@ function removeModule(kind: ModuleKind) {
   const next = { ...state.modules }
   delete next[kind]
   state.modules = next
+  state.fromExample = false
 }
 function moveModule(kind: ModuleKind, sectionId: string) {
   const s = sections.value.find((x) => x.id === sectionId)
@@ -300,6 +324,7 @@ function moveModule(kind: ModuleKind, sectionId: string) {
         placement: { kind: 'sectionTop', sectionId: s.id, sectionTitle: s.title },
       },
     }
+    state.fromExample = false
   }
   scrollToModule(kind)
 }
@@ -315,7 +340,11 @@ function scrollToModule(kind: ModuleKind, offset = 72) {
 
 // ── Select mode (Pick) ─────────────────────────────────────────────────────
 const draftItems = computed<BaseItem[]>(() => state.draft?.items ?? [])
-const pickedIds = computed(() => new Set(draftItems.value.map((e) => e.id)))
+const pickedIds = computed(() =>
+  state.draft?.kind === 'visual'
+    ? new Set(state.draft.spec?.tableId ? [state.draft.spec.tableId] : [])
+    : new Set(draftItems.value.map((e) => e.id)),
+)
 const usedIds = computed(() => {
   const out = new Set<string>()
   const spec = draftSpec.value
@@ -328,7 +357,41 @@ const usedIds = computed(() => {
 
 /** A tap on a chip whose thing is already there asks first. */
 const pendingDuplicate = ref<{ mention: Mention<unknown>; existing: BaseItem } | null>(null)
+/** A Visual takes a whole table: tap a table to use it (again to let it go, another to switch). */
+function pickTable(id: string) {
+  const draft = state.draft
+  const a = article.value
+  if (!draft || !a) return
+  const spec = draft.spec ?? emptySpec()
+  if (spec.tableId === id) {
+    draft.items = []
+    draft.spec = emptySpec()
+    return
+  }
+  const table = tableOf(a, id)
+  if (!table) return
+  const next = applyTable(a, table, null, null)
+  draft.items = next.items
+  draft.spec = next.spec
+  if (!draft.title || draft.title === KINDS.visual.title)
+    draft.title = a.infobox.name || table.sectionTitle
+}
+// Anywhere on a lit table picks it, not only its chip (big targets on phones).
+function onTableClick(e: MouseEvent) {
+  if (!panelOpen.value || draftSpec.value?.picks !== 'table') return
+  const t = (e.target as Element).closest<HTMLElement>('table[data-pick-table]')
+  if (!t || !bodyEl.value?.contains(t)) return
+  e.preventDefault()
+  pickTable(t.dataset.pickTable!)
+}
+watch(bodyEl, (el, old) => {
+  old?.removeEventListener('click', onTableClick)
+  el?.addEventListener('click', onTableClick)
+})
+onBeforeUnmount(() => bodyEl.value?.removeEventListener('click', onTableClick))
+
 function toggleMention(id: string) {
+  if (draftSpec.value?.picks === 'table') return pickTable(id)
   const draft = state.draft
   const spec = draftSpec.value
   const mention = mentionsById.value.get(id)
@@ -372,6 +435,10 @@ useSelectMode({
     const m = mentionsById.value.get(id)
     const what = draftSpec.value?.title.toLowerCase() ?? 'module'
     if (!m) return id
+    if (draftSpec.value?.picks === 'table')
+      return pickedIds.value.has(id)
+        ? `Table “${m.text}”: in use, tap to let it go`
+        : `Table “${m.text}”: tap to use it`
     if (pickedIds.value.has(id)) return `${m.text}: on the ${what}, tap to remove`
     if (usedIds.value.has(id)) return `${m.text}: already on the ${what} from another sentence`
     return `${m.text}: tap to add to the ${what}`
@@ -389,6 +456,14 @@ function addSearched(place: Place) {
   draft.items.push(place)
 }
 
+function showTableFromPanel() {
+  const id = state.draft?.spec?.tableId
+  const el = id ? bodyEl.value?.querySelector<HTMLElement>(`[data-pick-table="${id}"]`) : null
+  if (!el) return
+  if (panelMode.value === 'sheet') sheetExpanded.value = false
+  scrollToEl(el, 'start', 96)
+}
+
 function showSourceFromPanel(item: BaseItem) {
   if (panelMode.value === 'sheet') sheetExpanded.value = false
   if (bodyEl.value && item.sourceAnchor)
@@ -401,6 +476,7 @@ const selected = ref<{ kind: ModuleKind; id: string } | null>(null)
 let jumpedAt = 0
 const timelineRef = ref<InstanceType<typeof TimelineView> | null>(null)
 const mapRef = ref<InstanceType<typeof MapView> | null>(null)
+const electionRef = ref<InstanceType<typeof ElectionView> | null>(null)
 
 function jumpToSource(kind: ModuleKind, item: BaseItem) {
   if (!bodyEl.value || !item.sourceAnchor) return
@@ -420,6 +496,7 @@ function backToModule() {
   if (target) scrollToEl(target, 'center')
   setTimeout(() => {
     if (b.kind === 'timeline') timelineRef.value?.focusEvent(b.id)
+    else if (b.kind === 'visual') electionRef.value?.focusParty(b.id)
     else mapRef.value?.focusPlace(b.id)
   }, 350)
 }
@@ -493,8 +570,18 @@ const backLabel = computed(() =>
     :skin="props.forceSkin"
     :show-footer="!(isMobile && editing)"
     :last-edited-notice="false"
+    tag="Prototype"
   >
     <template v-if="isMobile && editing" #header><span /></template>
+    <template #user-menu>
+      <PrototypeMenu
+        :current="hubId"
+        :kinds="kinds"
+        :store="store"
+        :example="example"
+        :skin="isMobile ? 'mobile' : 'desktop'"
+      />
+    </template>
 
     <VisualEditorPageLayout :sidebar-open="false" :editing="editing" :skin="skin">
       <div
@@ -502,6 +589,7 @@ const backLabel = computed(() =>
         :class="{
           'tl-page--editing': editing,
           'tl-page--selecting': panelOpen,
+          'tl-page--tables': panelOpen && draftSpec?.picks === 'table',
           'tl-page--sheet': panelOpen && panelMode === 'sheet',
           'tl-page--side': panelOpen && panelMode === 'side',
           'tl-page--make-way': panelOpen && panelMode === 'side' && vw < 1400,
@@ -510,7 +598,7 @@ const backLabel = computed(() =>
       >
         <div class="tl-page__main">
           <ArticleWrapper
-            title="Frank Gehry"
+            :title="source.title"
             :skin="props.forceSkin"
             :active-view="editing ? 'edit' : 'read'"
             @read-click="exitEdit"
@@ -566,6 +654,11 @@ const backLabel = computed(() =>
           :subject="article.subject.name"
           :editing-placed="state.draft.editingPlaced"
           :cursor-placement="cursorPlacement"
+          :empty-note="
+            draftSpec.picks === 'table'
+              ? 'Its columns, rows and colours come with it. Tap it again to let it go.'
+              : undefined
+          "
           @close="closePanel"
           @discard="discard"
           @commit="commit"
@@ -588,6 +681,15 @@ const backLabel = computed(() =>
 
           <template #add>
             <PlaceSearch v-if="state.draft.kind === 'map'" @add="addSearched" />
+          </template>
+
+          <template v-if="state.draft.kind === 'visual'" #list>
+            <VisualCurate
+              v-model:draft="state.draft"
+              :article="article"
+              @show-source="showSourceFromPanel"
+              @show-table="showTableFromPanel"
+            />
           </template>
 
           <template #item="{ item, remove, chooseImage }">
@@ -618,7 +720,10 @@ const backLabel = computed(() =>
                 >Time between events</CdxToggleSwitch
               >
             </template>
-            <CdxToggleSwitch v-else v-model="state.draft.options.shadeByDate" align-switch
+            <CdxToggleSwitch
+              v-else-if="state.draft.kind === 'map'"
+              v-model="state.draft.options.shadeByDate"
+              align-switch
               >Shade by date</CdxToggleSwitch
             >
           </template>
@@ -633,9 +738,18 @@ const backLabel = computed(() =>
               :birth="birth"
               :skin="wide ? 'desktop' : skin"
               :layout="wide ? 'horizontal' : 'vertical'"
+              :can-show-source="false"
+            />
+            <ElectionView
+              v-else-if="state.draft.kind === 'visual' && state.draft.spec"
+              :items="state.draft.items as Party[]"
+              :spec="state.draft.spec"
+              :title="state.draft.title"
+              :monochrome="state.monochrome"
+              :can-show-source="false"
             />
             <MapView
-              v-else
+              v-else-if="state.draft.kind === 'map'"
               :places="state.draft.items as Place[]"
               :title="state.draft.title"
               :options="state.draft.options as never"
@@ -663,19 +777,36 @@ const backLabel = computed(() =>
             :events="shown(kind)!.items as TimelineEvent[]"
             :title="shown(kind)!.title"
             :spacing="state.spacing"
-            :fallback="state.fallback"
+            :fallback="hub.fallback"
             :skin="skin"
             :options="shown(kind)!.options as never"
             :birth="birth"
             :active-ids="activeIds('timeline')"
             @select="jumpToSource('timeline', $event)"
+            @focus="
+              selected = $event
+                ? { kind: 'timeline', id: $event.id }
+                : selected?.kind === 'timeline'
+                  ? null
+                  : selected
+            "
+          />
+          <ElectionView
+            v-else-if="kind === 'visual' && shown(kind)!.spec"
+            :ref="(el: any) => (electionRef = el)"
+            :items="shown(kind)!.items as Party[]"
+            :spec="shown(kind)!.spec!"
+            :title="shown(kind)!.title"
+            :fallback="hub.fallback"
+            :monochrome="state.monochrome"
+            @select="jumpToSource('visual', $event)"
           />
           <MapView
-            v-else
+            v-else-if="kind === 'map'"
             :ref="(el: any) => (mapRef = el)"
             :places="shown(kind)!.items as Place[]"
             :title="shown(kind)!.title"
-            :fallback="state.fallback"
+            :fallback="hub.fallback"
             :options="shown(kind)!.options as never"
             :active-ids="activeIds('map')"
             @select="jumpToSource('map', $event)"
@@ -852,6 +983,41 @@ const backLabel = computed(() =>
   border-radius: 0;
 }
 
+/* Tables (a Visual): every data table is lit, with a chip before it. Hidden otherwise. */
+.tl-table-pick {
+  display: none;
+}
+.tl-page--tables .tl-table-pick {
+  display: block;
+  margin: var(--spacing-75) 0 var(--spacing-25);
+}
+.tl-page.tl-page--tables .mw-parser-output table[data-pick-table] {
+  opacity: 1;
+  color: var(--color-base);
+  outline: var(--border-width-base, 1px) solid var(--border-color-progressive);
+  outline-offset: 2px;
+  cursor: pointer;
+}
+.tl-page.tl-page--tables .mw-parser-output .tl-table-pick:has(.tl-mention--picked) + table {
+  outline-width: var(--border-width-thick, 2px);
+}
+.tl-page.tl-page--tables .mw-parser-output button.tl-table-chip.tl-mention--candidate {
+  margin: 0;
+  padding: var(--spacing-25) var(--spacing-75);
+  border: 0;
+  border-radius: var(--border-radius-base, 2px);
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+}
+.tl-table-chip__using,
+.tl-mention--picked .tl-table-chip__use {
+  display: none;
+}
+.tl-mention--picked .tl-table-chip__using {
+  display: inline;
+}
+
 /* Jump-to-source mark (pick/passage.ts): held, then a slow fade. Uses the viz tokens. */
 .tl-passage-mark {
   position: absolute;
@@ -884,6 +1050,12 @@ const backLabel = computed(() =>
  */
 .tl-page .article .mw-parser-output.mw-parser-output {
   overflow-x: clip;
+}
+/* Screen-reader-only rows (the election infobox) are clipped but 100% wide: keep them from widening the page. */
+.tl-page .mw-parser-output .sr-only {
+  width: 1px;
+  max-width: 1px;
+  overflow: hidden;
 }
 .tl-page .mw-parser-output ul.gallery {
   margin-inline: 0;

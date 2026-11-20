@@ -333,3 +333,18 @@ hr {
   padding-bottom: var(--spacing-50, 8px);
   border-bottom: 1px solid var(--border-color-subtle, #c8ccd1);
 }
+
+/* Chrome headers: the small permanent tag beside the wordmark (`tag` prop), e.g. "Prototype". */
+.chrome-tag {
+  flex: none;
+  align-self: center;
+  margin-inline-start: var(--spacing-50);
+  padding: 0 var(--spacing-25);
+  border: var(--border-width-base, 1px) solid var(--border-color-base);
+  border-radius: var(--border-radius-base, 2px);
+  color: var(--color-subtle);
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-x-small, 0.75rem);
+  line-height: var(--line-height-x-small, 1.4);
+  white-space: nowrap;
+}

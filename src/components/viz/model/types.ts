@@ -4,7 +4,7 @@
  * not a live view of them.
  */
 
-export type ModuleKind = 'timeline' | 'map'
+export type ModuleKind = 'timeline' | 'map' | 'visual'
 
 export type Precision = 'year' | 'month' | 'day'
 
@@ -99,6 +99,71 @@ export interface TimelineOptions {
   showGaps: boolean
 }
 
+/** A party in an election result (one row of the results table). */
+export interface Party extends BaseItem {
+  /** Full name as the table gives it. */
+  name: string
+  /** Short name for labels: the infobox's, else derived (editable as the item's label). */
+  shortName: string
+  seats?: number
+  votes?: number
+  /** Percent of the vote, as in the table. */
+  voteShare?: number
+  /** Seat change against the previous election, as in the table's +/– column. */
+  change?: number
+  /** The party's colour, and where it came from. */
+  color?: string
+  colorSource?: string
+  /** Identity across elections: the link target of the party's name. */
+  key: string
+  wikidataId?: string
+}
+
+export interface ElectionMeta {
+  name: string
+  date: string
+  /** "All N seats" in the infobox. */
+  chamberSize?: number
+  majority?: number
+  /** The results table's Total row, in the seats column. */
+  tableTotal?: number
+  /** The article's parliament diagram: its file and its number of seats. */
+  diagramFile?: string
+  diagramTotal?: number
+}
+
+/** An article's parliament diagram, read at build time (election/scripts/seating.py): parties left to right. */
+export interface Seating {
+  file: string
+  total: number
+  parties: { label: string; color: string; seats: number }[]
+}
+
+export type ColumnRole = 'category' | 'seats' | 'votes' | 'share' | 'change' | 'ignore'
+export type VisualForm = 'seats' | 'bars'
+
+/** Everything about a "Visual" module besides its curated items. */
+export interface VisualSpec {
+  /** The picked table (`data-pick-table`), and the editor's column roles for it. */
+  tableId: string | null
+  headers: string[]
+  roles: ColumnRole[]
+  form: VisualForm | null
+  /** What bars measure. */
+  measure: 'seats' | 'share'
+  /** Offer the year control (needs earlier elections). */
+  years: boolean
+  /** Grouping: parties under this many seats (seat diagram, seat bars)… */
+  minSeats: number
+  /** …or under this share of the vote (share bars) are merged into "Others". */
+  minShare: number
+  election: ElectionMeta
+  /** Where the default party order came from: the article's parliament diagram, or the table. */
+  orderFrom?: 'diagram' | 'table'
+  /** Earlier elections, oldest last, read from their own snapshotted articles. */
+  previous: { election: ElectionMeta; parties: Party[] }[]
+}
+
 export interface MapOptions {
   /** Dots take one of four lightness steps by period, oldest lightest. */
   shadeByDate: boolean
@@ -111,10 +176,13 @@ export interface ModuleData<T extends BaseItem = BaseItem, O = Record<string, bo
   title: string
   items: T[]
   options: O
+  /** Kind-specific settings (a Visual's table, roles, form…). */
+  spec?: VisualSpec
 }
 
 export type Timeline = ModuleData<TimelineEvent, TimelineOptions>
 export type MapData = ModuleData<Place, MapOptions>
+export type VisualData = ModuleData<Party, Record<string, boolean>> & { spec: VisualSpec }
 
 export interface Draft extends ModuleData {
   kind: ModuleKind

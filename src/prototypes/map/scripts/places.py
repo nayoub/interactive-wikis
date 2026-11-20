@@ -9,9 +9,10 @@ year, and a coarse kind from instance-of (P31). No language model: a lookup.
 Writes public/snapshots/frank-gehry.places.json keyed by the link's page title
 as it appears in the article HTML (`./Title` → "Title").
 
-Run from the repo root:
-    python3 src/prototypes/map-module/scripts/places.py
+Run from the repo root (default slug: frank-gehry):
+    python3 src/prototypes/map/scripts/places.py [--slug german-federal-election-2025]
 """
+import argparse
 import html
 import json
 import re
@@ -19,8 +20,8 @@ import time
 import urllib.parse
 import urllib.request
 
-SNAPSHOT = "public/snapshots/frank-gehry.html"
-OUT = "public/snapshots/frank-gehry.places.json"
+SNAPSHOT = "public/snapshots/{slug}.html"
+OUT = "public/snapshots/{slug}.places.json"
 UA = open("src/api-user-agent.txt").read().strip()
 
 # P31 classes → kind. Countries and first-level regions have a coordinate too,
@@ -75,7 +76,10 @@ def ids_of(claims: dict, prop: str):
 
 
 def main() -> None:
-    raw = open(SNAPSHOT, encoding="utf-8").read()
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--slug", default="frank-gehry")
+    slug = ap.parse_args().slug
+    raw = open(SNAPSHOT.format(slug=slug), encoding="utf-8").read()
     titles = sorted(
         {
             urllib.parse.unquote(html.unescape(t))
@@ -178,16 +182,16 @@ def main() -> None:
         p.pop("countryId", None)
 
     out = {
-        "source": "Wikidata, via enwiki page props; built by src/prototypes/map-module/scripts/places.py",
+        "source": "Wikidata, via enwiki page props; built by src/prototypes/map/scripts/places.py",
         "built": time.strftime("%Y-%m-%d"),
         "places": places,
     }
-    with open(OUT, "w", encoding="utf-8") as f:
+    with open(OUT.format(slug=slug), "w", encoding="utf-8") as f:
         json.dump(out, f, ensure_ascii=False, indent=1)
     kinds = {}
     for p in places.values():
         kinds[p["kind"]] = kinds.get(p["kind"], 0) + 1
-    print(f"{len(places)} titles with coordinates → {OUT}  {kinds}")
+    print(f"{len(places)} titles with coordinates → {OUT.format(slug=slug)}  {kinds}")
 
 
 if __name__ == "__main__":

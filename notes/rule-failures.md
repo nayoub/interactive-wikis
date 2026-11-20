@@ -54,3 +54,67 @@ prose (see `src/components/viz/pick/extractDates.ts`).
 - "the "Avant-Garde in Russia 1910–1930" exhibition in 1980" → 1910–1930 is offered as a span → part of an exhibition title.
 - "the California "funk" art movement of the 1960s and early 1970s" → two decades offered → they date a movement, not an event.
 - "In 1962, he established a practice … that became Frank Gehry and Associates in 1967, then Gehry Partners in 2001." → three chips, all with the 1962 clause as their label → each year needs its own clause as a label.
+
+# Tables (election module)
+
+On the results tables of *2025 German federal election* (rev 1385970319), *2021…*
+(rev 1385970268) and *2017…* (rev 1386057083). Rules in force
+(`src/components/viz/pick/tables.ts`): header rows are the leading all-`<th>` rows,
+merged cells repeated; *category* = the column with the most text in its own
+cells; *seats* = whole numbers summing to the infobox's chamber size; *share* =
+"%" in header or cells (first such column); *votes* = whole numbers ≥ 10,000
+under a "vote" header (first such column); *change* = signed numbers or a "+/–"
+header; *colour* = an empty cell with an inline background; *not a party* = rows
+named Total, Valid, Invalid, Registered, Turnout, Source…
+
+Result: the same 10 roles on all three tables — ignore (colour), category, votes,
+share, ignore, ignore, ignore, ignore, seats, change — with the two misses below
+fixed in the rules.
+
+## Merged headers
+
+- One "Party" header spans the colour cell and the name → both columns are called "Party" → right for display, but matching the 2021/2017 tables by header text gave the name column the colour column's role (no parties found) → fixed: same header in the same place first, then the first unused one.
+- "Party list › Seats" (sums 354 / 436 / 410) and "Constituency › Seats" (276 / 299 / 299) beside "Total seats" (630 / 735 / 709) → only the total sums to the chamber → right. Without the infobox's chamber size the rule could not tell the three apart.
+- Two "Votes" and two "%" columns (party list = second vote, constituency = first vote) → the first of each is kept → right for Germany (the list vote decides seats), but only because it comes first.
+
+## Totals rows
+
+- "Total" is one cell merged across the colour and name columns → it made the colour column look like the most-text column, so *category* went to the colour column → fixed: a merged cell counts once, for its first column.
+- "Valid votes", "Invalid/blank votes", "Total", "Registered voters/turnout" → dropped by name → right. A totals row named differently (e.g. "Overall") would be read as a party.
+
+## Footnote markers in numbers
+
+- FDP change "−91[d]" → footnote stripped, −91 → right.
+- BSW change "New" → no number, no change shown → right.
+
+## Coalition and alliance rows
+
+- The infobox lists the alliance "CDU/CSU" (one link, 208 seats) while the table has CDU (164) and CSU (44) as rows → split by initials of the table names → CDU, CSU in the infobox's slot → right; an alliance whose short names are not initials (e.g. "Greens/EFA") would fall to the end of the order.
+
+## Renamed parties
+
+- 2025 infobox links *Die_Linke*; the 2025, 2021 and 2017 tables link *The_Left_(Germany)* → no link match → matched by equal seats won (64) → right, but fails when two parties have the same seats. The short name follows the infobox ("Die Linke") while the full name follows the table ("The Left").
+- *Sahra Wagenknecht Alliance* exists only in 2025 → absent in 2021/2017 → right (its slot is empty in those years).
+
+## Constituency / list seats split
+
+- Seats come from "Total seats"; the list/constituency split is ignored. The seat diagram cannot show overhang or the 2025 rule that left constituency winners without a seat.
+
+## Tables the rules do not read
+
+- "Party list vote share by state" (states as rows, parties as columns, percentages without a "%") → not lit (no quantity found) → a share table per party, transposed.
+- "Seats won by state" tables → not lit (parties as columns) → same.
+- "Seats targeted by The Left / the Free Voters" → lit, *share* = the winner's 2021 share → offered as bars, which is a valid but odd chart; a seat diagram is rightly not offered.
+- "Sociology of the electorate" → lit, *share* = the first party column (Union) only → bars of one party by demographic; the other parties' columns are ignored as "another percentage column".
+
+## Totals: 2021 shows 735 seats, the 2025 article says 736
+
+- The 2025 article's lead says the Bundestag went "down from 736 in 2021". The 2021 article's infobox says "All 735 seats", its results table totals 735 (FDP 91), and its own parliament diagram (`File:Bundestag_2021.svg`) has 736 seats (FDP 92). The infobox explains it in a footnote on FDP's 91: initially allocated 92 seats, it lost one in a repeat election in Berlin. The article's results section says when: the repeat election in 455 Berlin precincts on 11 February 2024 cost the FDP a seat, the Bundestag being "reduced from 736 to 735 members". So 736 is the result as first declared, 735 the legal result after the repeat; the table and infobox were updated, the diagram file and the 2025 article's sentence were not.
+- Rule now in force: party seats must equal every total the article states (infobox, the table's Total row, the parliament diagram). 2021 fails the diagram check → the curate panel shows a warning naming 735 and 736, and the figure carries the same note under it. The figure keeps the table's 735; it does not pick a side.
+
+## Seat order (election module)
+
+- Rule now in force: the default order is the article's own parliament diagram, read at build time (`src/prototypes/election/scripts/seating.py`: the SVG's party groups, left to right), matched to table rows by colour, then name, then seats. Before, the infobox order (by result) put AfD in the middle of the chamber.
+- 2025 diagram (`File:21st_Bundestag.svg`): Linke, SPD, Grüne, SSW, CDU, CSU, AfD → all matched by colour.
+- FDP has no seats in 2025, so the 2025 diagram does not seat it; in 2021 it would have fallen to the far right → placed where the most recent earlier diagram seated it (2021: between SSW and CDU).
+- The diagram is found by trying the SVGs in the Results section and infobox and keeping the one whose seats are within 10% of the infobox's chamber size. A diagram drawn by another tool (not one `<g>` per party) would not be read; the order then falls back to the results table's.

@@ -1,6 +1,6 @@
 /**
  * The map's base: Natural Earth land and lakes, pre-projected at build time
- * (src/prototypes/map-module/scripts/land.py) at three levels of detail.
+ * (src/prototypes/map/scripts/land.py) at three levels of detail.
  * The renderer asks for what its view needs; files are fetched once and cached.
  *
  *   1:110m  world views                       public/geo/land-110m.json

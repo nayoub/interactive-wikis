@@ -4,6 +4,7 @@
  * a place for maps, a quantity for charts.
  */
 import type { Citation, SourceAnchor, TimelineDate } from '../model/types'
+import type { ParsedTable } from './tables'
 
 export interface Mention<T> {
   id: string
@@ -42,4 +43,6 @@ export interface PlaceValue extends PlaceInfo {
 }
 
 export type PlaceMention = Mention<PlaceValue>
-export type PickKind = 'date' | 'place'
+/** A data table: its id is the table's `data-pick-table`; text is its caption or section. */
+export type TableMention = Mention<ParsedTable>
+export type PickKind = 'date' | 'place' | 'table'

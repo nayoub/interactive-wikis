@@ -112,6 +112,18 @@ export function showPassage(root: HTMLElement, anchor: SourceAnchor, sourceText?
   const span = mentionEl(root, anchor.mentionId)
   if (!span) return false
   revealSection(span)
+  // A table row (a party in a results table): the row is the passage.
+  if (span.tagName === 'TR' || span.tagName === 'TABLE') {
+    setTimeout(() => {
+      // Bring the row into the table's own horizontal scroll, then the page.
+      span.closest('table')?.scrollTo?.({ left: 0 })
+      scrollToEl(span, 'center')
+      const range = document.createRange()
+      range.selectNodeContents(span)
+      setTimeout(() => markRange(range), 350)
+    }, 30)
+    return true
+  }
   // After a collapsed section opens, measure again.
   setTimeout(() => {
     scrollToEl(span, 'center')
