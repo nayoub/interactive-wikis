@@ -23,7 +23,7 @@ Data, committed (no runtime lookups except the panel's Commons and Wikidata sear
 
 - `public/snapshots/frank-gehry.html` — `src/prototypes/timeline-module/scripts/snapshot.py`
 - `public/snapshots/frank-gehry.places.json` — `src/prototypes/map-module/scripts/places.py` (Wikidata)
-- `public/geo/land-50m.mercator.txt` — `src/prototypes/map-module/scripts/land.py` (Natural Earth 1:50m land, public domain, pre-projected)
+- `public/geo/land-110m.json`, `land-50m.json`, `10m/*.json` — `src/prototypes/map-module/scripts/land.py` (Natural Earth land and lakes, public domain, pre-projected; three levels of detail, the 1:10m level tiled and fetched only for the view: `render/baseMap.ts`)
 
 Adding a kind (e.g. a quantity chart): a mention type and extractor in `pick/`, an item type in `model/types.ts`, an entry in `host/kinds.ts`, an item editor over `ItemEditor`, a renderer in `render/` reading `tokens.css` (add tokens there, never literals), and the two template branches in `ArticleModules.vue`.
 

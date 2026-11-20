@@ -71,6 +71,7 @@
   /* Map base: always weaker than the marks */
   --viz-land: var(--background-color-neutral-subtle);
   --viz-coast: var(--border-color-muted);
+  --viz-water: var(--viz-paper); /* lakes: the same as the sea, which is the page */
   --viz-map-aspect: 0.6; /* height / width on wide columns */
   --viz-map-aspect-narrow: 1; /* roughly square on phones */
   --viz-map-margin: 0.14; /* fraction of the extent kept around the places */

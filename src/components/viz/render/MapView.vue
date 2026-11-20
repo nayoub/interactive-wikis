@@ -4,8 +4,10 @@
  * visualization tokens (../tokens.css). The timeline's sibling: the same dot,
  * the same hue, the same type, the same rules. Knows nothing about the article.
  *
- * - Base: Natural Earth land, pre-projected (Web Mercator) at build time,
- *   drawn once and moved with a transform; always weaker than the marks.
+ * - Base: Natural Earth land and lakes, pre-projected (Web Mercator) at build
+ *   time at three levels of detail (./baseMap.ts): 1:110m for the world, 1:50m
+ *   for continents, 1:10m tiles fetched for what is on screen when zoomed in.
+ *   Moved with a transform; always weaker than the marks.
  * - Extent: fitted to the places with a margin, never closer than a minimum span.
  * - Marks: one dot per place. Dots that would overlap merge into one circle
  *   whose area is proportional to the count, number inside; tap to zoom in.
@@ -27,6 +29,7 @@ import {
 
 import { dateYears, formatDate } from '../model/dates'
 import { sortPlaces } from '../model/places'
+import { levelFor, loadCoarse, loadTiles, loaded, tilesFor } from './baseMap'
 import type { MapOptions, Place } from '../model/types'
 
 const props = withDefaults(
@@ -58,17 +61,6 @@ const emit = defineEmits<{
 
 // ── Order: by date where dates exist, then by name ─────────────────────────
 const sorted = computed(() => sortPlaces(props.places))
-
-// ── Land ───────────────────────────────────────────────────────────────────
-const land = ref('')
-let landPromise: Promise<string> | null = null
-function loadLand() {
-  landPromise ??= fetch(`${import.meta.env.BASE_URL}geo/land-50m.mercator.txt`).then((r) =>
-    r.ok ? r.text() : '',
-  )
-  return landPromise
-}
-const LAND_UNITS = 100_000
 
 // ── Size and tokens ────────────────────────────────────────────────────────
 const rootRef = ref<HTMLElement | null>(null)
@@ -102,7 +94,6 @@ onMounted(async () => {
   width.value = el.getBoundingClientRect().width
   ro = new ResizeObserver(([entry]) => (width.value = entry.contentRect.width))
   ro.observe(el)
-  land.value = await loadLand()
 })
 onBeforeUnmount(() => ro?.disconnect())
 
@@ -152,10 +143,44 @@ const toScreen = (p: { x: number; y: number }) => ({
   x: (p.x - view.cx) * view.k + width.value / 2,
   y: (p.y - view.cy) * view.k + height.value / 2,
 })
-const landTransform = computed(() => {
-  const s = view.k / LAND_UNITS
-  return `translate(${width.value / 2 - view.cx * view.k} ${height.value / 2 - view.cy * view.k}) scale(${s})`
+/** SVG transform for base-map paths stored at `scale` units per world width. */
+const transformFor = (scale: number) =>
+  `translate(${width.value / 2 - view.cx * view.k} ${height.value / 2 - view.cy * view.k}) scale(${view.k / scale})`
+
+// ── Base map: the level of detail the view needs, falling back while it loads ──
+const viewBounds = computed(() => {
+  const hw = width.value / 2 / view.k
+  const hh = height.value / 2 / view.k
+  return { x0: view.cx - hw, y0: view.cy - hh, x1: view.cx + hw, y1: view.cy + hh }
 })
+const wantLevel = computed(() => levelFor(view.k))
+let tileTimer: ReturnType<typeof setTimeout> | undefined
+watch(
+  [wantLevel, viewBounds],
+  ([level, b]) => {
+    loadCoarse('110m').catch(() => {})
+    if (level !== '110m') loadCoarse('50m').catch(() => {})
+    if (level === '10m') {
+      // Debounced: panning and pinching ask for tiles once they settle.
+      clearTimeout(tileTimer)
+      tileTimer = setTimeout(() => loadTiles(b.x0, b.y0, b.x1, b.y1).catch(() => {}), 120)
+    }
+  },
+  { immediate: true },
+)
+const fineTiles = computed(() => {
+  if (wantLevel.value !== '10m') return []
+  const b = viewBounds.value
+  const keys = tilesFor(b.x0, b.y0, b.x1, b.y1)
+  return keys.every((k) => loaded.tiles[k]) ? keys.map((k) => loaded.tiles[k]) : []
+})
+/** The coarse layer to draw: the wanted one, or the best one loaded while the finer one arrives. */
+const coarseLayer = computed(() => {
+  if (fineTiles.value.length) return null
+  const want = wantLevel.value === '110m' ? '110m' : '50m'
+  return loaded.coarse[want] ?? loaded.coarse['50m'] ?? loaded.coarse['110m'] ?? null
+})
+const fineScale = computed(() => loaded.fine?.scale ?? 1)
 
 // ── Clusters: merge dots that would overlap; area ∝ count ──────────────────
 interface Cluster {
@@ -506,7 +531,27 @@ const titleId = `map-title-${Math.random().toString(36).slice(2, 8)}`
         @wheel="onWheel"
       >
         <svg class="map__base" :width="width" :height="height" aria-hidden="true">
-          <g :transform="landTransform"><path class="map__land" :d="land" /></g>
+          <g v-if="coarseLayer" :transform="transformFor(coarseLayer.scale)">
+            <path class="map__land" :d="coarseLayer.land" />
+            <path class="map__lake" :d="coarseLayer.lakes" />
+          </g>
+          <g v-else :transform="transformFor(fineScale)">
+            <!-- Tiles: fills first (seams are not stroked), then the coast as open lines. -->
+            <path
+              v-for="t in fineTiles"
+              :key="`l${t.key}`"
+              class="map__land map__fill"
+              :d="t.land"
+            />
+            <path
+              v-for="t in fineTiles"
+              :key="`w${t.key}`"
+              class="map__lake map__fill"
+              :d="t.lakes"
+            />
+            <path v-for="t in fineTiles" :key="`c${t.key}`" class="map__coast" :d="t.coast" />
+            <path v-for="t in fineTiles" :key="`s${t.key}`" class="map__coast" :d="t.shores" />
+          </g>
         </svg>
 
         <ol class="map__list">
@@ -713,11 +758,26 @@ small,
   position: absolute;
   inset: 0;
 }
-.map__land {
-  fill: var(--viz-land);
+.map__land,
+.map__lake,
+.map__coast {
   stroke: var(--viz-coast);
   stroke-width: var(--viz-line-width);
+  stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
+}
+.map__land {
+  fill: var(--viz-land);
+  fill-rule: evenodd;
+}
+.map__lake {
+  fill: var(--viz-water);
+}
+.map__coast {
+  fill: none;
+}
+.map__fill {
+  stroke: none;
 }
 .map .map__list {
   list-style: none;
