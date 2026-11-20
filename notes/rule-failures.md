@@ -136,6 +136,8 @@ for the Compare operator. Rules: `pick/toItems.ts` (tables, items),
 - 681 linked titles, 653 resolved to Wikidata, 372 with a coordinate (30 regions, left out). Organisations with a headquarters coordinate (Athletic Bilbao, BBVA, Iberdrola) are offered as places, as on the Gehry article.
 - Flight destinations ("Frankfurt", "Paris", "Munich", in Transport) are real places but not the city's → they made "Transport" the busiest section for the map suggestion and the map spanned Europe → the suggestion now counts only places within about 50 km of the median of the article's places.
 
+- Places in comparisons: "Cityscape" links *Michigan Avenue Bridge* (Chicago) and *Santiago de Compostela* in sentences about Bilbao's own bridges and churches → both are offered as places and, picked with the rest, stretch the map to another continent → a place the sentence compares Bilbao with, not a place in Bilbao.
+
 ## Tables whose columns were misclassified
 
 - The population table is not a `wikitable` but a `table-pale` box (Template:Historical populations) → not lit at first → data tables now include it.

@@ -9,6 +9,7 @@ import type { FormId, Item, Visual } from '../../model/visual'
 import AnnotatedForm from './AnnotatedForm.vue'
 import BarsForm from './BarsForm.vue'
 import LineForm from './LineForm.vue'
+import LinkedForm from './LinkedForm.vue'
 import SeatsForm from './SeatsForm.vue'
 import SmallColumnsForm from './SmallColumnsForm.vue'
 import TimelineForm from './TimelineForm.vue'
@@ -96,6 +97,29 @@ export const FORMS: Record<FormId, FormDef> = {
       )
       return svg(
         `<rect x="2" y="2" width="92" height="44" style="fill:var(--viz-land)"/>${dots.join('')}`,
+      )
+    },
+  },
+  linked: {
+    id: 'linked',
+    label: 'Map and timeline, linked',
+    component: LinkedForm,
+    caption: () =>
+      'The same places on a map and in order of date; select one in either to light it in both.',
+    settings: [{ key: 'showGaps', label: 'Time between events', type: 'toggle', default: true }],
+    order: byTime,
+    thumb: (items) => {
+      const pts = items.filter((i) => i.components.place).slice(0, 12)
+      const dots = pts.map(
+        (_, k) =>
+          `<circle cx="${8 + (k % 4) * 10}" cy="${12 + Math.floor(k / 4) * 10}" r="2.5" ${S}/>`,
+      )
+      const line = Array.from(
+        { length: Math.min(5, pts.length) },
+        (_, k) => `<circle cx="70" cy="${8 + k * 8}" r="2.5" ${S}/>`,
+      )
+      return svg(
+        `<rect x="2" y="2" width="48" height="44" style="fill:var(--viz-land)"/>${dots.join('')}<line x1="70" x2="70" y1="4" y2="44" ${R}/>${line.join('')}`,
       )
     },
   },

@@ -18,11 +18,13 @@ import {
 import {
   cdxIconArticle,
   cdxIconClose,
+  cdxIconImage,
   cdxIconDownTriangle,
   cdxIconUpTriangle,
 } from '@wikimedia/codex-icons'
 
 import CurationPanel from '../curate/CurationPanel.vue'
+import ImagePicker from '../curate/ImagePicker.vue'
 import type { LoadedArticle } from '../host/loadArticle'
 import type { ArticleSection, Placement } from '../model/types'
 import type { Item } from '../model/visual'
@@ -135,6 +137,30 @@ function move(item: Item, delta: number) {
   list.splice(i, 1)
   list.splice(j, 0, item)
 }
+// An optional image per item: from the article, or from Wikimedia Commons (the same picker as the timeline's).
+const pickerFor = ref<Item | null>(null)
+const pickerOpen = computed({
+  get: () => !!pickerFor.value,
+  set: (v: boolean) => {
+    if (!v) pickerFor.value = null
+  },
+})
+const pickerItem = computed(() =>
+  pickerFor.value
+    ? {
+        id: pickerFor.value.id,
+        label: pickerFor.value.label,
+        sourceText: pickerFor.value.source.text,
+        sourceDateText: '',
+        image: pickerFor.value.image,
+        date: pickerFor.value.components.time,
+      }
+    : null,
+)
+function onImage(img: Item['image']) {
+  if (pickerFor.value) pickerFor.value.image = img
+}
+
 function remove(item: Item) {
   const list = items.value
   list.splice(list.indexOf(item), 1)
@@ -365,6 +391,12 @@ const sourceLabel = (i: Item) =>
               <small class="gc__muted gc__src"
                 >{{ sourceLabel(i) }}<sup v-if="i.citation"> {{ i.citation.label }}</sup></small
               >
+              <img
+                v-if="i.image && !i.components.region"
+                class="gc__thumb-img"
+                :src="i.image.src"
+                :alt="i.image.caption"
+              />
               <template v-if="i.components.region">
                 <CdxButton v-if="tying !== i.id" size="small" weight="quiet" @click="tying = i.id">
                   {{
@@ -407,6 +439,18 @@ const sourceLabel = (i: Item) =>
                 <CdxIcon :icon="cdxIconDownTriangle" size="x-small" />
               </button>
             </span>
+            <button
+              v-if="!i.components.region"
+              type="button"
+              class="gc__icon"
+              :class="{ 'gc__icon--on': !!i.image }"
+              :aria-label="
+                i.image ? `Change the image for ${i.label}` : `Add an image to ${i.label}`
+              "
+              @click="pickerFor = i"
+            >
+              <CdxIcon :icon="cdxIconImage" size="small" />
+            </button>
             <button
               v-if="i.source.anchor"
               type="button"
@@ -476,6 +520,14 @@ const sourceLabel = (i: Item) =>
       </div>
     </template>
   </CurationPanel>
+
+  <ImagePicker
+    v-model:open="pickerOpen"
+    :images="article.images"
+    :event="pickerItem"
+    :subject="article.source.title"
+    @choose="onImage"
+  />
 </template>
 
 <style scoped>
@@ -712,6 +764,17 @@ const sourceLabel = (i: Item) =>
   background: none;
   color: var(--color-subtle);
   cursor: pointer;
+}
+.gc__icon--on {
+  color: var(--color-progressive);
+}
+.gc__thumb-img {
+  display: block;
+  width: 64px;
+  height: 43px;
+  margin: var(--spacing-25) var(--spacing-25) 0;
+  object-fit: cover;
+  border-radius: var(--border-radius-base, 2px);
 }
 .gc__icon:hover {
   color: var(--color-progressive);
