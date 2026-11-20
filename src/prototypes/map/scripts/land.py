@@ -16,7 +16,7 @@ Output (public/geo/):
 Coordinates: Web Mercator, the world is SCALE × SCALE (y from the top, latitude
 clamped to ±85°), integers, relative path commands, near-duplicates dropped.
 
-    python3 src/prototypes/map-module/scripts/land.py path/to/natural-earth-geojson/
+    python3 src/prototypes/map/scripts/land.py path/to/natural-earth-geojson/
 """
 import json
 import math

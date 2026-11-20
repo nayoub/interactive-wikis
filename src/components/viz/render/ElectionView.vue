@@ -15,9 +15,10 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } fro
 import { CdxToggleButtonGroup } from '@wikimedia/codex'
 
 import { globalTheme } from '@/theme'
-import { blocsFor, electionsOf, yearOf, type Bloc } from '../model/parties'
+import { blocsFor, electionsOf, totalsIssue, yearOf, type Bloc } from '../model/parties'
 import type { Party, VisualSpec } from '../model/types'
-import { contrast, hemicycle, mix, radiusFor } from './hemicycle'
+import { contrast, hemicycle, mix, radiusFor, withGaps } from './hemicycle'
+import SelectionCard from './SelectionCard.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -52,6 +53,7 @@ const tok = ref({
   narrow: 560,
   dot: 7,
   gap: 4,
+  blockGap: 4,
   font: '14px sans-serif',
   line: 20,
 })
@@ -82,6 +84,7 @@ function readTokens() {
     narrow: px('--viz-narrow', 560),
     dot: px('--viz-dot-size', 7),
     gap: px('--viz-label-gap', 4),
+    blockGap: px('--viz-block-gap', 4),
     font: `${small.fontWeight} ${small.fontSize} ${small.fontFamily}`,
     line: parseFloat(small.lineHeight) || 20,
   }
@@ -200,25 +203,28 @@ const geo = computed(() => {
   let per = 1
   while (per < 6 && radiusFor(Math.ceil(maxSeats.value / per), t.seatMin, t.inner) > availR) per++
   const R = Math.min(availR, radiusFor(Math.ceil(maxSeats.value / per), t.seatMax, t.inner))
-  const n = Math.ceil(totalSeats.value / per)
-  const { seats } = hemicycle(n, R, t.inner)
-
-  // Party ranges in dots: cumulative seats, rounded, so the total stays exact.
+  // Party ranges in dots: cumulative seats, rounded, so the total stays close;
+  // every party with a seat keeps at least one dot.
   const ranges: { bloc: Bloc; from: number; to: number }[] = []
   let cum = 0
+  let at = 0
   for (const b of blocs.value) {
     if (b.seats <= 0) continue
-    const from = Math.round(cum / per)
     cum += b.seats
-    ranges.push({ bloc: b, from, to: Math.round(cum / per) })
+    const to = Math.max(at + 1, Math.round(cum / per))
+    ranges.push({ bloc: b, from: at, to })
+    at = to
   }
-  const owner: number[] = new Array(n).fill(-1)
+  const n = at
+  const base = hemicycle(n, R, t.inner).seats
+  const owner: number[] = new Array(n).fill(0)
   ranges.forEach((r, i) => {
     for (let j = r.from; j < r.to && j < n; j++) owner[j] = i
   })
+  // A gap of page between neighbouring parties, so similar colours never merge.
+  const seats = withGaps(base, owner, ranges.length, t.blockGap)
 
   const top = narrow.value ? t.line * 0.5 : t.line * 2 + t.gap * 2
-  const H = top + R + t.dot + t.line * (narrow.value ? 0.2 : 1)
   const cx = W / 2
   const cy = top + R
 
@@ -252,60 +258,115 @@ const geo = computed(() => {
     }
   }
 
-  // Direct labels at each block's outer edge; a label that would collide moves out a step, else goes to the list.
+  // Direct labels, each at its own block. Top labels sit on the arc; side
+  // labels are stacked in a column beside the arc, as close to their block as
+  // they fit; a label that had to move gets a short leader to its block.
   type Box = [number, number, number, number]
   const boxes: Box[] = []
-  if (majority) boxes.push([majority.x2 - 3, majority.y2 - 3, majority.x2 + 3, majority.y1 + 3])
+  if (majority) boxes.push([majority.x2 - 4, majority.y2 - 4, majority.x2 + 4, majority.y1 + 4])
   const hits = (b: Box) =>
     boxes.some((o) => b[0] < o[2] && b[2] > o[0] && b[1] < o[3] && b[3] > o[1])
-  const labels: {
+  type Label = {
     key: string
     x: number
     y: number
-    anchor: string
+    anchor: 'start' | 'end' | 'middle'
     text: string
     seats: string
     change: string
-  }[] = []
-  const unplaced: string[] = []
+    leader: [number, number, number, number] | null
+    bottom: number
+  }
+  const labels: Label[] = []
+  const lineH = t.line * 0.95
+  const outer = R + t.dot / 2
+  let bottom = cy + t.dot
   if (!narrow.value) {
-    const order = ranges.map((r, i) => ({ r, i })).sort((p, q) => q.r.bloc.seats - p.r.bloc.seats)
-    for (const { r } of order) {
+    const items = ranges.map((r) => {
       const first = seats[Math.min(r.from, n - 1)]
-      const last = seats[Math.min(r.to - 1, n - 1)]
+      const last = seats[Math.min(Math.max(r.from, r.to - 1), n - 1)]
       const mid = (first.angle + last.angle) / 2
       const c = Math.cos(mid)
       const s = Math.sin(mid)
-      const anchor = c > 0.3 ? 'start' : c < -0.3 ? 'end' : 'middle'
       const change = props.spec.years && previousYear.value ? fmtChange(r.bloc.change) : ''
-      const text = `${r.bloc.label} ${r.bloc.seats}${change ? ` ${change}` : ''}`
-      const w = textWidth(text)
-      let placed = false
-      for (const step of [0, 1, 2]) {
-        const rad = R + t.dot + t.gap * 2 + step * t.line * 0.75
-        const x = cx + c * rad
-        const y = cy - s * rad
-        const x0 = anchor === 'start' ? x : anchor === 'end' ? x - w : x - w / 2
-        // Baseline: centred on the ray at the sides, sitting on it at the top.
-        const base = anchor === 'middle' ? y - t.gap : y + t.line * 0.3
-        const box: Box = [x0 - 2, base - t.line * 0.75, x0 + w + 2, base + t.line * 0.25]
-        if (box[0] < 0 || box[2] > W || box[1] < 0 || hits(box)) continue
+      const w = textWidth(`${r.bloc.label} ${r.bloc.seats}${change ? ` ${change}` : ''}`)
+      return { r, c, s, w, change, px: cx + c * (outer + 1), py: cy - s * (outer + 1) }
+    })
+    const L = R + t.dot + t.gap * 2
+    const make = (
+      it: (typeof items)[number],
+      anchor: Label['anchor'],
+      x: number,
+      y: number,
+      moved: boolean,
+    ): Label => {
+      // Leader from the block's outer edge to the label's near edge.
+      const ex = anchor === 'start' ? x - 2 : anchor === 'end' ? x + 2 : x
+      const ey = anchor === 'middle' ? y + 2 : y - t.line * 0.3
+      return {
+        key: it.r.bloc.key,
+        x,
+        y,
+        anchor,
+        text: it.r.bloc.label,
+        seats: String(it.r.bloc.seats),
+        change: it.change,
+        leader: moved ? [it.px, it.py, ex, ey] : null,
+        bottom: y + t.line * 0.25,
+      }
+    }
+    // Top labels first (centred above their block), lifted a line at a time if they collide.
+    for (const it of items
+      .filter((x) => Math.abs(x.c) <= 0.3)
+      .sort((a, b) => b.r.bloc.seats - a.r.bloc.seats)) {
+      const x = cx + it.c * L
+      for (let k = 0; k < 4; k++) {
+        const y = cy - it.s * L - t.gap - k * lineH
+        const box: Box = [x - it.w / 2 - 2, y - t.line * 0.75, x + it.w / 2 + 2, y + t.line * 0.25]
+        if (hits(box) && k < 3) continue
         boxes.push(box)
-        labels.push({
-          key: r.bloc.key,
-          x,
-          y: base,
-          anchor,
-          text: r.bloc.label,
-          seats: String(r.bloc.seats),
-          change,
-        })
-        placed = true
+        labels.push(make(it, 'middle', x, y, k > 0))
         break
       }
-      if (!placed) unplaced.push(r.bloc.key)
+    }
+    // Side labels: a column per side, in the blocks' order from top to bottom.
+    for (const side of [1, -1] as const) {
+      const list = items
+        .filter((x) => x.c * side > 0.3)
+        .map((it) => ({ it, want: cy - it.s * L + t.line * 0.3 }))
+        .sort((a, b) => a.want - b.want)
+      // Sweep down: keep a line between labels and clear of the top labels.
+      let y = -Infinity
+      const ys = list.map(({ it, want }) => {
+        y = Math.max(want, y + lineH)
+        for (let k = 0; k < 6; k++) {
+          const xArc = Math.sqrt(Math.max(0, L * L - (cy - y) ** 2))
+          const x0 = side > 0 ? cx + xArc : cx - xArc - it.w
+          if (!hits([x0 - 2, y - t.line * 0.75, x0 + it.w + 2, y + t.line * 0.25])) break
+          y += lineH
+        }
+        return y
+      })
+      list.forEach(({ it, want }, k) => {
+        const yk = ys[k]
+        // Beside the arc at this height (never over the dots), inside the figure.
+        const xArc = Math.sqrt(Math.max(0, L * L - Math.min(L, cy - yk + t.line * 0.3) ** 2))
+        let x = side > 0 ? cx + Math.max(xArc, it.c * L) : cx - Math.max(xArc, -it.c * L)
+        x = side > 0 ? Math.min(x, W - it.w - 2) : Math.max(x, it.w + 2)
+        const moved = Math.abs(yk - want) > 2 || Math.abs(x - (cx + it.c * L)) > 4
+        const anchor = side > 0 ? 'start' : 'end'
+        const lab = make(it, anchor, x, yk, moved)
+        boxes.push(
+          side > 0
+            ? [x - 2, yk - t.line * 0.75, x + it.w + 2, yk + t.line * 0.25]
+            : [x - it.w - 2, yk - t.line * 0.75, x + 2, yk + t.line * 0.25],
+        )
+        labels.push(lab)
+        bottom = Math.max(bottom, lab.bottom)
+      })
     }
   }
+  const H = Math.max(top + R + t.dot + t.line * (narrow.value ? 0.2 : 1), bottom + t.gap)
 
   return {
     W,
@@ -316,19 +377,16 @@ const geo = computed(() => {
     dots: seats.map((p, i) => ({
       x: cx + p.x,
       y: cy + p.y,
-      bloc: owner[i] >= 0 ? ranges[owner[i]].bloc : null,
+      bloc: ranges[owner[i]]?.bloc ?? null,
     })),
     r: t.dot / 2,
     majority,
     labels,
-    unplaced,
   }
 })
 
-/** The list under the diagram: on narrow columns always; else only when a label found no room. */
-const showList = computed(
-  () => form.value === 'seats' && (narrow.value || (geo.value?.unplaced.length ?? 0) > 0),
-)
+/** The list under the diagram: on narrow columns, where labels beside the arc would not fit. */
+const showList = computed(() => form.value === 'seats' && narrow.value)
 
 // ── Bars ───────────────────────────────────────────────────────────────────
 const barMax = computed(() =>
@@ -357,11 +415,48 @@ const meta = computed(() => {
   return parts.filter(Boolean).join(' · ')
 })
 
+/** Any dot selects its party (the nearest dot to the tap, so small dots are easy to hit); a label too; elsewhere clears. */
 function onFigureClick(e: MouseEvent) {
-  const key = (e.target as Element).closest<SVGElement>('[data-key]')?.dataset.key
-  if (key) toggle(key)
+  const label = (e.target as Element).closest<SVGElement>('.el__label')?.dataset.key
+  if (label) return toggle(label)
+  const svg = e.currentTarget as SVGSVGElement
+  const g = geo.value
+  const ctm = svg.getScreenCTM()
+  if (!g || !ctm) return
+  const pt = new DOMPoint(e.clientX, e.clientY).matrixTransform(ctm.inverse())
+  let best: (typeof g.dots)[number] | null = null
+  let d2 = Infinity
+  for (const d of g.dots) {
+    const dd = (d.x - pt.x) ** 2 + (d.y - pt.y) ** 2
+    if (dd < d2) {
+      d2 = dd
+      best = d
+    }
+  }
+  const reach = tok.value.seatMax
+  if (best?.bloc && d2 <= reach * reach) toggle(best.bloc.key)
   else selectedKey.value = null
 }
+
+const issue = computed(() =>
+  shown.value ? totalsIssue(shown.value.election, shown.value.parties) : null,
+)
+const selectedMeta = computed(() => {
+  const b = selected.value
+  if (!b) return ''
+  const parts = [`${b.seats} ${b.seats === 1 ? 'seat' : 'seats'}`]
+  if (b.voteShare !== undefined) parts.push(`${fmtShare(b.voteShare)} of the vote`)
+  if (b.change !== undefined)
+    parts.push(
+      `${fmtChange(b.change)} seats${previousYear.value ? ` since ${previousYear.value}` : ''}`,
+    )
+  return `${shown.value?.year ?? ''} · ${parts.join(' · ')}`
+})
+const selectedSource = computed(() => {
+  const p = selected.value?.party
+  if (!p?.sourceAnchor) return selected.value?.members ? 'Grouped by the editor.' : undefined
+  return `From the results table in “${p.sourceAnchor.sectionTitle}”${isLatest.value ? '' : `, ${shown.value?.election.name}`}.`
+})
 
 const ariaSummary = computed(() =>
   blocs.value
@@ -426,6 +521,8 @@ const ariaSummary = computed(() =>
         </tr>
       </tbody>
     </table>
+
+    <small v-if="issue && fallback" class="el__warn" role="note">{{ issue }}</small>
 
     <div v-if="items.length && !fallback" class="el__rich">
       <!-- Seat diagram -->
@@ -492,6 +589,14 @@ const ariaSummary = computed(() =>
             @keydown.enter.prevent="toggle(l.key)"
             @keydown.space.prevent="toggle(l.key)"
           >
+            <line
+              v-if="l.leader"
+              class="el__leader"
+              :x1="l.leader[0]"
+              :y1="l.leader[1]"
+              :x2="l.leader[2]"
+              :y2="l.leader[3]"
+            />
             <text :x="l.x" :y="l.y" :text-anchor="l.anchor">
               <tspan class="el__label-name">{{ l.text }}</tspan>
               <tspan class="el__label-n">{{ `\u00a0${l.seats}` }}</tspan>
@@ -542,7 +647,7 @@ const ariaSummary = computed(() =>
 
       <ul v-if="showList" class="el__list">
         <li
-          v-for="b in blocs.filter((x) => x.seats > 0 && (narrow || geo?.unplaced.includes(x.key)))"
+          v-for="b in blocs.filter((x) => x.seats > 0)"
           :key="b.key"
           :class="{ 'el__list-item--dim': selected && selected.key !== b.key }"
         >
@@ -569,31 +674,23 @@ const ariaSummary = computed(() =>
       </ul>
 
       <!-- The selected party -->
-      <div v-if="selected" class="el__note-box" role="status">
-        <div class="el__callout-name">{{ selected.name }}</div>
-        <small class="el__callout-meta">
-          {{ selected.seats }} {{ selected.seats === 1 ? 'seat' : 'seats'
-          }}<template v-if="selected.voteShare !== undefined">
-            · {{ fmtShare(selected.voteShare) }} of the vote</template
-          ><template v-if="selected.change !== undefined && previousYear">
-            · {{ fmtChange(selected.change) }} seats since {{ previousYear }}</template
-          >
-          <template v-else-if="selected.change !== undefined">
-            · {{ fmtChange(selected.change) }} seats</template
-          >
-        </small>
+      <small v-if="issue" class="el__warn" role="note">{{ issue }}</small>
+
+      <!-- The selected party: below the figure, never over it. -->
+      <SelectionCard
+        v-if="selected"
+        :title="selected.name"
+        :subtitle="selected.label !== selected.name ? selected.label : undefined"
+        :meta="selectedMeta"
+        :source-note="selectedSource"
+        :can-show-source="!!selected.party?.sourceAnchor && isLatest && canShowSource"
+        @show-source="emit('select', selected.party!)"
+        @close="selectedKey = null"
+      >
         <small v-if="selected.members" class="el__callout-members">{{
           selected.members.map((m) => m.name).join(', ')
         }}</small>
-        <button
-          v-if="selected.party?.sourceAnchor && isLatest && canShowSource"
-          type="button"
-          class="el__link"
-          @click="emit('select', selected.party)"
-        >
-          <small>Show in article</small>
-        </button>
-      </div>
+      </SelectionCard>
     </div>
   </div>
 </template>
@@ -844,10 +941,16 @@ small,
 }
 
 /* ── The selected party ─────────────────────────────────────────────────── */
-.el__note-box {
-  margin-top: var(--viz-space-m);
-  padding-top: var(--viz-space-s);
-  border-top: var(--viz-line-width) solid var(--viz-rule-light);
+.el__leader {
+  stroke: var(--viz-rule);
+  stroke-width: var(--viz-line-width);
+}
+.el__warn {
+  display: block;
+  margin-top: var(--viz-space-s);
+  padding-inline-start: var(--viz-space-s);
+  border-inline-start: var(--viz-focus-width) solid var(--viz-warning);
+  color: var(--viz-ink-secondary);
 }
 .el__callout-meta,
 .el__callout-members {

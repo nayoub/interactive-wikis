@@ -9,11 +9,11 @@
  * left–right order is inferred.
  */
 import { computed, ref } from 'vue'
-import { CdxButton, CdxIcon, CdxSelect, CdxTextInput } from '@wikimedia/codex'
+import { CdxButton, CdxIcon, CdxMessage, CdxSelect, CdxTextInput } from '@wikimedia/codex'
 import { cdxIconArticle, cdxIconDraggable, cdxIconTable } from '@wikimedia/codex-icons'
 
 import type { LoadedArticle } from '../host/loadArticle'
-import { electionsOf, groupedOut } from '../model/parties'
+import { electionsOf, groupedOut, totalsIssue } from '../model/parties'
 import type { ColumnRole, Draft, Party, VisualForm } from '../model/types'
 import { proposeRoles } from '../pick/tables'
 import { hemicycle } from '../render/hemicycle'
@@ -156,6 +156,16 @@ const infoboxOrder = computed(() => {
     : []
   return fresh.map((p) => p.key)
 })
+/** Seats that do not add up to what the article states, per election shown. */
+const issues = computed(() =>
+  electionsOf(items.value, spec.value)
+    .filter((e, i, all) => spec.value.years || i === all.length - 1)
+    .map((e) => ({ year: e.year, text: totalsIssue(e.election, e.parties) }))
+    .filter((x) => x.text),
+)
+const orderName = computed(() =>
+  spec.value.orderFrom === 'diagram' ? 'the article’s seat diagram' : 'the results table',
+)
 const reordered = computed(() => items.value.some((p, i) => infoboxOrder.value[i] !== p.key))
 function resetOrder() {
   const rank = new Map(infoboxOrder.value.map((k, i) => [k, i]))
@@ -225,6 +235,11 @@ const figures = (p: Party) =>
       >
       <button type="button" class="vc__link" @click="emit('showTable')"><small>Show</small></button>
     </div>
+
+    <CdxMessage v-for="x in issues" :key="x.year" type="warning" class="vc__issue">
+      <b>{{ x.year }}:</b> {{ x.text }} The figure shows the table’s seats; check the table before
+      inserting.
+    </CdxMessage>
 
     <!-- Columns -->
     <section class="vc__section">
@@ -342,9 +357,9 @@ const figures = (p: Party) =>
     <section class="vc__section">
       <div class="vc__row">
         <div class="vc__h">Order</div>
-        <small class="vc__muted">{{ reordered ? 'Your order' : 'As in the infobox' }}</small>
+        <small class="vc__muted">{{ reordered ? 'Your order' : `As in ${orderName}` }}</small>
         <CdxButton v-if="reordered" size="small" weight="quiet" class="vc__push" @click="resetOrder"
-          >Infobox order</CdxButton
+          >Reset order</CdxButton
         >
       </div>
       <ol ref="listRef" class="vc__parties" :class="{ 'vc__parties--dragging': dragging }">
@@ -420,6 +435,9 @@ const figures = (p: Party) =>
 </template>
 
 <style scoped>
+.vc__issue {
+  margin-bottom: var(--spacing-75);
+}
 .vc__section {
   padding-block: var(--spacing-75);
   border-top: var(--border-width-base, 1px) solid var(--border-color-subtle);

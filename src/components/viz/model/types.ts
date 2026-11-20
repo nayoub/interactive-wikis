@@ -122,8 +122,21 @@ export interface Party extends BaseItem {
 export interface ElectionMeta {
   name: string
   date: string
+  /** "All N seats" in the infobox. */
   chamberSize?: number
   majority?: number
+  /** The results table's Total row, in the seats column. */
+  tableTotal?: number
+  /** The article's parliament diagram: its file and its number of seats. */
+  diagramFile?: string
+  diagramTotal?: number
+}
+
+/** An article's parliament diagram, read at build time (election/scripts/seating.py): parties left to right. */
+export interface Seating {
+  file: string
+  total: number
+  parties: { label: string; color: string; seats: number }[]
 }
 
 export type ColumnRole = 'category' | 'seats' | 'votes' | 'share' | 'change' | 'ignore'
@@ -145,6 +158,8 @@ export interface VisualSpec {
   /** …or under this share of the vote (share bars) are merged into "Others". */
   minShare: number
   election: ElectionMeta
+  /** Where the default party order came from: the article's parliament diagram, or the table. */
+  orderFrom?: 'diagram' | 'table'
   /** Earlier elections, oldest last, read from their own snapshotted articles. */
   previous: { election: ElectionMeta; parties: Party[] }[]
 }

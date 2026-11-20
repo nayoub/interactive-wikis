@@ -3,15 +3,17 @@
  * editor's column roles. Every figure is read from the table; nothing is
  * computed except sums used to recognise columns.
  *
- *   - order: the article's own infobox order; parties it doesn't list follow,
- *     by seats then votes (no left–right political order is inferred)
+ *   - order: the article's own parliament diagram, left to right (a half
+ *     circle implies real seating), matched by colour, then name, then seats;
+ *     without a diagram, the results table's order. No left–right political
+ *     order is inferred.
  *   - short name: the infobox's link text for the same link; else a
  *     combined infobox entry ("CDU/CSU") split by initials; else the infobox
  *     entry with the same seats won (a renamed article: "Die Linke" →
  *     The_Left_(Germany)); else the name
  *   - colour: the row's colour cell (Template:Party color in the table)
  */
-import type { ColumnRole, ElectionMeta, Party } from '../model/types'
+import type { ColumnRole, ElectionMeta, Party, Seating } from '../model/types'
 import {
   parseNumber,
   partyRows,
@@ -34,6 +36,7 @@ export function buildParties(
   roles: ColumnRole[],
   infobox: InfoboxElection,
   year: string,
+  seating?: Seating,
 ): Party[] {
   const col = (r: ColumnRole) => roles.indexOf(r)
   const cat = col('category')
@@ -76,7 +79,7 @@ export function buildParties(
     }
   })
 
-  // Short names and order from the infobox.
+  // Short names from the infobox.
   const slot = new Map<string, number>()
   infobox.order.forEach((o, i) => {
     const byLink = parties.find((p) => p.key === o.linkTitle)
@@ -110,20 +113,62 @@ export function buildParties(
     if (p.shortName === p.name && p.name.length > 14) p.shortName = initials(p.name) || p.name
     p.label = p.shortName
   }
-  return parties.sort((a, b) => {
-    const sa = slot.get(a.id)
-    const sb = slot.get(b.id)
-    if (sa !== undefined && sb !== undefined) return sa - sb
-    if (sa !== undefined) return -1
-    if (sb !== undefined) return 1
-    return (b.seats ?? 0) - (a.seats ?? 0) || (b.votes ?? 0) - (a.votes ?? 0)
+  if (!seating) return parties // the table's order
+  const rank = seatingRanks(parties, seating)
+  const tableIndex = new Map(parties.map((p, i) => [p.id, i]))
+  // Parties in the diagram, left to right; the rest (no seats) after, in table order.
+  return [...parties].sort(
+    (a, b) =>
+      (rank.get(a.id) ?? 1e6 + tableIndex.get(a.id)!) -
+      (rank.get(b.id) ?? 1e6 + tableIndex.get(b.id)!),
+  )
+}
+
+const hex = (c?: string) => {
+  const h = c
+    ?.trim()
+    .toLowerCase()
+    .match(/^#([0-9a-f]{3}|[0-9a-f]{6})/)?.[1]
+  return h ? (h.length === 3 ? [...h].map((x) => x + x).join('') : h) : ''
+}
+const word = (s: string) =>
+  s
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]/g, '')
+
+/** Each diagram group's party: same colour, else same name, else the one party with the same seats. */
+export function seatingRanks(parties: Party[], seating: Seating): Map<string, number> {
+  const rank = new Map<string, number>()
+  const free = (p: Party) => !rank.has(p.id) && (p.seats ?? 0) > 0
+  seating.parties.forEach((g, i) => {
+    const byColour = parties.filter((p) => free(p) && hex(p.color) && hex(p.color) === hex(g.color))
+    const label = word(g.label)
+    const byName = parties.filter(
+      (p) =>
+        free(p) &&
+        [p.shortName, initials(p.name), p.name].some((n) => {
+          const w = word(n)
+          return w === label || (label.length > 3 && w.includes(label))
+        }),
+    )
+    const bySeats = parties.filter((p) => free(p) && p.seats === g.seats)
+    const p =
+      (byColour.length === 1 && byColour[0]) ||
+      (byName.length === 1 && byName[0]) ||
+      (bySeats.length === 1 && bySeats[0]) ||
+      null
+    if (p) rank.set(p.id, i)
   })
+  return rank
 }
 
 export function electionMeta(
   infobox: InfoboxElection,
   table: ParsedTable,
   roles: ColumnRole[],
+  seating?: Seating,
 ): ElectionMeta {
   // Chamber size from the infobox; the table's Total row is the cross-check.
   const seatsCol = roles.indexOf('seats')
@@ -135,6 +180,9 @@ export function electionMeta(
     date: infobox.date,
     chamberSize: infobox.chamberSize ?? tableTotal,
     majority: infobox.majority,
+    tableTotal,
+    diagramFile: seating?.file,
+    diagramTotal: seating?.total,
   }
 }
 

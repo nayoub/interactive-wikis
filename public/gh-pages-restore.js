@@ -12,6 +12,11 @@
   )
   if (m && m[2]) return
   sessionStorage.removeItem(key)
+  // Only a pr-preview or codex/<variant> base index restores a path. Anywhere
+  // else the stored path is stale (left by an earlier preview visit): appending
+  // it to this page's own path would send the router to a route that does not
+  // exist and render a blank page.
+  if (!m) return
   var base = l.pathname.replace(/\/$/, '') || l.pathname
   h.replaceState(null, '', base + stored)
 })(location, history)

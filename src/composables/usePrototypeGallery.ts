@@ -29,7 +29,9 @@ export function usePrototypeGallery(galleryTab: Ref<GalleryTab>) {
   const galleryState = computed(() => {
     const visibleEntries = router
       .getRoutes()
-      .filter((r) => r.path !== '/' && r.path !== '/:catchAll(.*)')
+      // Not the gallery itself, and not redirects (the hub's entry and old routes).
+      .filter((r) => r.path !== '/' && r.path !== '/gallery' && r.path !== '/:catchAll(.*)')
+      .filter((r) => !r.redirect)
       .filter((r) => isTopLevelPrototypePath(r.path))
       .filter((r) => r.meta.hidden !== true)
       .map((r) => parseGalleryEntry(r.meta, r.path))
@@ -41,8 +43,8 @@ export function usePrototypeGallery(galleryTab: Ref<GalleryTab>) {
     const hidePrimary = route.meta.hidePrimary === true
     const hideSecondary = route.meta.hideSecondary === true
 
-    return filterGalleryEntriesByTab(galleryState.value.entries, galleryTab.value).filter(
-      (entry) => isEntryAllowedByLayout(entry, hidePrimary, hideSecondary),
+    return filterGalleryEntriesByTab(galleryState.value.entries, galleryTab.value).filter((entry) =>
+      isEntryAllowedByLayout(entry, hidePrimary, hideSecondary),
     )
   })
 

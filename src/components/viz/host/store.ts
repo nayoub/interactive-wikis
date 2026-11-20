@@ -33,6 +33,8 @@ export interface ModulesState {
   fallback: boolean
   /** Prototype check: draw party colours in one hue by lightness instead. */
   monochrome: boolean
+  /** The modules are exactly "Load example" (so `?example=1` reproduces them). */
+  fromExample: boolean
   width: Width
   /** Placed modules, at most one per kind. */
   modules: Partial<Record<ModuleKind, PlacedModule>>
@@ -55,6 +57,7 @@ function initial(): ModulesState {
     spacing: 'proportional',
     fallback: false,
     monochrome: false,
+    fromExample: false,
     width: 'desktop',
     modules: {},
     panelOpen: false,

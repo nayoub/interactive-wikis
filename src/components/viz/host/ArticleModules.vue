@@ -58,14 +58,19 @@ import type {
 // Host
 import { KINDS } from './kinds'
 import { GEHRY, loadArticle, type ArticleSource, type LoadedArticle } from './loadArticle'
+import { hub, type HubId } from './hub'
 import ModuleBlock from './ModuleBlock.vue'
-import { DEFAULTS, type ModulesStore } from './store'
+import PrototypeMenu from './PrototypeMenu.vue'
+import { DEFAULTS, type ModulesStore, type PlacedModule } from './store'
 
 const props = defineProps<{
   /** Which modules this page offers, in Insert-menu order. */
   kinds: ModuleKind[]
   store: ModulesStore
   forceSkin?: 'desktop' | 'mobile'
+  /** For the prototype menu in the header. */
+  hubId: HubId
+  example: () => Promise<Partial<Record<ModuleKind, PlacedModule>>>
   /** Which article (default: Frank Gehry). */
   source?: ArticleSource
 }>()
@@ -289,6 +294,7 @@ function commit() {
     ? state.modules[draft.kind]!.placement
     : draftPlacement.value
   state.modules = { ...state.modules, [draft.kind]: { data, placement } }
+  state.fromExample = false
   const kind = draft.kind
   state.draft = null
   state.panelOpen = false
@@ -305,6 +311,7 @@ function removeModule(kind: ModuleKind) {
   const next = { ...state.modules }
   delete next[kind]
   state.modules = next
+  state.fromExample = false
 }
 function moveModule(kind: ModuleKind, sectionId: string) {
   const s = sections.value.find((x) => x.id === sectionId)
@@ -317,6 +324,7 @@ function moveModule(kind: ModuleKind, sectionId: string) {
         placement: { kind: 'sectionTop', sectionId: s.id, sectionTitle: s.title },
       },
     }
+    state.fromExample = false
   }
   scrollToModule(kind)
 }
@@ -562,8 +570,18 @@ const backLabel = computed(() =>
     :skin="props.forceSkin"
     :show-footer="!(isMobile && editing)"
     :last-edited-notice="false"
+    tag="Prototype"
   >
     <template v-if="isMobile && editing" #header><span /></template>
+    <template #user-menu>
+      <PrototypeMenu
+        :current="hubId"
+        :kinds="kinds"
+        :store="store"
+        :example="example"
+        :skin="isMobile ? 'mobile' : 'desktop'"
+      />
+    </template>
 
     <VisualEditorPageLayout :sidebar-open="false" :editing="editing" :skin="skin">
       <div
@@ -720,6 +738,7 @@ const backLabel = computed(() =>
               :birth="birth"
               :skin="wide ? 'desktop' : skin"
               :layout="wide ? 'horizontal' : 'vertical'"
+              :can-show-source="false"
             />
             <ElectionView
               v-else-if="state.draft.kind === 'visual' && state.draft.spec"
@@ -758,12 +777,19 @@ const backLabel = computed(() =>
             :events="shown(kind)!.items as TimelineEvent[]"
             :title="shown(kind)!.title"
             :spacing="state.spacing"
-            :fallback="state.fallback"
+            :fallback="hub.fallback"
             :skin="skin"
             :options="shown(kind)!.options as never"
             :birth="birth"
             :active-ids="activeIds('timeline')"
             @select="jumpToSource('timeline', $event)"
+            @focus="
+              selected = $event
+                ? { kind: 'timeline', id: $event.id }
+                : selected?.kind === 'timeline'
+                  ? null
+                  : selected
+            "
           />
           <ElectionView
             v-else-if="kind === 'visual' && shown(kind)!.spec"
@@ -771,7 +797,7 @@ const backLabel = computed(() =>
             :items="shown(kind)!.items as Party[]"
             :spec="shown(kind)!.spec!"
             :title="shown(kind)!.title"
-            :fallback="state.fallback"
+            :fallback="hub.fallback"
             :monochrome="state.monochrome"
             @select="jumpToSource('visual', $event)"
           />
@@ -780,7 +806,7 @@ const backLabel = computed(() =>
             :ref="(el: any) => (mapRef = el)"
             :places="shown(kind)!.items as Place[]"
             :title="shown(kind)!.title"
-            :fallback="state.fallback"
+            :fallback="hub.fallback"
             :options="shown(kind)!.options as never"
             :active-ids="activeIds('map')"
             @select="jumpToSource('map', $event)"

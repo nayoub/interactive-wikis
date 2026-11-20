@@ -102,6 +102,7 @@
   --viz-seat-min: 10px; /* closest dot centres; below this one dot stands for two seats */
   --viz-seat-max: 12px; /* loosest dot centres on wide columns */
   --viz-hemicycle-inner: 0.4; /* inner radius / outer radius */
+  --viz-block-gap: 4px; /* extra page between neighbouring parties, in colour and monochrome */
   --viz-label-room: 104px; /* beside the hemicycle, for direct labels */
   --viz-narrow: 560px; /* below this width labels move to a list under the diagram */
   --viz-dim: 0.18; /* other parties while one is selected */
@@ -111,6 +112,7 @@
   --viz-bar-value-room: 5em; /* after the longest bar, for its value */
   --viz-others: var(--color-placeholder); /* "Others": always neutral */
   --viz-majority: var(--viz-ink); /* the majority tick */
+  --viz-warning: var(--border-color-warning); /* figures that do not add up */
 
   /* Motion */
   --viz-transition: 120ms;

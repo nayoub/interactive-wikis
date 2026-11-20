@@ -20,18 +20,14 @@ import '../tokens.css'
 
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { CdxButton, CdxIcon } from '@wikimedia/codex'
-import {
-  cdxIconAdd,
-  cdxIconClose,
-  cdxIconFullscreen,
-  cdxIconSubtract,
-} from '@wikimedia/codex-icons'
+import { cdxIconAdd, cdxIconFullscreen, cdxIconSubtract } from '@wikimedia/codex-icons'
 
 import { dateYears, formatDate } from '../model/dates'
 import { sortPlaces } from '../model/places'
 import { levelFor, loadCoarse, loadTiles, loaded, tilesFor } from './baseMap'
 import { createVectorBase, type VectorBase } from './vectorBase'
 import type { MapOptions, Place } from '../model/types'
+import SelectionCard from './SelectionCard.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -364,18 +360,6 @@ function closeCallout() {
   if (openIndex.value !== null) emit('focus', null)
   openIndex.value = null
 }
-const calloutStyle = computed(() => {
-  const i = openIndex.value
-  if (i === null) return {}
-  const c = clusterOf.value.get(i)
-  if (!c) return {}
-  const below = c.y < height.value / 2
-  return {
-    left: `${Math.max(8, Math.min(width.value - 8, c.x))}px`,
-    top: `${below ? c.y + c.r + tok.value.gap : c.y - c.r - tok.value.gap}px`,
-    '--callout-shift': below ? '0%' : '-100%',
-  }
-})
 const year = (p: Place) => (p.date ? formatDate(p.date) : null)
 /** What the map calls a place: the editor's label (drafted from the article's own wording). */
 const nameOf = (p: Place) => p.label || p.name
@@ -443,7 +427,11 @@ function onClickCapture(e: MouseEvent) {
     e.stopPropagation()
     e.preventDefault()
     dragged = false
+    return
   }
+  // A tap on the map itself (not a mark or a control) clears the selection.
+  if (!(e.target as Element).closest('.map__mark, .map__controls, .map__attribution'))
+    closeCallout()
 }
 function onWheel(e: WheelEvent) {
   if (!e.ctrlKey && !e.metaKey) return // plain wheel scrolls the page
@@ -610,7 +598,10 @@ const titleId = `map-title-${Math.random().toString(36).slice(2, 8)}`
                 class="map__mark"
                 :class="[
                   stepOf(i) ? `map__mark--step${stepOf(i)}` : '',
-                  { 'map__mark--lit': active(p.id) || openIndex === i },
+                  {
+                    'map__mark--lit': active(p.id) || openIndex === i,
+                    'map__mark--dim': openIndex !== null && openIndex !== i,
+                  },
                 ]"
                 :style="{ left: `${clusterOf.get(i)!.x}px`, top: `${clusterOf.get(i)!.y}px` }"
                 :aria-label="`${nameOf(p)}${year(p) ? ', ' + year(p) : ''}`"
@@ -624,6 +615,8 @@ const titleId = `map-title-${Math.random().toString(36).slice(2, 8)}`
                 class="map__mark map__cluster"
                 :class="{
                   'map__mark--lit': clusterOf.get(i)!.ids.some((k) => active(sorted[k].id)),
+                  'map__mark--dim':
+                    openIndex !== null && !clusterOf.get(i)!.ids.includes(openIndex),
                 }"
                 :style="{
                   left: `${clusterOf.get(i)!.x}px`,
@@ -643,56 +636,16 @@ const titleId = `map-title-${Math.random().toString(36).slice(2, 8)}`
             <small
               v-if="labels.get(i)"
               class="map__label"
-              :class="{ 'map__label--lit': active(p.id) || openIndex === i }"
+              :class="{
+                'map__label--lit': active(p.id) || openIndex === i,
+                'map__mark--dim': openIndex !== null && openIndex !== i,
+              }"
               :style="{ left: `${labels.get(i)!.x}px`, top: `${labels.get(i)!.y}px` }"
               aria-hidden="true"
               >{{ nameOf(p) }}</small
             >
           </li>
         </ol>
-
-        <div
-          v-if="openPlace"
-          class="map__callout"
-          :style="calloutStyle"
-          role="dialog"
-          :aria-label="nameOf(openPlace)"
-        >
-          <button type="button" class="map__callout-close" aria-label="Close" @click="closeCallout">
-            <CdxIcon :icon="cdxIconClose" size="x-small" />
-          </button>
-          <img
-            v-if="openPlace.image"
-            class="map__img"
-            :src="openPlace.image.src"
-            :alt="openPlace.image.caption"
-            :title="openPlace.image.fileTitle ?? openPlace.image.caption"
-          />
-          <div class="map__callout-name">{{ nameOf(openPlace) }}</div>
-          <small v-if="openPlace.name !== nameOf(openPlace)" class="map__callout-label">{{
-            openPlace.name
-          }}</small>
-          <small class="map__callout-meta"
-            >{{ openPlace.country ?? 'Unknown country'
-            }}<template v-if="year(openPlace)"> · {{ year(openPlace) }}</template></small
-          >
-          <div class="map__callout-actions">
-            <button
-              v-if="openPlace.sourceAnchor && canShowSource"
-              type="button"
-              class="map__callout-link"
-              @click="emit('select', openPlace)"
-            >
-              <small>Show in article</small>
-            </button>
-            <button type="button" class="map__callout-link" @click="zoomToPlace(openIndex!)">
-              <small>Zoom in here</small>
-            </button>
-          </div>
-          <small v-if="!openPlace.sourceAnchor" class="map__callout-meta"
-            >Not mentioned in the article text.</small
-          >
-        </div>
 
         <small class="map__attribution"
           ><a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> ©
@@ -720,6 +673,29 @@ const titleId = `map-title-${Math.random().toString(36).slice(2, 8)}`
           </CdxButton>
         </div>
       </div>
+
+      <!-- The selected place: below the map, never over it. -->
+      <SelectionCard
+        v-if="openPlace"
+        :title="nameOf(openPlace)"
+        :subtitle="openPlace.name !== nameOf(openPlace) ? openPlace.name : undefined"
+        :meta="
+          [openPlace.country ?? 'Unknown country', year(openPlace)].filter(Boolean).join(' · ')
+        "
+        :quote="openPlace.sourceText || undefined"
+        :citation="openPlace.citation"
+        :source-note="openPlace.sourceAnchor ? undefined : 'Not mentioned in the article text.'"
+        :image="openPlace.image"
+        :can-show-source="!!openPlace.sourceAnchor && canShowSource"
+        @show-source="emit('select', openPlace)"
+        @close="closeCallout"
+      >
+        <template #actions>
+          <button type="button" @click="zoomToPlace(openIndex!)">
+            <small>Zoom in here</small>
+          </button>
+        </template>
+      </SelectionCard>
 
       <div v-if="steps.length" class="map__legend" aria-label="Shade by date">
         <span v-for="s in steps" :key="s.step" class="map__legend-step">
@@ -768,12 +744,6 @@ const titleId = `map-title-${Math.random().toString(36).slice(2, 8)}`
   margin-block-end: var(--viz-space-l);
 }
 .map__title,
-.map__callout-name {
-  font-family: var(--viz-font-family);
-  font-size: var(--viz-heading-size);
-  font-weight: var(--viz-heading-weight);
-  line-height: var(--viz-heading-line);
-}
 small,
 .map__label {
   font-family: var(--viz-font-family);
@@ -955,31 +925,6 @@ small,
 }
 
 /* Callout: a small plain box, thin rule, no shadow. */
-.map__callout {
-  position: absolute;
-  z-index: 2;
-  width: calc(var(--viz-image-width) * 2.2);
-  max-width: calc(100% - 2 * var(--viz-space-s));
-  padding: var(--viz-space-s) var(--viz-space-m) var(--viz-space-m);
-  transform: translate(-50%, var(--callout-shift, 0%));
-  background: var(--viz-paper);
-  border: var(--viz-line-width) solid var(--viz-rule);
-  border-radius: var(--viz-radius);
-  cursor: default;
-}
-.map--narrow .map__callout {
-  left: 50% !important;
-}
-.map__callout-close {
-  position: absolute;
-  top: var(--viz-space-xs);
-  right: var(--viz-space-xs);
-  padding: var(--viz-space-xs);
-  border: 0;
-  background: none;
-  color: var(--viz-ink-tertiary);
-  cursor: pointer;
-}
 .map__img {
   display: block;
   width: var(--viz-image-width);
@@ -988,30 +933,6 @@ small,
   border-radius: var(--viz-radius);
   background: var(--viz-image-empty);
   margin-bottom: var(--viz-space-s);
-}
-.map__callout-meta,
-.map__callout-label {
-  display: block;
-  color: var(--viz-ink-secondary);
-}
-.map__callout-meta {
-  color: var(--viz-ink-tertiary);
-}
-.map__callout-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0 var(--viz-space-l);
-}
-.map__callout-link {
-  margin-top: var(--viz-space-s);
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--viz-accent);
-  cursor: pointer;
-}
-.map__callout-link:hover {
-  text-decoration: underline;
 }
 
 .map__controls {
@@ -1023,6 +944,10 @@ small,
   background: var(--viz-paper);
   border: var(--viz-line-width) solid var(--viz-rule-light);
   border-radius: var(--viz-radius);
+}
+
+.map__mark--dim {
+  opacity: var(--viz-dim);
 }
 
 /* Legend: the four steps and their years. */

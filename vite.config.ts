@@ -1,4 +1,11 @@
-import { copyFileSync, existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs'
 import { fileURLToPath, URL } from 'node:url'
 import { resolve } from 'node:path'
 
@@ -6,6 +13,7 @@ import { defineConfig } from 'vite'
 import VueRouter from 'unplugin-vue-router/vite'
 import vue from '@vitejs/plugin-vue'
 
+import hubRoutes from './src/components/viz/host/hub-routes.json'
 import { readCodexBuildInfo } from './scripts/lib-codex-build-info.mjs'
 import { reconcileCodexInstall } from './scripts/reconcile-codex-install.mjs'
 import { protowikiCodexDevSwitch } from './scripts/vite-plugin-codex-dev-switch.mjs'
@@ -92,15 +100,22 @@ export default defineConfig(async ({ command, isPreview }) => {
             return
           }
           copyFileSync(index, fallback)
-          // A real page per top-level prototype route (`<name>.html`), so GitHub
-          // Pages answers `/<base>/<name>` with 200 rather than the 404 fallback
-          // (link previews, fetch-based tools and crawlers see a real page).
-          // Nested routes still go through 404.html.
+          // A real page per top-level prototype route, so GitHub Pages answers
+          // `/<base>/<name>` and `/<base>/<name>/` with 200 rather than the 404
+          // fallback (link previews, fetch-based tools and crawlers see a real
+          // page): `<name>.html` and `<name>/index.html`. Old hub routes that
+          // now redirect get the same. Nested routes still go through 404.html.
           const prototypes = resolve(__dirname, 'src/prototypes')
+          const names = new Set(hubRoutes.map((r) => r.legacy.replace(/^\//, '')))
           for (const entry of readdirSync(prototypes, { withFileTypes: true })) {
             if (entry.isDirectory() && existsSync(resolve(prototypes, entry.name, 'index.vue'))) {
-              copyFileSync(index, resolve(dist, `${entry.name}.html`))
+              names.add(entry.name)
             }
+          }
+          for (const name of names) {
+            copyFileSync(index, resolve(dist, `${name}.html`))
+            mkdirSync(resolve(dist, name), { recursive: true })
+            copyFileSync(index, resolve(dist, name, 'index.html'))
           }
           const html = readFileSync(fallback, 'utf8')
           const preamble = `<script>${ghPagesPreview404Script}</script>`

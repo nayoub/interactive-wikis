@@ -100,3 +100,25 @@ export function groupedOut(order: Party[], spec: VisualSpec, measure: 'seats' | 
     measure === 'share' ? (p.voteShare ?? 0) < spec.minShare : (p.seats ?? 0) < spec.minSeats,
   )
 }
+
+/**
+ * Do the parties' seats add up to what the article states? Checked against the
+ * infobox ("All N seats"), the results table's Total row and the parliament
+ * diagram. Null when they agree; else a sentence naming every number.
+ */
+export function totalsIssue(e: ElectionMeta, parties: Party[]): string | null {
+  const sum = parties.reduce((s, p) => s + (p.seats ?? 0), 0)
+  if (!sum) return null
+  const stated: [string, number | undefined][] = [
+    ['the infobox', e.chamberSize],
+    ['the results table’s total', e.tableTotal],
+    ['the parliament diagram', e.diagramTotal],
+  ]
+  const off = stated.filter(([, n]) => n !== undefined && n !== sum)
+  if (!off.length) return null
+  const agree = stated.filter(([, n]) => n === sum).map(([w]) => w)
+  return (
+    `Party seats add up to ${sum}${agree.length ? ` (as ${agree.join(' and ')})` : ''}, ` +
+    `but ${off.map(([w, n]) => `${w} shows ${n}`).join(' and ')}.`
+  )
+}

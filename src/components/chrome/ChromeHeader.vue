@@ -42,12 +42,15 @@ interface Props {
   /**
    * When true, default tool controls open prototyping settings; wordmarks link to the Main Page.
    */
+  /** A small permanent tag beside the wordmark (e.g. "Prototype"), so a mock is never mistaken for the real site. */
+  tag?: string
   prototypingSettings?: boolean
   /** Forwarded to Vector chrome — bookmark links to saved pages template. */
   savedPagesRoute?: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
+  tag: undefined,
   skin: undefined,
   theme: undefined,
   username: undefined,
@@ -187,6 +190,7 @@ const minervaRight = computed((): HeaderItem[] | undefined => {
     :nav-tools="props.navTools"
     :prototyping-settings="props.prototypingSettings"
     :saved-pages-route="props.savedPagesRoute"
+    :tag="props.tag"
   >
     <template v-if="slots.menu" #menu>
       <slot name="menu" />
@@ -214,5 +218,6 @@ const minervaRight = computed((): HeaderItem[] | undefined => {
     :wordmark-src="props.wordmarkSrc"
     :mobile-wordmark-src="props.mobileWordmarkSrc"
     :prototyping-settings="props.prototypingSettings"
+    :tag="props.tag"
   />
 </template>

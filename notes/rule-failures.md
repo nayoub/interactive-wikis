@@ -106,3 +106,15 @@ fixed in the rules.
 - "Seats won by state" tables → not lit (parties as columns) → same.
 - "Seats targeted by The Left / the Free Voters" → lit, *share* = the winner's 2021 share → offered as bars, which is a valid but odd chart; a seat diagram is rightly not offered.
 - "Sociology of the electorate" → lit, *share* = the first party column (Union) only → bars of one party by demographic; the other parties' columns are ignored as "another percentage column".
+
+## Totals: 2021 shows 735 seats, the 2025 article says 736
+
+- The 2025 article's lead says the Bundestag went "down from 736 in 2021". The 2021 article's infobox says "All 735 seats", its results table totals 735 (FDP 91), and its own parliament diagram (`File:Bundestag_2021.svg`) has 736 seats (FDP 92). The infobox explains it in a footnote on FDP's 91: initially allocated 92 seats, it lost one in a repeat election in Berlin. The article's results section says when: the repeat election in 455 Berlin precincts on 11 February 2024 cost the FDP a seat, the Bundestag being "reduced from 736 to 735 members". So 736 is the result as first declared, 735 the legal result after the repeat; the table and infobox were updated, the diagram file and the 2025 article's sentence were not.
+- Rule now in force: party seats must equal every total the article states (infobox, the table's Total row, the parliament diagram). 2021 fails the diagram check → the curate panel shows a warning naming 735 and 736, and the figure carries the same note under it. The figure keeps the table's 735; it does not pick a side.
+
+## Seat order (election module)
+
+- Rule now in force: the default order is the article's own parliament diagram, read at build time (`src/prototypes/election/scripts/seating.py`: the SVG's party groups, left to right), matched to table rows by colour, then name, then seats. Before, the infobox order (by result) put AfD in the middle of the chamber.
+- 2025 diagram (`File:21st_Bundestag.svg`): Linke, SPD, Grüne, SSW, CDU, CSU, AfD → all matched by colour.
+- FDP has no seats in 2025, so the 2025 diagram does not seat it; in 2021 it would have fallen to the far right → placed where the most recent earlier diagram seated it (2021: between SSW and CDU).
+- The diagram is found by trying the SVGs in the Results section and infobox and keeping the one whose seats are within 10% of the infobox's chamber size. A diagram drawn by another tool (not one `<g>` per party) would not be read; the order then falls back to the results table's.

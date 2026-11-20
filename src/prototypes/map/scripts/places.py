@@ -10,7 +10,7 @@ Writes public/snapshots/frank-gehry.places.json keyed by the link's page title
 as it appears in the article HTML (`./Title` → "Title").
 
 Run from the repo root (default slug: frank-gehry):
-    python3 src/prototypes/map-module/scripts/places.py [--slug german-federal-election-2025]
+    python3 src/prototypes/map/scripts/places.py [--slug german-federal-election-2025]
 """
 import argparse
 import html
@@ -182,7 +182,7 @@ def main() -> None:
         p.pop("countryId", None)
 
     out = {
-        "source": "Wikidata, via enwiki page props; built by src/prototypes/map-module/scripts/places.py",
+        "source": "Wikidata, via enwiki page props; built by src/prototypes/map/scripts/places.py",
         "built": time.strftime("%Y-%m-%d"),
         "places": places,
     }

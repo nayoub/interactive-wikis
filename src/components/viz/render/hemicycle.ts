@@ -56,6 +56,24 @@ export function hemicycle(n: number, R: number, inner: number): { seats: Seat[];
   return { seats, spacing: (Math.PI * total) / n }
 }
 
+/**
+ * Open a gap of `gap` px between neighbouring blocks (`owner[i]` is the block of
+ * seat i, blocks numbered left to right). Each row is squeezed a little and
+ * every block after the first is moved right by one gap per block before it,
+ * so the gaps line up from the inner row to the outer one.
+ */
+export function withGaps(seats: Seat[], owner: number[], blocks: number, gap: number): Seat[] {
+  if (blocks < 2 || gap <= 0) return seats
+  return seats.map((p, i) => {
+    const r = Math.hypot(p.x, p.y)
+    if (!r) return p
+    const g = gap / r
+    const squeeze = Math.max(0.5, (Math.PI - (blocks - 1) * g) / Math.PI)
+    const angle = Math.PI - ((Math.PI - p.angle) * squeeze + owner[i] * g)
+    return { x: r * Math.cos(angle), y: -r * Math.sin(angle), angle }
+  })
+}
+
 /** The outer radius at which `n` dots sit `spacing` apart. */
 export function radiusFor(n: number, spacing: number, inner: number) {
   return spacing / Math.sqrt(((Math.PI / 2) * (1 - inner * inner)) / n)

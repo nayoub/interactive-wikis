@@ -894,7 +894,7 @@ const leadPhotoUrl = `${import.meta.env.BASE_URL}images/wet-leg-o2-infobox.jpg`
           </div>
         </section>
 
-        <p><RouterLink to="/">Back to gallery</RouterLink></p>
+        <p><RouterLink to="/gallery">Back to gallery</RouterLink></p>
       </section>
     </ArticleCustom>
   </ChromeWrapper>

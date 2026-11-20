@@ -23,7 +23,7 @@ import {
   type ParsedTable,
 } from '../pick/tables'
 import { indexBlock, proseBlocks, rangeFor, sentences } from '../pick/textIndex'
-import type { ArticleSection, EventImage, PartialDate } from '../model/types'
+import type { ArticleSection, EventImage, PartialDate, Seating } from '../model/types'
 import type { DateMention, PlaceInfo, PlaceMention, TableMention } from '../pick/types'
 
 export type { DateMention, PlaceMention, TableMention }
@@ -50,6 +50,7 @@ export interface RelatedArticle {
   title: string
   tables: ParsedTable[]
   infobox: InfoboxElection
+  seating?: Seating
 }
 
 export interface LoadedArticle {
@@ -63,6 +64,8 @@ export interface LoadedArticle {
   /** Election infobox: chamber size, majority, the article's party order. */
   infobox: InfoboxElection
   previous: RelatedArticle[]
+  /** The article's own parliament diagram, if it has one. */
+  seating?: Seating
   source: ArticleSource
   images: EventImage[]
   sections: ArticleSection[]
@@ -92,13 +95,25 @@ export function loadArticle(source: ArticleSource = GEHRY): Promise<LoadedArticl
           .catch(() => ({})),
         Promise.all(
           (source.previous ?? []).map((p) =>
-            text(`${base}snapshots/${p.slug}.html`).then((html) => related(html, p.title)),
+            Promise.all([text(`${base}snapshots/${p.slug}.html`), seatingOf(p.slug)]).then(
+              ([html, seating]) => ({ ...related(html, p.title), seating }),
+            ),
           ),
         ),
-      ]).then(([html, places, previous]) => process(html, places, source, previous)),
+        seatingOf(source.slug),
+      ]).then(([html, places, previous, seating]) => ({
+        ...process(html, places, source, previous),
+        seating,
+      })),
     )
   return cache.get(source.slug)!
 }
+
+/** <slug>.seating.json, when the article has a parliament diagram. */
+const seatingOf = (slug: string): Promise<Seating | undefined> =>
+  fetch(`${import.meta.env.BASE_URL}snapshots/${slug}.seating.json`)
+    .then((r) => (r.ok ? r.json() : undefined))
+    .catch(() => undefined)
 
 const parse = (raw: string) => new DOMParser().parseFromString(`<body>${raw}</body>`, 'text/html')
 

@@ -6,8 +6,8 @@ image it references into public/snapshots/<slug>/, rewriting the <img src> to
 a relative local path so the prototype works offline.
 
 Run from the repo root:
-    python3 src/prototypes/timeline-module/scripts/snapshot.py [--revision N]
-    python3 src/prototypes/timeline-module/scripts/snapshot.py --title "2025 German federal election" --slug german-federal-election-2025
+    python3 src/prototypes/timeline/scripts/snapshot.py [--revision N]
+    python3 src/prototypes/timeline/scripts/snapshot.py --title "2025 German federal election" --slug german-federal-election-2025
 """
 import argparse
 import hashlib

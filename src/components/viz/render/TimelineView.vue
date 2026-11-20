@@ -20,6 +20,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 
 import { ageAt, dateYears, formatDate, isoDate, sortEvents } from '../model/dates'
 import type { PartialDate, TimelineEvent, TimelineOptions } from '../model/types'
+import SelectionCard from './SelectionCard.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -36,6 +37,8 @@ const props = withDefaults(
     activeId?: string | null
     /** Events to show as active (selected here, or linked from a map). */
     activeIds?: string[]
+    /** "Show in article" in the selected event's card (off in the editor's preview). */
+    canShowSource?: boolean
   }>(),
   {
     title: 'Timeline',
@@ -47,10 +50,16 @@ const props = withDefaults(
     birth: undefined,
     activeId: null,
     activeIds: () => [],
+    canShowSource: true,
   },
 )
 
-const emit = defineEmits<{ select: [event: TimelineEvent] }>()
+const emit = defineEmits<{
+  /** "Show in article" (or a click in the plain list): jump to the source sentence. */
+  select: [event: TimelineEvent]
+  /** The selected event changed (for linking to a map on the same page). */
+  focus: [event: TimelineEvent | null]
+}>()
 
 const sorted = computed(() => sortEvents(props.events))
 const n = computed(() => sorted.value.length)
@@ -81,8 +90,19 @@ onMounted(() => {
 onBeforeUnmount(() => ro?.disconnect())
 
 const hoverId = ref<string | null>(null)
+/** The selected event: lit, the rest dimmed, its card below the timeline. */
+const selectedId = ref<string | null>(null)
 const lit = (id: string) =>
-  hoverId.value === id || props.activeId === id || props.activeIds.includes(id)
+  hoverId.value === id ||
+  selectedId.value === id ||
+  props.activeId === id ||
+  props.activeIds.includes(id)
+const dimmed = (id: string) => !!selectedId.value && selectedId.value !== id
+const selectedEvent = computed(() => sorted.value.find((e) => e.id === selectedId.value) ?? null)
+function setSelected(id: string | null) {
+  selectedId.value = id
+  emit('focus', selectedEvent.value)
+}
 
 /** Horizontal needs at least one slot per event plus one for the margins; otherwise vertical. */
 const fitsHorizontally = computed(() => width.value >= (n.value + 1) * geo.value.slot)
@@ -219,10 +239,18 @@ function verticalGap(i: number) {
 // ── Interaction ────────────────────────────────────────────────────────────
 function onActivate(e: MouseEvent, event: TimelineEvent) {
   e.preventDefault()
-  emit('select', event)
+  e.stopPropagation()
+  // The plain list jumps straight to the source; the timeline selects first.
+  if (props.fallback) return emit('select', event)
+  setSelected(selectedId.value === event.id ? null : event.id)
+}
+/** A click on the figure but not on an event clears the selection. */
+function onFigureClick(e: MouseEvent) {
+  if (!(e.target as Element).closest('.tl-ev__link, .tl-ev__ref')) setSelected(null)
 }
 
 function onKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && selectedId.value) return setSelected(null)
   const keys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End']
   if (!keys.includes(e.key)) return
   const links = Array.from(
@@ -239,6 +267,7 @@ function onKeydown(e: KeyboardEvent) {
 }
 
 function focusEvent(id: string) {
+  selectedId.value = id
   rootRef.value
     ?.querySelector<HTMLElement>(`.tl__rich [data-event-id="${id}"] .tl-ev__link`)
     ?.focus({ preventScroll: true })
@@ -286,7 +315,8 @@ const titleId = `tl-title-${Math.random().toString(36).slice(2, 8)}`
       </li>
     </ol>
 
-    <div v-if="sorted.length && !fallback" class="tl__rich">
+    <!-- eslint-disable-next-line vuejs-accessibility/click-events-have-key-events, vuejs-accessibility/no-static-element-interactions -->
+    <div v-if="sorted.length && !fallback" class="tl__rich" @click="onFigureClick">
       <!-- Horizontal -->
       <ol
         v-if="effectiveLayout === 'horizontal'"
@@ -302,7 +332,7 @@ const titleId = `tl-title-${Math.random().toString(36).slice(2, 8)}`
           class="tl-h__item tl-ev"
           :class="[
             above(i) ? 'tl-h__item--above' : 'tl-h__item--below',
-            { 'tl-ev--lit': lit(event.id) },
+            { 'tl-ev--lit': lit(event.id), 'tl-ev--dim': dimmed(event.id) },
           ]"
           :style="{ gridColumn: gridColumn(i) }"
           :data-event-id="event.id"
@@ -359,7 +389,7 @@ const titleId = `tl-title-${Math.random().toString(36).slice(2, 8)}`
             v-for="(event, i) in sorted"
             :key="`d${event.id}`"
             class="tl-dot"
-            :class="{ 'tl-dot--lit': lit(event.id) }"
+            :class="{ 'tl-dot--lit': lit(event.id), 'tl-dot--dim': dimmed(event.id) }"
             :style="{ left: `${dx(i)}px`, top: `${axisY}px` }"
           />
           <small
@@ -391,6 +421,7 @@ const titleId = `tl-title-${Math.random().toString(36).slice(2, 8)}`
             'tl-v__item--last': i === n - 1,
             'tl-v__item--elided': spacing === 'even' && skipped(i),
             'tl-ev--lit': lit(event.id),
+            'tl-ev--dim': dimmed(event.id),
           }"
           :style="{ '--gap': `${verticalGap(i)}px` }"
           :data-event-id="event.id"
@@ -402,7 +433,7 @@ const titleId = `tl-title-${Math.random().toString(36).slice(2, 8)}`
           }}</small>
           <span
             class="tl-dot tl-v__dot"
-            :class="{ 'tl-dot--lit': lit(event.id) }"
+            :class="{ 'tl-dot--lit': lit(event.id), 'tl-dot--dim': dimmed(event.id) }"
             aria-hidden="true"
           />
           <div class="tl-v__body">
@@ -434,6 +465,19 @@ const titleId = `tl-title-${Math.random().toString(36).slice(2, 8)}`
         </li>
       </ol>
     </div>
+
+    <!-- The selected event: below the timeline, never over it. -->
+    <SelectionCard
+      v-if="selectedEvent && !fallback"
+      :title="selectedEvent.label"
+      :meta="[formatDate(selectedEvent.date), age(selectedEvent)].filter(Boolean).join(' · ')"
+      :quote="selectedEvent.sourceText"
+      :citation="selectedEvent.citation"
+      :image="selectedEvent.image"
+      :can-show-source="canShowSource"
+      @show-source="emit('select', selectedEvent)"
+      @close="setSelected(null)"
+    />
 
     <p v-if="commonsImages.length" class="tl__credits">
       <small
@@ -547,6 +591,11 @@ small,
 .tl-ev__ref {
   position: relative;
   z-index: 1;
+}
+.tl-ev--dim,
+.tl-dot--dim {
+  opacity: var(--viz-dim);
+  transition: opacity var(--viz-transition);
 }
 .tl-ev--lit .tl-ev__date {
   color: var(--viz-accent);
