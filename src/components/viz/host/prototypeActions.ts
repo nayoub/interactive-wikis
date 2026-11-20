@@ -8,7 +8,11 @@ export async function loadExample(
 ) {
   const state = store.state
   const modules = await example()
-  state.modules = modules
+  // The general tool's example comes as `visuals` (any number), the others' as one module per kind.
+  const { visuals, ...perKind } = modules as typeof modules & { visuals?: typeof state.visuals }
+  state.modules = perKind
+  state.visuals = visuals ?? []
+  state.vdraft = null
   state.draft = null
   state.panelOpen = false
   state.mode = 'read'

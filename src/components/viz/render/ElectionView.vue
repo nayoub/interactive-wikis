@@ -31,10 +31,26 @@ const props = withDefaults(
     canShowSource?: boolean
     /** Ids of parties to show selected (linking from elsewhere). */
     activeIds?: string[]
+    /** Inside the general tool's frame: no header, card or plain list of its own. */
+    bare?: boolean
+    /** The selected item, when the frame owns the selection. */
+    selection?: string | null
   }>(),
-  { title: '', fallback: false, monochrome: false, canShowSource: true, activeIds: () => [] },
+  {
+    title: '',
+    fallback: false,
+    monochrome: false,
+    canShowSource: true,
+    activeIds: () => [],
+    bare: false,
+    selection: undefined,
+  },
 )
-const emit = defineEmits<{ select: [party: Party] }>()
+const emit = defineEmits<{
+  select: [party: Party]
+  /** The selected party changed (the general tool's frame shows its card). */
+  focus: [party: Party | null]
+}>()
 
 const titleId = useId()
 const rootRef = ref<HTMLElement | null>(null)
@@ -149,6 +165,14 @@ const outlined = (c: string) => contrast(c, tok.value.paper) < tok.value.contras
 
 // ── Selection ──────────────────────────────────────────────────────────────
 const selectedKey = ref<string | null>(null)
+watch(
+  () => props.selection,
+  (id) => {
+    if (id === undefined) return
+    selectedKey.value = props.items.find((p) => p.id === id)?.key ?? null
+  },
+)
+watch(selectedKey, (k) => emit('focus', props.items.find((p) => p.key === k) ?? null))
 watch(
   () => props.activeIds,
   (ids) => {
@@ -470,13 +494,18 @@ const ariaSummary = computed(() =>
   <div
     ref="rootRef"
     class="viz el"
-    :class="{ 'el--fallback': fallback, 'el--narrow': narrow, 'el--selecting': !!selected }"
+    :class="{
+      'el--fallback': fallback,
+      'el--narrow': narrow,
+      'el--selecting': !!selected,
+      'el--bare': bare,
+    }"
     role="group"
     :aria-labelledby="titleId"
     @keydown="onKeydown"
   >
     <small class="el__probe" aria-hidden="true" />
-    <div class="el__header">
+    <div v-if="!bare" class="el__header">
       <div :id="titleId" class="el__title">{{ title || shown?.election.name || 'Results' }}</div>
       <small class="el__meta">{{ meta }}</small>
     </div>
@@ -491,7 +520,7 @@ const ariaSummary = computed(() =>
     <p v-if="!items.length" class="el__empty"><small>No results yet.</small></p>
 
     <!-- Plain list: the results as a table, restyled. Also the print rendering. -->
-    <table v-if="items.length" class="el-fallback">
+    <table v-if="items.length && !bare" class="el-fallback">
       <thead>
         <tr>
           <th scope="col"><small>Party</small></th>
@@ -678,7 +707,7 @@ const ariaSummary = computed(() =>
 
       <!-- The selected party: below the figure, never over it. -->
       <SelectionCard
-        v-if="selected"
+        v-if="selected && !bare"
         :title="selected.name"
         :subtitle="selected.label !== selected.name ? selected.label : undefined"
         :meta="selectedMeta"
@@ -697,6 +726,11 @@ const ariaSummary = computed(() =>
 
 <style scoped>
 /* Everything here reads ../tokens.css; no literal colours, weights or sizes. */
+.el.el--bare {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
 .el {
   display: flow-root;
   min-width: 0;

@@ -1,5 +1,6 @@
 [
   { "id": "timeline", "path": "/timeline", "label": "Timeline", "legacy": "/timeline-module" },
   { "id": "map", "path": "/map", "label": "Map", "legacy": "/map-module" },
-  { "id": "election", "path": "/election", "label": "Election", "legacy": "/election-module" }
+  { "id": "election", "path": "/election", "label": "Election", "legacy": "/election-module" },
+  { "id": "visual", "path": "/visual", "label": "Visual tool" }
 ]

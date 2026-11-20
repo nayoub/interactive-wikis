@@ -20,6 +20,8 @@ export interface Mention<T> {
   citation?: Citation
   /** A short label trimmed from the sentence. */
   draftLabel: string
+  /** In a list item rather than a paragraph (lists of people, of works…). */
+  inList?: boolean
 }
 
 export type DateMention = Mention<TimelineDate>

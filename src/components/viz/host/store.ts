@@ -6,6 +6,8 @@
  */
 import { reactive, watch } from 'vue'
 
+import type { PlacedVisual, VisualDraft } from '../general/draft'
+
 import {
   DEFAULT_MAP_OPTIONS,
   DEFAULT_OPTIONS,
@@ -35,6 +37,9 @@ export interface ModulesState {
   monochrome: boolean
   /** The modules are exactly "Load example" (so `?example=1` reproduces them). */
   fromExample: boolean
+  /** The general tool (visual route): placed visuals, any number, and the one being made. */
+  visuals: PlacedVisual[]
+  vdraft: VisualDraft | null
   width: Width
   /** Placed modules, at most one per kind. */
   modules: Partial<Record<ModuleKind, PlacedModule>>
@@ -58,6 +63,8 @@ function initial(): ModulesState {
     fallback: false,
     monochrome: false,
     fromExample: false,
+    visuals: [],
+    vdraft: null,
     width: 'desktop',
     modules: {},
     panelOpen: false,

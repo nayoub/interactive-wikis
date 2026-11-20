@@ -106,7 +106,9 @@ export default defineConfig(async ({ command, isPreview }) => {
           // page): `<name>.html` and `<name>/index.html`. Old hub routes that
           // now redirect get the same. Nested routes still go through 404.html.
           const prototypes = resolve(__dirname, 'src/prototypes')
-          const names = new Set(hubRoutes.map((r) => r.legacy.replace(/^\//, '')))
+          const names = new Set(
+            hubRoutes.flatMap((r) => ('legacy' in r && r.legacy ? [r.legacy.replace(/^\//, '')] : [])),
+          )
           for (const entry of readdirSync(prototypes, { withFileTypes: true })) {
             if (entry.isDirectory() && existsSync(resolve(prototypes, entry.name, 'index.vue'))) {
               names.add(entry.name)

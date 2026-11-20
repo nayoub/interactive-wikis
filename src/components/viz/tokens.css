@@ -114,6 +114,23 @@
   --viz-majority: var(--viz-ink); /* the majority tick */
   --viz-warning: var(--border-color-warning); /* figures that do not add up */
 
+  /*
+   * General tool (general/): charts and annotated images. Still one hue:
+   * the strong and weak steps order things by lightness (a second set in a
+   * comparison, columns above a row's mean).
+   */
+  --viz-strong: var(--viz-step-4);
+  --viz-weak: var(--viz-step-2);
+  --viz-series-1: var(--viz-strong); /* the first set */
+  --viz-series-2: var(--viz-step-2); /* a compared set */
+  --viz-chart-aspect: 0.5; /* line and column charts: height / width */
+  --viz-chart-min-height: 180px;
+  --viz-chart-max-height: 300px;
+  --viz-row-height: 28px; /* one row of small columns */
+  --viz-marker-size: 22px; /* numbered markers on an image */
+  --viz-thumb-width: 96px; /* form previews in the editor */
+  --viz-thumb-height: 48px;
+
   /* Motion */
   --viz-transition: 120ms;
   --viz-transition-step: 450ms; /* stepping between elections */

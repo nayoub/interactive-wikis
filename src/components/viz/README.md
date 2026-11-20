@@ -10,6 +10,7 @@ reserved for the general tool. The ProtoWiki gallery is at `/gallery`.
 
 - `src/prototypes/timeline/` — timeline only (`/timeline`), Frank Gehry
 - `src/prototypes/map/` — map and timeline on one page (`/map`), Frank Gehry
+- `src/prototypes/visual/` — the general tool: any form by rule, several visuals per article (`/visual`), Bilbao
 - `src/prototypes/election/` — a visual from a results table (seat diagram, bars, earlier elections), with timeline and map (`/election`), 2025 German federal election
 
 | Part       | Folder    | Does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | Must not                                                                         |
@@ -39,5 +40,28 @@ Data, committed (no runtime lookups except the panel's Commons and Wikidata sear
 - `public/geo/land-110m.json`, `land-50m.json`, `10m/*.json` — `src/prototypes/map/scripts/land.py` (Natural Earth land and lakes, public domain, pre-projected; three levels of detail, the 1:10m level tiled and fetched only for the view: `render/baseMap.ts`)
 
 Adding a kind (e.g. a quantity chart): a mention type and extractor in `pick/`, an item type in `model/types.ts`, an entry in `host/kinds.ts`, an item editor over `ItemEditor`, a renderer in `render/` reading `tokens.css` (add tokens there, never literals), and the two template branches in `ArticleModules.vue`.
+
+## The general tool (`general/`, route `/visual`)
+
+One way in (Insert → Visual, or a **Suggested visual** at the top of Insert), one pick
+mode (dates, places, tables and images all lit; a filter row narrows it and follows
+the first pick), one curate panel (`GeneralCurate`) and one frame (`VisualFrame`)
+for every form. Everything is the general object in `model/visual.ts`: sets of
+items with typed components (time, place, quantity, category, region) and a source.
+
+- `form-rules.json` — which forms fit which components (data). `rules.ts` reads it.
+- `forms/` — one renderer per form plus its entry in `forms/index.ts` (label, how-to-read
+  caption, settings, order, numbered, compare, preview thumbnail). Timeline, map and seat
+  diagram wrap the existing renderers (`bare` mode, selection owned by the frame); line and
+  columns, bars, rows of small columns and the annotated image are new.
+- `draft.ts` — what picking does (dates/places → items, a table → items by column roles,
+  an image → markers), and the Compare operator (`setCompare`: the same table in a
+  comparable article, as a second set). Over time and Link are noted in `model/visual.ts`.
+- `suggest.ts` — the suggestions, from counts and table detection.
+- Adding a form: a row in `form-rules.json`, a renderer and its entry in `forms/index.ts`.
+
+Data: `public/snapshots/bilbao.html` (+ `.places.json`, `.labels.json` from
+`src/prototypes/visual/scripts/labels.py`: Basque and French Wikidata labels for the user
+menu's **Labels** choice), `san-sebastian.html` (Compare).
 
 Where rules fall short is logged in `notes/rule-failures.md`.

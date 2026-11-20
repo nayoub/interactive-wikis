@@ -1,0 +1,15 @@
+{
+  "$comment": "Which forms fit which components. Matched on the exact set of components the picked items carry (parent ignored). `when` narrows a form to items whose quantity measure matches. Adding a form = a row here and a renderer (with its entry) in forms/.",
+  "rules": [
+    { "components": ["time"], "forms": ["timeline"] },
+    { "components": ["place"], "forms": ["map"] },
+    { "components": ["place", "time"], "forms": ["map", "timeline"] },
+    { "components": ["quantity", "time"], "forms": ["line", "columns"] },
+    {
+      "components": ["category", "quantity"],
+      "forms": ["bars", { "form": "seats", "when": { "measure": "seats" } }]
+    },
+    { "components": ["category", "quantity", "time"], "forms": ["smallColumns"] },
+    { "components": ["region"], "forms": ["annotated"] }
+  ]
+}
