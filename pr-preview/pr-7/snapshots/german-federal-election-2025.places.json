@@ -1,0 +1,1158 @@
+{
+ "source": "Wikidata, via enwiki page props; built by src/prototypes/map-module/scripts/places.py",
+ "built": "2026-11-20",
+ "places": {
+  "Allied_invasion_of_Normandy": {
+   "wikidataId": "Q8641370",
+   "name": "Operation Overlord",
+   "coordinates": {
+    "lat": 49.33333,
+    "lon": -0.56667
+   },
+   "opened": null,
+   "inception": null,
+   "kind": "site",
+   "country": "Nazi Germany"
+  },
+  "Aschaffenburg": {
+   "wikidataId": "Q3942",
+   "name": "Aschaffenburg",
+   "coordinates": {
+    "lat": 49.97405,
+    "lon": 9.14936
+   },
+   "opened": null,
+   "inception": null,
+   "kind": "site",
+   "country": "Kingdom of Bavaria"
+  },
+  "Augsburg-Stadt_(electoral_district)": {
+   "wikidataId": "Q1007944",
+   "name": "Augsburg-Stadt",
+   "coordinates": {
+    "lat": 48.33563,
+    "lon": 10.88543
+   },
+   "opened": null,
+   "inception": null,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Baden-Württemberg": {
+   "wikidataId": "Q985",
+   "name": "Baden-Württemberg",
+   "coordinates": {
+    "lat": 48.53778,
+    "lon": 9.04111
+   },
+   "opened": null,
+   "inception": 1952,
+   "kind": "region",
+   "country": "Germany"
+  },
+  "Badische_Zeitung": {
+   "wikidataId": "Q799143",
+   "name": "Badische Zeitung",
+   "coordinates": {
+    "lat": 47.98533,
+    "lon": 7.82849
+   },
+   "opened": null,
+   "inception": 1946,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Bavaria": {
+   "wikidataId": "Q980",
+   "name": "Bavaria",
+   "coordinates": {
+    "lat": 49.07861,
+    "lon": 11.38556
+   },
+   "opened": null,
+   "inception": 1919,
+   "kind": "region",
+   "country": "Germany"
+  },
+  "Bellevue_Palace_(Germany)": {
+   "wikidataId": "Q317091",
+   "name": "Bellevue Palace",
+   "coordinates": {
+    "lat": 52.5175,
+    "lon": 13.35333
+   },
+   "opened": 1786,
+   "inception": 1786,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Berlin": {
+   "wikidataId": "Q64",
+   "name": "Berlin",
+   "coordinates": {
+    "lat": 52.51667,
+    "lon": 13.38333
+   },
+   "opened": null,
+   "inception": 1244,
+   "kind": "region",
+   "country": "Margraviate of Brandenburg"
+  },
+  "Berlin-Friedrichshain-Kreuzberg_–_Prenzlauer_Berg_East": {
+   "wikidataId": "Q1007971",
+   "name": "Berlin-Friedrichshain-Kreuzberg – Prenzlauer Berg East",
+   "coordinates": {
+    "lat": 52.51167,
+    "lon": 13.432
+   },
+   "opened": null,
+   "inception": 2002,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Berlin-Lichtenberg_(electoral_district)": {
+   "wikidataId": "Q1007979",
+   "name": "Berlin-Lichtenberg",
+   "coordinates": {
+    "lat": 52.5349,
+    "lon": 13.50974
+   },
+   "opened": null,
+   "inception": 2002,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Berlin-Marzahn_–_Hellersdorf": {
+   "wikidataId": "Q1007985",
+   "name": "Berlin-Marzahn-Hellersdorf",
+   "coordinates": {
+    "lat": 52.52087,
+    "lon": 13.57869
+   },
+   "opened": null,
+   "inception": 1990,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Berlin-Reinickendorf_(electoral_district)": {
+   "wikidataId": "Q1007991",
+   "name": "Berlin-Reinickendorf",
+   "coordinates": {
+    "lat": 52.59575,
+    "lon": 13.29135
+   },
+   "opened": null,
+   "inception": 1990,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Berlin-Tempelhof-Schöneberg": {
+   "wikidataId": "Q1007997",
+   "name": "Berlin-Tempelhof-Schöneberg",
+   "coordinates": {
+    "lat": 52.44118,
+    "lon": 13.38077
+   },
+   "opened": null,
+   "inception": 2002,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Berlin-Treptow_–_Köpenick": {
+   "wikidataId": "Q1008001",
+   "name": "Berlin-Treptow-Köpenick",
+   "coordinates": {
+    "lat": 52.42963,
+    "lon": 13.61126
+   },
+   "opened": null,
+   "inception": 1994,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Biberach_(electoral_district)": {
+   "wikidataId": "Q1008004",
+   "name": "Biberach",
+   "coordinates": {
+    "lat": 48.06318,
+    "lon": 9.80436
+   },
+   "opened": null,
+   "inception": null,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Bochum_I": {
+   "wikidataId": "Q1008012",
+   "name": "Bochum I",
+   "coordinates": {
+    "lat": 51.46167,
+    "lon": 7.19717
+   },
+   "opened": null,
+   "inception": null,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Brandenburg": {
+   "wikidataId": "Q1208",
+   "name": "Brandenburg",
+   "coordinates": {
+    "lat": 52.39456,
+    "lon": 13.06033
+   },
+   "opened": null,
+   "inception": 1990,
+   "kind": "region",
+   "country": "Germany"
+  },
+  "Bremen_(state)": {
+   "wikidataId": "Q1209",
+   "name": "Bremen",
+   "coordinates": {
+    "lat": 53.13333,
+    "lon": 8.73333
+   },
+   "opened": null,
+   "inception": null,
+   "kind": "region",
+   "country": "Germany"
+  },
+  "Bremen_I": {
+   "wikidataId": "Q1008023",
+   "name": "Bremen I",
+   "coordinates": {
+    "lat": 53.07374,
+    "lon": 8.87294
+   },
+   "opened": null,
+   "inception": null,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Bremen_II_–_Bremerhaven": {
+   "wikidataId": "Q1008028",
+   "name": "Bremen II – Bremerhaven",
+   "coordinates": {
+    "lat": 53.29715,
+    "lon": 8.65439
+   },
+   "opened": null,
+   "inception": null,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Bundespräsidialamt": {
+   "wikidataId": "Q470470",
+   "name": "Bundespräsidialamt",
+   "coordinates": {
+    "lat": 52.51639,
+    "lon": 13.35111
+   },
+   "opened": null,
+   "inception": 1949,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Bundesrat_(Germany)": {
+   "wikidataId": "Q146138",
+   "name": "Bundesrat",
+   "coordinates": {
+    "lat": 52.50917,
+    "lon": 13.38139
+   },
+   "opened": null,
+   "inception": 1949,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Bundesverfassungsgericht": {
+   "wikidataId": "Q56025",
+   "name": "Federal Constitutional Court",
+   "coordinates": {
+    "lat": 49.01286,
+    "lon": 8.40152
+   },
+   "opened": null,
+   "inception": 1951,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Constitutional_Court_of_North_Rhine-Westphalia": {
+   "wikidataId": "Q122955697",
+   "name": "Constitutional Court of North Rhine-Westphalia",
+   "coordinates": {
+    "lat": 51.9597,
+    "lon": 7.62486
+   },
+   "opened": null,
+   "inception": null,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Cuxhaven_–_Stade_II": {
+   "wikidataId": "Q1008069",
+   "name": "constituency for the Bundestag election Cuxhaven – Stade II",
+   "coordinates": {
+    "lat": 53.63535,
+    "lon": 8.90668
+   },
+   "opened": null,
+   "inception": null,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "D-Day_(military_term)": {
+   "wikidataId": "Q206106",
+   "name": "D-Day",
+   "coordinates": {
+    "lat": 49.3333,
+    "lon": -0.5667
+   },
+   "opened": null,
+   "inception": null,
+   "kind": "site",
+   "country": null
+  },
+  "Delmenhorst_–_Wesermarsch_–_Oldenburg-Land": {
+   "wikidataId": "Q1008085",
+   "name": "Delmenhorst – Wesermarsch – Oldenburg-Land",
+   "coordinates": {
+    "lat": 53.14813,
+    "lon": 8.39719
+   },
+   "opened": null,
+   "inception": null,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Der_Spiegel": {
+   "wikidataId": "Q131478",
+   "name": "Der Spiegel",
+   "coordinates": {
+    "lat": 53.54697,
+    "lon": 9.99775
+   },
+   "opened": null,
+   "inception": 1947,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Deutschlandfunk": {
+   "wikidataId": "Q695328",
+   "name": "Deutschlandfunk",
+   "coordinates": {
+    "lat": 50.9028,
+    "lon": 6.95944
+   },
+   "opened": null,
+   "inception": 1962,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Düsseldorf_II": {
+   "wikidataId": "Q1008112",
+   "name": "Düsseldorf II",
+   "coordinates": {
+    "lat": 51.18335,
+    "lon": 6.83326
+   },
+   "opened": null,
+   "inception": null,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "East_Germany": {
+   "wikidataId": "Q16957",
+   "name": "East Germany",
+   "coordinates": {
+    "lat": 52.052,
+    "lon": 12.389
+   },
+   "opened": null,
+   "inception": 1949,
+   "kind": "region",
+   "country": "East Germany"
+  },
+  "Eichsfeld_–_Nordhausen_–_Kyffhäuserkreis": {
+   "wikidataId": "Q1008122",
+   "name": "Eichsfeld – Nordhausen – Unstrut-Hainich-Kreis I",
+   "coordinates": {
+    "lat": 51.39252,
+    "lon": 10.66162
+   },
+   "opened": null,
+   "inception": 2005,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Erfurt_–_Weimar_–_Weimarer_Land_II": {
+   "wikidataId": "Q1008143",
+   "name": "constituency for the Bundestag election Erfurt – Weimar – Weimarer Land II",
+   "coordinates": {
+    "lat": 50.97943,
+    "lon": 11.11466
+   },
+   "opened": null,
+   "inception": null,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Esslingen_(electoral_district)": {
+   "wikidataId": "Q1008157",
+   "name": "Esslingen",
+   "coordinates": {
+    "lat": 48.71993,
+    "lon": 9.36717
+   },
+   "opened": null,
+   "inception": null,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Europe": {
+   "wikidataId": "Q46",
+   "name": "Europe",
+   "coordinates": {
+    "lat": 48.69096,
+    "lon": 9.14062
+   },
+   "opened": null,
+   "inception": null,
+   "kind": "region",
+   "country": null
+  },
+  "European_University_Institute": {
+   "wikidataId": "Q1378099",
+   "name": "European University Institute",
+   "coordinates": {
+    "lat": 43.80278,
+    "lon": 11.28278
+   },
+   "opened": null,
+   "inception": 1972,
+   "kind": "site",
+   "country": "Italy"
+  },
+  "Euskirchen_–_Rhein-Erft-Kreis_II": {
+   "wikidataId": "Q1008159",
+   "name": "constituency for the Bundestag election Euskirchen – Rhein-Erft-Kreis II",
+   "coordinates": {
+    "lat": 50.56997,
+    "lon": 6.66621
+   },
+   "opened": null,
+   "inception": null,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Federal_Constitutional_Court": {
+   "wikidataId": "Q56025",
+   "name": "Federal Constitutional Court",
+   "coordinates": {
+    "lat": 49.01286,
+    "lon": 8.40152
+   },
+   "opened": null,
+   "inception": 1951,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Federal_Ministry_of_Education,_Family_Affairs,_Senior_Citizens,_Women_and_Youth": {
+   "wikidataId": "Q166020",
+   "name": "Federal Ministry for Education, Family Affairs, Senior Citizens, Women and Youth",
+   "coordinates": {
+    "lat": 52.51332,
+    "lon": 13.38671
+   },
+   "opened": null,
+   "inception": 1953,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Federal_Ministry_of_Justice_(Germany)": {
+   "wikidataId": "Q498251",
+   "name": "Federal Ministry of Justice and Consumer Protection",
+   "coordinates": {
+    "lat": 52.51202,
+    "lon": 13.39587
+   },
+   "opened": null,
+   "inception": 1877,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Freising_(electoral_district)": {
+   "wikidataId": "Q1008184",
+   "name": "Wahlkreis Freising",
+   "coordinates": {
+    "lat": 48.52756,
+    "lon": 11.5856
+   },
+   "opened": null,
+   "inception": null,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "German_Bundesrat": {
+   "wikidataId": "Q146138",
+   "name": "Bundesrat",
+   "coordinates": {
+    "lat": 52.50917,
+    "lon": 13.38139
+   },
+   "opened": null,
+   "inception": 1949,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Germany": {
+   "wikidataId": "Q183",
+   "name": "Germany",
+   "coordinates": {
+    "lat": 51,
+    "lon": 10
+   },
+   "opened": null,
+   "inception": 1949,
+   "kind": "region",
+   "country": "Germany"
+  },
+  "Halle_(Saale)": {
+   "wikidataId": "Q2814",
+   "name": "Halle (Saale)",
+   "coordinates": {
+    "lat": 51.48278,
+    "lon": 11.96972
+   },
+   "opened": null,
+   "inception": null,
+   "kind": "settlement",
+   "country": "Germany"
+  },
+  "Halle_(electoral_district)": {
+   "wikidataId": "Q1008225",
+   "name": "Halle",
+   "coordinates": {
+    "lat": 51.51407,
+    "lon": 12.02917
+   },
+   "opened": null,
+   "inception": null,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Hamburg": {
+   "wikidataId": "Q1055",
+   "name": "Hamburg",
+   "coordinates": {
+    "lat": 53.55,
+    "lon": 10
+   },
+   "opened": null,
+   "inception": null,
+   "kind": "region",
+   "country": "Holy Roman Empire"
+  },
+  "Hamburg-Eimsbüttel_(electoral_district)": {
+   "wikidataId": "Q264130",
+   "name": "Hamburg-Eimsbüttel",
+   "coordinates": {
+    "lat": 53.60972,
+    "lon": 9.9397
+   },
+   "opened": null,
+   "inception": null,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Harburg_(electoral_district)": {
+   "wikidataId": "Q1008258",
+   "name": "Harburg",
+   "coordinates": {
+    "lat": 53.32972,
+    "lon": 10.08
+   },
+   "opened": null,
+   "inception": 2009,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Harz_(electoral_district)": {
+   "wikidataId": "Q1008262",
+   "name": "Harz",
+   "coordinates": {
+    "lat": 51.81688,
+    "lon": 11.00663
+   },
+   "opened": null,
+   "inception": null,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Heilbronn_(electoral_district)": {
+   "wikidataId": "Q1008267",
+   "name": "Heilbronn",
+   "coordinates": {
+    "lat": 49.20704,
+    "lon": 9.20448
+   },
+   "opened": null,
+   "inception": null,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Herne_–_Bochum_II": {
+   "wikidataId": "Q1008277",
+   "name": "Herne – Bochum II",
+   "coordinates": {
+    "lat": 51.51588,
+    "lon": 7.24605
+   },
+   "opened": null,
+   "inception": 2002,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Hesse": {
+   "wikidataId": "Q1199",
+   "name": "Hesse",
+   "coordinates": {
+    "lat": 50.60803,
+    "lon": 9.02847
+   },
+   "opened": null,
+   "inception": 1946,
+   "kind": "region",
+   "country": "Germany"
+  },
+  "Hof,_Bavaria": {
+   "wikidataId": "Q6938",
+   "name": "Hof",
+   "coordinates": {
+    "lat": 50.31667,
+    "lon": 11.91667
+   },
+   "opened": null,
+   "inception": null,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Kiel_(electoral_district)": {
+   "wikidataId": "Q1008312",
+   "name": "Kiel",
+   "coordinates": {
+    "lat": 54.33555,
+    "lon": 10.12852
+   },
+   "opened": null,
+   "inception": null,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Landshut_(electoral_district)": {
+   "wikidataId": "Q1008343",
+   "name": "Landshut",
+   "coordinates": {
+    "lat": 48.68031,
+    "lon": 12.03068
+   },
+   "opened": null,
+   "inception": null,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Leipzig_II": {
+   "wikidataId": "Q1008348",
+   "name": "Leipzig II",
+   "coordinates": {
+    "lat": 51.30047,
+    "lon": 12.35886
+   },
+   "opened": null,
+   "inception": 1990,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Lippe_I": {
+   "wikidataId": "Q1008356",
+   "name": "Lippe I",
+   "coordinates": {
+    "lat": 52.0286,
+    "lon": 8.90182
+   },
+   "opened": null,
+   "inception": null,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "London": {
+   "wikidataId": "Q84",
+   "name": "London",
+   "coordinates": {
+    "lat": 51.50722,
+    "lon": -0.1275
+   },
+   "opened": null,
+   "inception": 47,
+   "kind": "region",
+   "country": "Roman Empire"
+  },
+  "Lower_Saxony": {
+   "wikidataId": "Q1197",
+   "name": "Lower Saxony",
+   "coordinates": {
+    "lat": 52.75611,
+    "lon": 9.39306
+   },
+   "opened": null,
+   "inception": 1946,
+   "kind": "region",
+   "country": "Germany"
+  },
+  "Mecklenburg-Vorpommern": {
+   "wikidataId": "Q1196",
+   "name": "Mecklenburg-Vorpommern",
+   "coordinates": {
+    "lat": 53.75,
+    "lon": 12.5
+   },
+   "opened": null,
+   "inception": 1990,
+   "kind": "region",
+   "country": "Germany"
+  },
+  "Meissen_(electoral_district)": {
+   "wikidataId": "Q1008401",
+   "name": "Meißen",
+   "coordinates": {
+    "lat": 51.2394,
+    "lon": 13.4829
+   },
+   "opened": null,
+   "inception": null,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Münster_(electoral_district)": {
+   "wikidataId": "Q1008444",
+   "name": "Münster",
+   "coordinates": {
+    "lat": 51.95432,
+    "lon": 7.62365
+   },
+   "opened": null,
+   "inception": null,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "New_states_of_Germany": {
+   "wikidataId": "Q675430",
+   "name": "new states of Germany",
+   "coordinates": {
+    "lat": 52.1665,
+    "lon": 12.5175
+   },
+   "opened": null,
+   "inception": 1990,
+   "kind": "region",
+   "country": "Germany"
+  },
+  "North_Rhine-Westphalia": {
+   "wikidataId": "Q1198",
+   "name": "North Rhine-Westphalia",
+   "coordinates": {
+    "lat": 51.46667,
+    "lon": 7.55
+   },
+   "opened": null,
+   "inception": 1946,
+   "kind": "region",
+   "country": "Germany"
+  },
+  "Oberallgäu_(electoral_district)": {
+   "wikidataId": "Q1008480",
+   "name": "Oberallgäu",
+   "coordinates": {
+    "lat": 47.58367,
+    "lon": 10.19682
+   },
+   "opened": null,
+   "inception": null,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Ostholstein_–_Stormarn-Nord": {
+   "wikidataId": "Q1008509",
+   "name": "constituency for the Bundestag election Ostholstein – Stormarn-Nord",
+   "coordinates": {
+    "lat": 54.15869,
+    "lon": 10.79166
+   },
+   "opened": null,
+   "inception": null,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Passau": {
+   "wikidataId": "Q4190",
+   "name": "Passau",
+   "coordinates": {
+    "lat": 48.57482,
+    "lon": 13.46097
+   },
+   "opened": null,
+   "inception": null,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Rhein-Kreis_Neuss": {
+   "wikidataId": "Q6253",
+   "name": "Rhein-Kreis Neuss",
+   "coordinates": {
+    "lat": 51.17,
+    "lon": 6.67
+   },
+   "opened": null,
+   "inception": 1975,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Rhein-Zeitung": {
+   "wikidataId": "Q2147518",
+   "name": "Rhein-Zeitung",
+   "coordinates": {
+    "lat": 50.39111,
+    "lon": 7.57972
+   },
+   "opened": null,
+   "inception": 1946,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Rheinisch-Bergischer_Kreis_(electoral_district)": {
+   "wikidataId": "Q1008563",
+   "name": "Rheinisch-Bergischer Kreis",
+   "coordinates": {
+    "lat": 51.023,
+    "lon": 7.19485
+   },
+   "opened": null,
+   "inception": null,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Rhineland-Pfalz": {
+   "wikidataId": "Q1200",
+   "name": "Rhineland-Palatinate",
+   "coordinates": {
+    "lat": 49.91306,
+    "lon": 7.44972
+   },
+   "opened": null,
+   "inception": 1946,
+   "kind": "region",
+   "country": "Germany"
+  },
+  "Rostock_–_Landkreis_Rostock_II": {
+   "wikidataId": "Q1008564",
+   "name": "Rostock – Landkreis Rostock II",
+   "coordinates": {
+    "lat": 54.06577,
+    "lon": 12.24485
+   },
+   "opened": null,
+   "inception": 1990,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Rottal-Inn_(electoral_district)": {
+   "wikidataId": "Q1008577",
+   "name": "Rottal-Inn",
+   "coordinates": {
+    "lat": 48.51292,
+    "lon": 12.74486
+   },
+   "opened": null,
+   "inception": null,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Saarland": {
+   "wikidataId": "Q1201",
+   "name": "Saarland",
+   "coordinates": {
+    "lat": 49.37715,
+    "lon": 6.87838
+   },
+   "opened": null,
+   "inception": 1947,
+   "kind": "region",
+   "country": "Germany"
+  },
+  "Saxony": {
+   "wikidataId": "Q1202",
+   "name": "Saxony",
+   "coordinates": {
+    "lat": 51.02694,
+    "lon": 13.35889
+   },
+   "opened": null,
+   "inception": 1990,
+   "kind": "region",
+   "country": "Germany"
+  },
+  "Saxony-Anhalt": {
+   "wikidataId": "Q1206",
+   "name": "Saxony-Anhalt",
+   "coordinates": {
+    "lat": 52,
+    "lon": 11.7
+   },
+   "opened": null,
+   "inception": 1990,
+   "kind": "region",
+   "country": "Germany"
+  },
+  "Schleswig-Holstein": {
+   "wikidataId": "Q1194",
+   "name": "Schleswig-Holstein",
+   "coordinates": {
+    "lat": 54.47004,
+    "lon": 9.51416
+   },
+   "opened": null,
+   "inception": 1946,
+   "kind": "region",
+   "country": "Germany"
+  },
+  "Schwalm-Eder": {
+   "wikidataId": "Q1008586",
+   "name": "Schwalm-Eder",
+   "coordinates": {
+    "lat": 51.03355,
+    "lon": 9.19152
+   },
+   "opened": null,
+   "inception": null,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Siegen-Wittgenstein_(electoral_district)": {
+   "wikidataId": "Q1008602",
+   "name": "Siegen-Wittgenstein",
+   "coordinates": {
+    "lat": 50.93774,
+    "lon": 8.19517
+   },
+   "opened": null,
+   "inception": null,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Soest_(electoral_district)": {
+   "wikidataId": "Q1008606",
+   "name": "Soest",
+   "coordinates": {
+    "lat": 51.56441,
+    "lon": 8.21744
+   },
+   "opened": null,
+   "inception": null,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "St._Wendel_(electoral_district)": {
+   "wikidataId": "Q1008612",
+   "name": "Sankt Wendel",
+   "coordinates": {
+    "lat": 49.47215,
+    "lon": 7.05588
+   },
+   "opened": null,
+   "inception": null,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Stadt_Osnabrück": {
+   "wikidataId": "Q1008629",
+   "name": "constituency for the Bundestag election Stadt Osnabrück",
+   "coordinates": {
+    "lat": 52.27062,
+    "lon": 8.04741
+   },
+   "opened": null,
+   "inception": null,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Stuttgart_I_(electoral_district)": {
+   "wikidataId": "Q1008650",
+   "name": "Stuttgart I",
+   "coordinates": {
+    "lat": 48.746,
+    "lon": 9.15702
+   },
+   "opened": null,
+   "inception": null,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Suhl_–_Schmalkalden-Meiningen_–_Hildburghausen_–_Sonneberg": {
+   "wikidataId": "Q30535413",
+   "name": "constituency for the Bundestag election Suhl – Schmalkalden-Meiningen – Hildburghausen – Sonneberg",
+   "coordinates": {
+    "lat": 50.52661,
+    "lon": 10.64777
+   },
+   "opened": null,
+   "inception": null,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Sächsische_Zeitung": {
+   "wikidataId": "Q2378692",
+   "name": "Sächsische Zeitung",
+   "coordinates": {
+    "lat": 51.05712,
+    "lon": 13.72871
+   },
+   "opened": null,
+   "inception": 1946,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Südpfalz": {
+   "wikidataId": "Q1008662",
+   "name": "Südpfalz",
+   "coordinates": {
+    "lat": 49.1637,
+    "lon": 8.1256
+   },
+   "opened": null,
+   "inception": null,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "The_Guardian": {
+   "wikidataId": "Q11148",
+   "name": "The Guardian",
+   "coordinates": {
+    "lat": 51.53511,
+    "lon": -0.12169
+   },
+   "opened": null,
+   "inception": 1821,
+   "kind": "site",
+   "country": "United Kingdom"
+  },
+  "Thuringia": {
+   "wikidataId": "Q1205",
+   "name": "Thuringia",
+   "coordinates": {
+    "lat": 51,
+    "lon": 11
+   },
+   "opened": null,
+   "inception": 1920,
+   "kind": "region",
+   "country": "Holy Roman Empire"
+  },
+  "Traunstein_(electoral_district)": {
+   "wikidataId": "Q1008664",
+   "name": "Traunstein",
+   "coordinates": {
+    "lat": 47.82533,
+    "lon": 12.69334
+   },
+   "opened": null,
+   "inception": null,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Tübingen_(electoral_district)": {
+   "wikidataId": "Q1008665",
+   "name": "Tübingen",
+   "coordinates": {
+    "lat": 48.43037,
+    "lon": 9.00011
+   },
+   "opened": null,
+   "inception": 1980,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Uckermark_–_Barnim_I": {
+   "wikidataId": "Q1008672",
+   "name": "constituency for the Bundestag election Uckermark – Barnim I",
+   "coordinates": {
+    "lat": 53.11292,
+    "lon": 13.82267
+   },
+   "opened": null,
+   "inception": null,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Werra-Meißner_–_Hersfeld-Rotenburg": {
+   "wikidataId": "Q1008715",
+   "name": "Werra-Meißner – Hersfeld-Rotenburg",
+   "coordinates": {
+    "lat": 51.04399,
+    "lon": 9.83815
+   },
+   "opened": null,
+   "inception": 2002,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "Wesel_I": {
+   "wikidataId": "Q1008719",
+   "name": "constituency for the Bundestag election Wesel I",
+   "coordinates": {
+    "lat": 51.65233,
+    "lon": 6.61316
+   },
+   "opened": null,
+   "inception": null,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "West_Germany": {
+   "wikidataId": "Q713750",
+   "name": "West Germany",
+   "coordinates": {
+    "lat": 50.73389,
+    "lon": 7.09972
+   },
+   "opened": null,
+   "inception": 1949,
+   "kind": "region",
+   "country": null
+  },
+  "Würzburg_(electoral_district)": {
+   "wikidataId": "Q1008744",
+   "name": "constituency for the Bundestag election Würzburg",
+   "coordinates": {
+    "lat": 49.74154,
+    "lon": 9.92849
+   },
+   "opened": null,
+   "inception": null,
+   "kind": "site",
+   "country": "Germany"
+  },
+  "ZDF": {
+   "wikidataId": "Q48989",
+   "name": "ZDF",
+   "coordinates": {
+    "lat": 49.96444,
+    "lon": 8.20806
+   },
+   "opened": null,
+   "inception": 1963,
+   "kind": "site",
+   "country": "Germany"
+  }
+ }
+}
