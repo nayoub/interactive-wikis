@@ -4,9 +4,9 @@
  * editor's trims of the source sentence (no new claims), images are the
  * article's own.
  */
-import type { DateMention, LoadedArticle } from '../article/loadArticle'
-import { eventFromMention } from './fromMention'
-import type { Timeline } from './types'
+import type { DateMention, LoadedArticle } from './article/loadArticle'
+import { eventFromMention } from './curate/fromMention'
+import type { Timeline } from './model/types'
 
 interface Pick {
   date: string
@@ -85,5 +85,5 @@ export function buildExample(article: LoadedArticle): Timeline {
     }
     return event
   }).filter((e) => e !== null)
-  return { title: 'Early life and career', events }
+  return { title: 'Early life and career', events, options: { showAge: true, showGaps: true } }
 }

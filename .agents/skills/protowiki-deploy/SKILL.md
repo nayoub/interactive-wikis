@@ -59,6 +59,11 @@ The build:
    `…/pr-preview/pr-N/…` deep links into the preview base. **`public/gh-pages-restore.js`**
    is injected at the top of `<head>` on every build so the preview index can
    restore the stashed path before Vue Router starts.
+5. **Writes `dist/<prototype>.html`** (a copy of `index.html`) for every
+   top-level folder in `src/prototypes/` with an `index.vue`. GitHub Pages serves
+   `/<base>/<prototype>` from that file with **HTTP 200**, so link previews,
+   fetch-based tools and crawlers see a real page; nested routes still use the
+   `404.html` fallback.
 
 ## Base path
 

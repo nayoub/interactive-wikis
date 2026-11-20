@@ -1,10 +1,11 @@
 /**
  * Finding, revealing and highlighting a source passage in the rendered article.
- * Uses the CSS Custom Highlight API (no DOM changes); falls back to marking
- * the whole block where it is unavailable.
+ * Hover hints use the CSS Custom Highlight API (no DOM changes). The jump-to-
+ * source mark is an overlay of line boxes over the sentence, because it has to
+ * hold and then fade, which highlight pseudo-elements cannot animate.
  */
 import { indexBlock, rangeFor } from './textIndex'
-import type { SourceAnchor } from '../timeline/types'
+import type { SourceAnchor } from '../model/types'
 
 export function mentionEl(root: HTMLElement, mentionId: string) {
   return root.querySelector<HTMLElement>(`[data-tl-id="${mentionId}"]`)
@@ -69,17 +70,53 @@ export function setHighlight(name: string, range: Range | null, ms = 0) {
     )
 }
 
-/** Scroll a passage into view and flash it. */
+/**
+ * Mark a range for a while: held clearly (--viz-highlight-hold), then a slow
+ * fade (--viz-highlight-fade). One line box per line of text.
+ */
+let currentMark: HTMLElement | null = null
+export function markRange(range: Range) {
+  currentMark?.remove()
+  const lines = new Map<number, { left: number; right: number; top: number; bottom: number }>()
+  for (const r of Array.from(range.getClientRects())) {
+    if (r.width < 1 || r.height < 1) continue
+    const key = Math.round(r.top + r.height / 2)
+    const near = [...lines.keys()].find((k) => Math.abs(k - key) < r.height / 2)
+    const line = near !== undefined ? lines.get(near)! : undefined
+    if (line) {
+      line.left = Math.min(line.left, r.left)
+      line.right = Math.max(line.right, r.right)
+      line.top = Math.min(line.top, r.top)
+      line.bottom = Math.max(line.bottom, r.bottom)
+    } else lines.set(key, { left: r.left, right: r.right, top: r.top, bottom: r.bottom })
+  }
+  const mark = document.createElement('div')
+  mark.className = 'viz tl-passage-mark'
+  mark.setAttribute('aria-hidden', 'true')
+  for (const l of lines.values()) {
+    const box = document.createElement('div')
+    box.className = 'tl-passage-mark__line'
+    box.style.left = `${l.left + window.scrollX - 2}px`
+    box.style.top = `${l.top + window.scrollY - 1}px`
+    box.style.width = `${l.right - l.left + 4}px`
+    box.style.height = `${l.bottom - l.top + 2}px`
+    mark.appendChild(box)
+  }
+  mark.addEventListener('animationend', () => mark.remove())
+  document.body.appendChild(mark)
+  currentMark = mark
+}
+
+/** Scroll a passage into view and mark it. */
 export function showPassage(root: HTMLElement, anchor: SourceAnchor, sourceText?: string) {
   const span = mentionEl(root, anchor.mentionId)
   if (!span) return false
   revealSection(span)
-  scrollToEl(span, 'center')
-  const range = sentenceRange(root, anchor, sourceText)
-  setHighlight('tl-source', range, 3200)
-  const block = span.closest('p, li')
-  block?.classList.remove('tl-flash')
-  void (block as HTMLElement | null)?.offsetWidth
-  block?.classList.add('tl-flash')
+  // After a collapsed section opens, measure again.
+  setTimeout(() => {
+    scrollToEl(span, 'center')
+    const range = sentenceRange(root, anchor, sourceText)
+    if (range) markRange(range)
+  }, 30)
   return true
 }

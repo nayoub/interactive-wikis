@@ -6,7 +6,7 @@ import { cdxIconClose, cdxIconSettings } from '@wikimedia/codex-icons'
 
 import { loadArticle } from './article/loadArticle'
 import { resetState, signal, state } from './store'
-import { buildExample } from './timeline/example'
+import { buildExample } from './example'
 
 const props = defineProps<{ narrow: boolean }>()
 

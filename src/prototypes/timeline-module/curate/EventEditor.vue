@@ -8,8 +8,8 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { CdxButton, CdxCheckbox, CdxIcon, CdxSelect, CdxTextInput } from '@wikimedia/codex'
 import { cdxIconArrowNext, cdxIconClose, cdxIconImage, cdxIconTrash } from '@wikimedia/codex-icons'
 
-import { MONTH_NAMES, formatDate } from '../timeline/format'
-import type { Precision, TimelineEvent } from '../timeline/types'
+import { MONTH_NAMES, formatDate } from '../model/dates'
+import type { Precision, Qualifier, TimelineEvent } from '../model/types'
 
 const props = defineProps<{ draftLabel?: string }>()
 const event = defineModel<TimelineEvent>({ required: true })
@@ -97,6 +97,27 @@ const endYear = computed({
     if (event.value.date.end) event.value.date.end.y = num(v, event.value.date.start.y, 2100)
   },
 })
+const qualifierItems = [
+  { value: '', label: 'Exact' },
+  { value: 'early', label: 'Early' },
+  { value: 'mid', label: 'Mid' },
+  { value: 'late', label: 'Late' },
+  { value: 'spring', label: 'Spring' },
+  { value: 'summer', label: 'Summer' },
+  { value: 'fall', label: 'Fall' },
+  { value: 'winter', label: 'Winter' },
+]
+const qualifier = computed({
+  get: () => event.value.date.qualifier ?? '',
+  set: (v: string) => {
+    if (v) event.value.date.qualifier = v as Qualifier
+    else delete event.value.date.qualifier
+  },
+})
+const credit = computed(() => {
+  const img = event.value.image
+  return img?.source === 'commons' ? `${img.artist} · ${img.license}` : ''
+})
 const circa = computed({
   get: () => !!event.value.date.circa,
   set: (v: boolean) => (event.value.date.circa = v),
@@ -154,6 +175,13 @@ const sourceParts = computed(() => {
         class="ev__month"
         :menu-items="monthItems"
       />
+      <CdxSelect
+        v-if="precision === 'year'"
+        v-model:selected="qualifier"
+        class="ev__month"
+        aria-label="Part of the year or decade"
+        :menu-items="qualifierItems"
+      />
       <CdxTextInput v-model="year" class="ev__num" input-type="number" aria-label="Year" />
       <span v-if="isRange" class="ev__until">to</span>
       <CdxTextInput
@@ -195,7 +223,7 @@ const sourceParts = computed(() => {
           aria-label="Change image"
           @click="emit('chooseImage')"
         >
-          <img :src="event.image.src" :alt="event.image.caption" />
+          <img :src="event.image.src" :alt="event.image.caption" :title="event.image.fileTitle" />
         </button>
         <button
           type="button"
@@ -208,6 +236,9 @@ const sourceParts = computed(() => {
       </div>
     </div>
 
+    <small v-if="credit" class="ev__credit">
+      Image: <a :href="event.image!.pageUrl" target="_blank" rel="noopener">{{ credit }}</a>
+    </small>
     <small class="ev__source" :class="{ 'ev__source--open': sourceOpen }">
       <button
         type="button"
@@ -436,6 +467,12 @@ const sourceParts = computed(() => {
   text-decoration: underline;
   text-decoration-color: var(--border-color-progressive);
   text-underline-offset: 3px;
+}
+.ev__credit {
+  color: var(--color-placeholder);
+}
+.ev__credit a {
+  color: inherit;
 }
 .ev__where {
   display: flex;

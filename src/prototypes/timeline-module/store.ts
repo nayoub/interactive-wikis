@@ -5,18 +5,12 @@
  */
 import { reactive, watch } from 'vue'
 
-import type { Placement, Timeline, TimelineEvent } from './timeline/types'
+import { DEFAULT_OPTIONS, type Draft, type Placement, type Timeline } from './model/types'
 
 export type Mode = 'read' | 'edit'
 export type Spacing = 'proportional' | 'even'
 export type Width = 'desktop' | 'mobile'
-
-export interface Draft {
-  title: string
-  events: TimelineEvent[]
-  /** True when re-editing the placed timeline rather than inserting a new one. */
-  editingPlaced: boolean
-}
+export type { Draft }
 
 export interface TimelineState {
   mode: Mode
@@ -48,10 +42,17 @@ function initial(): TimelineState {
   }
 }
 
+/** Timelines saved before display options existed get the defaults. */
+function migrate(s: TimelineState): TimelineState {
+  if (s.timeline && !s.timeline.options) s.timeline.options = { ...DEFAULT_OPTIONS }
+  if (s.draft && !s.draft.options) s.draft.options = { ...DEFAULT_OPTIONS }
+  return s
+}
+
 function read(): TimelineState {
   try {
     const raw = localStorage.getItem(KEY)
-    if (raw) return { ...initial(), ...JSON.parse(raw) }
+    if (raw) return migrate({ ...initial(), ...JSON.parse(raw) })
   } catch {
     /* private mode or bad JSON */
   }
@@ -80,7 +81,7 @@ if (typeof window !== 'undefined') {
     if (e.key !== KEY || !e.newValue) return
     try {
       applyingRemote = true
-      Object.assign(state, initial(), JSON.parse(e.newValue))
+      Object.assign(state, migrate({ ...initial(), ...JSON.parse(e.newValue) }))
     } catch {
       /* ignore */
     } finally {

@@ -1,27 +1,30 @@
 <script setup lang="ts">
 /**
- * The timeline's curation panel: picked events (always date-sorted), each
- * editable; a live reader preview; where it goes; insert / done.
+ * Curate: the panel that lists, edits and orders picked items (date-sorted),
+ * says where the result goes, and inserts it. It does not draw the result —
+ * the host passes a renderer through the `preview` slot, so the same panel can
+ * curate a map or a chart.
  */
 import { computed, ref } from 'vue'
-import { CdxButton, CdxDialog, CdxIcon, CdxSelect, CdxTab, CdxTabs } from '@wikimedia/codex'
+import { CdxButton, CdxDialog, CdxIcon, CdxSelect, CdxToggleSwitch } from '@wikimedia/codex'
 import { cdxIconFullscreen } from '@wikimedia/codex-icons'
 
-import CurationPanel from '../selection/CurationPanel.vue'
-import type { ArticleSection, DateMention } from '../article/loadArticle'
-import TimelineView from '../timeline/TimelineView.vue'
-import { sortEvents } from '../timeline/format'
-import type { ArticleImage, Placement, TimelineEvent } from '../timeline/types'
-import type { Draft } from '../store'
+import { sortEvents } from '../model/dates'
+import type { ArticleSection, Draft, EventImage, Placement, TimelineEvent } from '../model/types'
+import CurationPanel from './CurationPanel.vue'
 import EventEditor from './EventEditor.vue'
 import ImagePicker from './ImagePicker.vue'
 
 const props = defineProps<{
-  skin: 'desktop' | 'mobile'
-  images: ArticleImage[]
+  /** Sidebar beside the article, or a bottom sheet over it. */
+  mode: 'side' | 'sheet'
+  images: EventImage[]
   sections: ArticleSection[]
-  mentions: Map<string, DateMention>
-  spacing: 'proportional' | 'even'
+  /** Machine-drafted label per item id, so edits can be undone. */
+  draftLabels: Map<string, string>
+  subject: string
+  /** Ages need a birth date; without one the switch is hidden. */
+  canShowAge: boolean
   /** Where the caret was when Insert was chosen (null: none). */
   cursorPlacement: Placement | null
 }>()
@@ -37,7 +40,17 @@ const emit = defineEmits<{
   showSource: [event: TimelineEvent]
 }>()
 
+defineSlots<{
+  preview(props: { wide: boolean }): unknown
+  notice(): unknown
+}>()
+
 const tab = ref<'events' | 'preview'>('events')
+const tabs = [
+  { id: 'events', label: 'Events' },
+  { id: 'preview', label: 'Preview' },
+] as const
+
 const sorted = computed(() => sortEvents(draft.value.events))
 const count = computed(() => draft.value.events.length)
 const countLabel = computed(() => (count.value === 1 ? '1 event' : `${count.value} events`))
@@ -57,7 +70,7 @@ function chooseImage(id: string) {
   pickerFor.value = id
   pickerOpen.value = true
 }
-function onImage(img: ArticleImage | undefined) {
+function onImage(img: EventImage | undefined) {
   if (pickerEvent.value) pickerEvent.value.image = img
 }
 
@@ -109,61 +122,88 @@ const hint = computed(() =>
 <template>
   <CurationPanel
     v-model:expanded="expanded"
-    :skin="skin"
+    :mode="mode"
     title="Timeline"
     :count="count"
     :count-label="countLabel"
     :hint="hint"
     @close="emit('close')"
   >
-    <CdxTabs v-model:active="tab" class="tp__tabs" :framed="false">
-      <CdxTab name="events" label="Events">
-        <div class="tp__pane">
-          <input
-            v-model="draft.title"
-            class="tp__title"
-            placeholder="Untitled timeline"
-            aria-label="Timeline title"
+    <template #notice><slot name="notice" /></template>
+
+    <div class="tp__tabs" role="tablist" aria-label="Timeline panel">
+      <button
+        v-for="t in tabs"
+        :id="`tp-tab-${t.id}`"
+        :key="t.id"
+        type="button"
+        role="tab"
+        class="tp__tab"
+        :class="{ 'tp__tab--on': tab === t.id }"
+        :aria-selected="tab === t.id"
+        :aria-controls="`tp-panel-${t.id}`"
+        @click="tab = t.id"
+      >
+        {{ t.label }}
+      </button>
+    </div>
+
+    <div
+      v-show="tab === 'events'"
+      id="tp-panel-events"
+      role="tabpanel"
+      aria-labelledby="tp-tab-events"
+      class="tp__pane"
+    >
+      <input
+        v-model="draft.title"
+        class="tp__title"
+        placeholder="Untitled timeline"
+        aria-label="Timeline title"
+      />
+      <div v-if="!count" class="tp__empty">
+        <p>Tap any highlighted date in the article.</p>
+        <small>Each date brings its sentence with it. Tap again to remove it.</small>
+      </div>
+      <ol v-else class="tp__list">
+        <li v-for="event in sorted" :key="event.id" class="tp__item">
+          <EventEditor
+            :model-value="eventRef(event.id)"
+            :draft-label="draftLabels.get(event.id)"
+            @remove="remove(event.id)"
+            @choose-image="chooseImage(event.id)"
+            @show-source="emit('showSource', event)"
           />
-          <div v-if="!count" class="tp__empty">
-            <p>Tap any highlighted date in the article.</p>
-            <small>Each date brings its sentence with it. Tap again to remove it.</small>
-          </div>
-          <ol v-else class="tp__list">
-            <li v-for="event in sorted" :key="event.id" class="tp__item">
-              <EventEditor
-                :model-value="eventRef(event.id)"
-                :draft-label="mentions.get(event.id)?.draftLabel"
-                @update:model-value="Object.assign(eventRef(event.id), $event)"
-                @remove="remove(event.id)"
-                @choose-image="chooseImage(event.id)"
-                @show-source="emit('showSource', event)"
-              />
-            </li>
-          </ol>
-        </div>
-      </CdxTab>
-      <CdxTab name="preview" label="Preview">
-        <div class="tp__pane">
-          <TimelineView
-            :events="draft.events"
-            :title="draft.title"
-            :spacing="spacing"
-            :skin="skin"
-            layout="vertical"
-          />
-          <CdxButton
-            v-if="skin === 'desktop' && count"
-            class="tp__wide-btn"
-            weight="quiet"
-            size="small"
-            @click="widePreview = true"
-          >
-            <CdxIcon :icon="cdxIconFullscreen" size="small" /> At article width
-          </CdxButton>
-        </div>
-      </CdxTab>
-    </CdxTabs>
+        </li>
+      </ol>
+    </div>
+
+    <div
+      v-show="tab === 'preview'"
+      id="tp-panel-preview"
+      role="tabpanel"
+      aria-labelledby="tp-tab-preview"
+      class="tp__pane"
+    >
+      <div class="tp__options">
+        <CdxToggleSwitch v-if="canShowAge" v-model="draft.options.showAge" align-switch
+          >Age at each event</CdxToggleSwitch
+        >
+        <CdxToggleSwitch v-model="draft.options.showGaps" align-switch
+          >Time between events</CdxToggleSwitch
+        >
+      </div>
+      <slot name="preview" :wide="false" />
+      <CdxButton
+        v-if="mode === 'side' && count"
+        class="tp__wide-btn"
+        weight="quiet"
+        size="small"
+        @click="widePreview = true"
+      >
+        <CdxIcon :icon="cdxIconFullscreen" size="small" /> At article width
+      </CdxButton>
+    </div>
 
     <template #footer>
       <CdxSelect
@@ -185,7 +225,13 @@ const hint = computed(() =>
     </template>
   </CurationPanel>
 
-  <ImagePicker v-model:open="pickerOpen" :images="images" :event="pickerEvent" @choose="onImage" />
+  <ImagePicker
+    v-model:open="pickerOpen"
+    :images="images"
+    :event="pickerEvent"
+    :subject="subject"
+    @choose="onImage"
+  />
 
   <CdxDialog
     v-model:open="widePreview"
@@ -194,28 +240,58 @@ const hint = computed(() =>
     subtitle="As readers will see it in the article on desktop"
     :use-close-button="true"
   >
-    <TimelineView
-      :events="draft.events"
-      :title="draft.title"
-      :spacing="spacing"
-      skin="desktop"
-      layout="horizontal"
-    />
+    <slot name="preview" :wide="true" />
   </CdxDialog>
 </template>
 
 <style scoped>
+/* Two plain tabs that always fit (no scrolling tab strip). */
 .tp__tabs {
-  min-height: 100%;
-}
-.tp__tabs :deep(.cdx-tabs__header) {
   position: sticky;
   top: 0;
   z-index: 2;
+  display: flex;
+  gap: var(--spacing-150);
+  padding: 0 var(--spacing-100);
   background: var(--background-color-base);
+  border-bottom: var(--border-width-base, 1px) solid var(--border-color-subtle);
+}
+.tp__tab {
+  flex: none;
+  padding: var(--spacing-50) 0;
+  margin-bottom: -1px;
+  border: 0;
+  border-bottom: var(--border-width-thick, 2px) solid transparent;
+  background: none;
+  color: var(--color-subtle);
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-medium);
+  font-weight: var(--font-weight-normal);
+  line-height: var(--line-height-medium);
+  cursor: pointer;
+}
+.tp__tab:hover {
+  color: var(--color-base);
+}
+.tp__tab--on {
+  color: var(--color-progressive);
+  border-bottom-color: var(--border-color-progressive);
+}
+.tp__tab:focus-visible {
+  outline: var(--border-width-thick, 2px) solid var(--outline-color-progressive--focus, #36c);
+  outline-offset: 2px;
 }
 .tp__pane {
   padding: var(--spacing-75) var(--spacing-100) var(--spacing-150);
+}
+.tp__options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-50);
+  margin-bottom: var(--spacing-75);
+}
+.tp__options :deep(.cdx-toggle-switch) {
+  margin: 0;
 }
 .tp__list {
   list-style: none;
