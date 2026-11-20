@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Snapshot the Frank Gehry article (Parsoid HTML) for the timeline prototype.
+"""Snapshot an English Wikipedia article (Parsoid HTML) for the module prototypes.
 
-Writes the <body> HTML to public/snapshots/frank-gehry.html and downloads
-every image it references into public/snapshots/frank-gehry/, rewriting the
-<img src> to a relative local path so the prototype works offline.
+Writes the <body> HTML to public/snapshots/<slug>.html and downloads every
+image it references into public/snapshots/<slug>/, rewriting the <img src> to
+a relative local path so the prototype works offline.
 
 Run from the repo root:
     python3 src/prototypes/timeline-module/scripts/snapshot.py [--revision N]
+    python3 src/prototypes/timeline-module/scripts/snapshot.py --title "2025 German federal election" --slug german-federal-election-2025
 """
 import argparse
 import hashlib
@@ -18,8 +19,7 @@ import urllib.parse
 import urllib.request
 
 TITLE = "Frank Gehry"
-OUT_HTML = "public/snapshots/frank-gehry.html"
-OUT_DIR = "public/snapshots/frank-gehry"
+SLUG = "frank-gehry"
 UA = open("src/api-user-agent.txt").read().strip()
 
 
@@ -32,8 +32,13 @@ def get(url: str) -> bytes:
 def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--revision", type=int)
+    p.add_argument("--title", default=TITLE)
+    p.add_argument("--slug", default=SLUG)
+    p.add_argument("--no-images", action="store_true", help="keep remote image URLs")
     a = p.parse_args()
-    slug = urllib.parse.quote(TITLE.replace(" ", "_"), safe="")
+    OUT_HTML = f"public/snapshots/{a.slug}.html"
+    OUT_DIR = f"public/snapshots/{a.slug}"
+    slug = urllib.parse.quote(a.title.replace(" ", "_"), safe="")
     url = f"https://en.wikipedia.org/api/rest_v1/page/html/{slug}"
     if a.revision:
         url += f"/{a.revision}"
@@ -69,16 +74,18 @@ def main() -> None:
                 return src
             open(path, "wb").write(data)
             time.sleep(0.2)
-        cache[clean] = "snapshots/frank-gehry/" + name
+        cache[clean] = f"snapshots/{a.slug}/" + name
         return cache[clean]
 
     def fix_img(m: re.Match) -> str:
         tag = m.group(0)
+        if a.no_images:
+            return re.sub(r'\s(srcset)="[^"]*"', "", tag)
         tag = re.sub(r'\s(srcset|data-file-width|data-file-height)="[^"]*"', "", tag)
         return re.sub(r'src="([^"]*)"', lambda s: f'src="{local(s.group(1))}"', tag)
 
     body = re.sub(r"<img\b[^>]*>", fix_img, body)
-    header = f"<!-- {TITLE}, enwiki revision {rev.group(1) if rev else '?'}, CC BY-SA 4.0 -->\n"
+    header = f"<!-- {a.title}, enwiki revision {rev.group(1) if rev else '?'}, CC BY-SA 4.0 -->\n"
     open(OUT_HTML, "w", encoding="utf-8").write(header + body)
     print(f"wrote {OUT_HTML} ({len(body)} bytes), {len(cache)} images")
 

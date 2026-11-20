@@ -54,3 +54,55 @@ prose (see `src/components/viz/pick/extractDates.ts`).
 - "the "Avant-Garde in Russia 1910–1930" exhibition in 1980" → 1910–1930 is offered as a span → part of an exhibition title.
 - "the California "funk" art movement of the 1960s and early 1970s" → two decades offered → they date a movement, not an event.
 - "In 1962, he established a practice … that became Frank Gehry and Associates in 1967, then Gehry Partners in 2001." → three chips, all with the 1962 clause as their label → each year needs its own clause as a label.
+
+# Tables (election module)
+
+On the results tables of *2025 German federal election* (rev 1385970319), *2021…*
+(rev 1385970268) and *2017…* (rev 1386057083). Rules in force
+(`src/components/viz/pick/tables.ts`): header rows are the leading all-`<th>` rows,
+merged cells repeated; *category* = the column with the most text in its own
+cells; *seats* = whole numbers summing to the infobox's chamber size; *share* =
+"%" in header or cells (first such column); *votes* = whole numbers ≥ 10,000
+under a "vote" header (first such column); *change* = signed numbers or a "+/–"
+header; *colour* = an empty cell with an inline background; *not a party* = rows
+named Total, Valid, Invalid, Registered, Turnout, Source…
+
+Result: the same 10 roles on all three tables — ignore (colour), category, votes,
+share, ignore, ignore, ignore, ignore, seats, change — with the two misses below
+fixed in the rules.
+
+## Merged headers
+
+- One "Party" header spans the colour cell and the name → both columns are called "Party" → right for display, but matching the 2021/2017 tables by header text gave the name column the colour column's role (no parties found) → fixed: same header in the same place first, then the first unused one.
+- "Party list › Seats" (sums 354 / 436 / 410) and "Constituency › Seats" (276 / 299 / 299) beside "Total seats" (630 / 735 / 709) → only the total sums to the chamber → right. Without the infobox's chamber size the rule could not tell the three apart.
+- Two "Votes" and two "%" columns (party list = second vote, constituency = first vote) → the first of each is kept → right for Germany (the list vote decides seats), but only because it comes first.
+
+## Totals rows
+
+- "Total" is one cell merged across the colour and name columns → it made the colour column look like the most-text column, so *category* went to the colour column → fixed: a merged cell counts once, for its first column.
+- "Valid votes", "Invalid/blank votes", "Total", "Registered voters/turnout" → dropped by name → right. A totals row named differently (e.g. "Overall") would be read as a party.
+
+## Footnote markers in numbers
+
+- FDP change "−91[d]" → footnote stripped, −91 → right.
+- BSW change "New" → no number, no change shown → right.
+
+## Coalition and alliance rows
+
+- The infobox lists the alliance "CDU/CSU" (one link, 208 seats) while the table has CDU (164) and CSU (44) as rows → split by initials of the table names → CDU, CSU in the infobox's slot → right; an alliance whose short names are not initials (e.g. "Greens/EFA") would fall to the end of the order.
+
+## Renamed parties
+
+- 2025 infobox links *Die_Linke*; the 2025, 2021 and 2017 tables link *The_Left_(Germany)* → no link match → matched by equal seats won (64) → right, but fails when two parties have the same seats. The short name follows the infobox ("Die Linke") while the full name follows the table ("The Left").
+- *Sahra Wagenknecht Alliance* exists only in 2025 → absent in 2021/2017 → right (its slot is empty in those years).
+
+## Constituency / list seats split
+
+- Seats come from "Total seats"; the list/constituency split is ignored. The seat diagram cannot show overhang or the 2025 rule that left constituency winners without a seat.
+
+## Tables the rules do not read
+
+- "Party list vote share by state" (states as rows, parties as columns, percentages without a "%") → not lit (no quantity found) → a share table per party, transposed.
+- "Seats won by state" tables → not lit (parties as columns) → same.
+- "Seats targeted by The Left / the Free Voters" → lit, *share* = the winner's 2021 share → offered as bars, which is a valid but odd chart; a seat diagram is rightly not offered.
+- "Sociology of the electorate" → lit, *share* = the first party column (Union) only → bars of one party by demographic; the other parties' columns are ignored as "another percentage column".

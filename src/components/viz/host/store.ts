@@ -31,6 +31,8 @@ export interface ModulesState {
   mode: Mode
   spacing: Spacing
   fallback: boolean
+  /** Prototype check: draw party colours in one hue by lightness instead. */
+  monochrome: boolean
   width: Width
   /** Placed modules, at most one per kind. */
   modules: Partial<Record<ModuleKind, PlacedModule>>
@@ -44,6 +46,7 @@ export interface ModulesState {
 export const DEFAULTS: Record<ModuleKind, Record<string, boolean>> = {
   timeline: { ...DEFAULT_OPTIONS },
   map: { ...DEFAULT_MAP_OPTIONS },
+  visual: {},
 }
 
 function initial(): ModulesState {
@@ -51,6 +54,7 @@ function initial(): ModulesState {
     mode: 'read',
     spacing: 'proportional',
     fallback: false,
+    monochrome: false,
     width: 'desktop',
     modules: {},
     panelOpen: false,

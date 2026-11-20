@@ -5,7 +5,7 @@
  * (Which renderer and which item editor to use is decided in the host's template.)
  */
 import type { Icon } from '@wikimedia/codex-icons'
-import { cdxIconHistory, cdxIconMap } from '@wikimedia/codex-icons'
+import { cdxIconChart, cdxIconHistory, cdxIconMap } from '@wikimedia/codex-icons'
 
 import { eventFromMention, placeFromMention } from '../curate/fromMention'
 import { sameDate, sortEvents } from '../model/dates'
@@ -70,5 +70,20 @@ export const KINDS: Record<ModuleKind, KindSpec> = {
       )
     },
     sort: (items) => sortPlaces(items as Place[]),
+  },
+  // A table is picked whole (see the host's pickTable); its rows become the items.
+  visual: {
+    kind: 'visual',
+    title: 'Visual',
+    noun: ['party', 'parties'],
+    picks: 'table',
+    icon: cdxIconChart,
+    mentions: (a) => a.tables,
+    fromMention: () => {
+      throw new Error('A table is picked whole')
+    },
+    duplicateOf: () => null,
+    // The editor's order: no automatic sort.
+    sort: (items) => items,
   },
 }
