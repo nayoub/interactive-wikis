@@ -18,7 +18,8 @@ import { cleanLabel } from '../pick/labelSpan'
 import { defaultsOf, FORMS } from './forms'
 import { formsFor } from './rules'
 
-export type PickFilter = 'all' | 'date' | 'place' | 'table' | 'image'
+/** What a visual is picked from; "series" is made whole from one sentence (no picking). */
+export type PickFilter = 'all' | 'date' | 'place' | 'table' | 'image' | 'series'
 
 export interface VisualDraft {
   visual: Visual
@@ -39,6 +40,8 @@ export interface VisualDraft {
   isNew?: boolean
   /** The item whose label span is underlined in the text and can be adjusted. */
   currentId?: string | null
+  /** The sentence a series chart is made from. */
+  seriesId?: string | null
   /** A table read with doubt: the one question the bar asks, with two or three answers. */
   question?: { text: string; answers: { label: string; col: number }[]; chosen: number } | null
 }
@@ -51,6 +54,8 @@ export interface PickState {
   roles: GeneralRole[]
   imageId: string | null
   compareWith: string | null
+  /** The sentence a series chart was made from. */
+  seriesId?: string | null
 }
 
 export interface PlacedVisual {
@@ -67,6 +72,7 @@ export const pickStateOf = (d: VisualDraft): PickState => ({
   roles: [...d.roles],
   imageId: d.imageId,
   compareWith: d.compareWith,
+  seriesId: d.seriesId ?? null,
 })
 
 /** The label a span reads as, unless the editor typed their own. */
@@ -213,6 +219,14 @@ export function addMarker(d: VisualDraft, a: LoadedArticle, x: number, y: number
   refreshForm(d)
 }
 
+/** The comparable articles that have the same table (same headers), by title. */
+export function compareOptions(a: LoadedArticle, tableId: string | null): string[] {
+  const here = tableOf(a, tableId)
+  if (!here) return []
+  const want = here.headers.map(norm).join('|')
+  return a.compare.filter((c) => c.tables.some((t) => t.headers.map(norm).join('|') === want)).map((c) => c.title)
+}
+
 /** Header text without punctuation, for finding the same table in another article. */
 const norm = (h: string) => h.toLowerCase().replace(/[^a-z%]/g, '')
 
@@ -222,11 +236,12 @@ const norm = (h: string) => h.toLowerCase().replace(/[^a-z%]/g, '')
  */
 export function setCompare(d: VisualDraft, a: LoadedArticle, title: string | null) {
   d.compareWith = title
+  const here = tableOf(a, d.tableId)
   if (!title) {
     d.visual.sets = d.visual.sets.slice(0, 1)
+    if (here) d.visual.sourceNote = `Data: the table in “${here.sectionTitle}”, ${a.source.title}.`
     return
   }
-  const here = tableOf(a, d.tableId)
   const other = a.compare.find((c) => c.title === title)
   if (!here || !other) return
   const want = here.headers.map(norm).join('|')
@@ -258,4 +273,31 @@ export function chooseValueColumn(d: VisualDraft, a: LoadedArticle, col: number)
     label: labels.get(i.id) ?? i.label,
   }))
   refreshForm(d)
+}
+
+/**
+ * "Show as a chart" on a sentence like "the population increased from 11,000
+ * in 1880 to 80,000 in 1900": a line of its number–year pairs, the sentence as
+ * the source of each point. Every figure is the sentence's own.
+ */
+export function draftFromSeries(a: LoadedArticle, id: string): VisualDraft | null {
+  const s = a.series.find((x) => x.id === id)
+  if (!s) return null
+  const d = emptyDraft('series')
+  d.seriesId = id
+  d.visual.title = `${s.measure} over time`
+  d.visual.sets[0].label = a.source.title
+  d.visual.sets[0].items = s.points.map((p) => ({
+    id: p.id,
+    label: String(p.year),
+    components: {
+      time: { start: { y: p.year }, precision: 'year' as const },
+      quantity: { value: p.value, unit: '', measure: s.measure },
+    },
+    source: { kind: 'sentence' as const, anchor: { ...s.anchor, mentionId: p.id }, text: s.sentence },
+  }))
+  d.visual.sourceNote = `Data: one sentence in “${s.anchor.sectionTitle}”.`
+  d.visual.form = 'line'
+  refreshForm(d)
+  return d
 }

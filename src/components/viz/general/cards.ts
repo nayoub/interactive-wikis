@@ -3,9 +3,12 @@
  * snapshot. No model.
  *
  *   Timeline  at least six dated sentences (prose, not lists) in the section
- *   Map       at least five distinct linked places with coordinates, near the
- *             article's other places (within about 50 km: not flight destinations)
- *   Table     a data table with a time or category column and a number column
+ *   Map       at least five distinct linked places with coordinates. Which count
+ *             depends on the subject (its infobox type): for a place, those within
+ *             about 50 km of it (not its flight destinations); for a person, an
+ *             organisation or a work, every one.
+ *   Tables and sentences that tell a quantity over time get their own chips
+ *   (InlineChips), outside this ranking.
  *   Never     an annotated image; the lead (no heading to sit by); a kind
  *             already made in that section; a dismissed one
  *
@@ -19,9 +22,50 @@ import type { LoadedArticle } from '../host/loadArticle'
 import { proposeGeneralRoles } from '../pick/toItems'
 import type { PickFilter, PlacedVisual } from './draft'
 
+/** A suggestion attached to its source (a table, a sentence): see InlineChips.vue. */
+export interface InlineChip {
+  id: string
+  label: string
+  /** The element it is attached to. */
+  anchor: HTMLElement
+}
+
+/**
+ * The sources that get a chip of their own (not ranked, not counted toward
+ * the three cards):
+ *   Table     a data table with a time or category column and a number column
+ *             → "Show as a figure"
+ *   Sentence  "from 11,000 in 1880 to 80,000 in 1900": two or more number–year
+ *             pairs in one prose sentence → "Show as a chart" (a line)
+ * Never one already made into a visual, or dismissed.
+ */
+export function chipSources(
+  a: LoadedArticle,
+  visuals: PlacedVisual[],
+  gone: Record<string, unknown>,
+): { id: string; kind: 'table' | 'series'; ref: string; label: string }[] {
+  const out: { id: string; kind: 'table' | 'series'; ref: string; label: string }[] = []
+  const usedTables = new Set(visuals.map((v) => v.pick?.tableId).filter(Boolean))
+  const usedSeries = new Set(visuals.map((v) => v.pick?.seriesId).filter(Boolean))
+  for (const tm of a.tables) {
+    const id = `table:${tm.id}`
+    if (gone[id] || usedTables.has(tm.id)) continue
+    const roles = proposeGeneralRoles(tm.value).map((r) => r.role)
+    const hasKey = roles.includes('time') || roles.includes('category')
+    const hasNumber = roles.includes('quantity') || roles.filter((r) => r === 'time').length > 1
+    if (hasKey && hasNumber) out.push({ id, kind: 'table', ref: tm.id, label: 'Show as a figure' })
+  }
+  for (const s of a.series) {
+    const id = `series:${s.id}`
+    if (gone[id] || s.inList || usedSeries.has(s.id)) continue
+    out.push({ id, kind: 'series', ref: s.id, label: 'Show as a chart' })
+  }
+  return out
+}
+
 export interface Card {
   id: string
-  kind: Exclude<PickFilter, 'all' | 'image'>
+  kind: 'date' | 'place'
   section: { id: string; title: string }
   title: string
   evidence: string
@@ -29,7 +73,7 @@ export interface Card {
   score: number
 }
 
-const ORDER: Card['kind'][] = ['date', 'place', 'table']
+const ORDER: Card['kind'][] = ['date', 'place']
 const KEY = 'protowiki-visual:dismissed'
 
 export const DISMISS_REASONS = [
@@ -108,10 +152,11 @@ export function cards(
   const placeSentences = new Map<string, Set<string>>()
   const median = (xs: number[]) => [...xs].sort((x, y) => x - y)[Math.floor(xs.length / 2)] ?? 0
   const pts = a.places.filter((p) => p.value.kind !== 'region')
-  const lat = median(pts.map((p) => p.value.coordinates.lat))
-  const lon = median(pts.map((p) => p.value.coordinates.lon))
+  const near = a.subject.kind === 'place'
+  const lat = a.subject.coords?.lat ?? median(pts.map((p) => p.value.coordinates.lat))
+  const lon = a.subject.coords?.lon ?? median(pts.map((p) => p.value.coordinates.lon))
   for (const p of pts) {
-    if (Math.hypot(p.value.coordinates.lat - lat, p.value.coordinates.lon - lon) > 0.5) continue
+    if (near && Math.hypot(p.value.coordinates.lat - lat, p.value.coordinates.lon - lon) > 0.5) continue
     const s = top(p.anchor.sectionId)
     if (!places.has(s.id)) places.set(s.id, new Set())
     places.get(s.id)!.add(p.value.wikidataId)
@@ -128,28 +173,6 @@ export function cards(
       evidence: `${set.size} places with coordinates in this section`,
       why: 'Suggested because this section links five or more places that have coordinates on Wikidata.',
       score: share(placeSentences.get(id) ?? new Set(), id),
-    })
-  }
-
-  // Table: time or category, and a number.
-  for (const tm of a.tables) {
-    const t = tm.value
-    const roles = proposeGeneralRoles(t).map((r) => r.role)
-    const hasKey = roles.includes('time') || roles.includes('category')
-    const hasNumber = roles.includes('quantity') || roles.filter((r) => r === 'time').length > 1
-    if (!hasKey || !hasNumber) continue
-    const s = top(t.sectionId)
-    const name = /[A-Za-z]{3}/.test(t.caption)
-      ? t.caption.split(/\s+data\s+for\b/i)[0]
-      : t.sectionTitle
-    add({
-      id: `table:${t.id}`,
-      kind: 'table',
-      section: s,
-      title: 'Turn a table into a figure',
-      evidence: `${name}: ${t.rows.length} rows`,
-      why: 'Suggested because this section has a data table with a column of times or names and a column of numbers.',
-      score: t.rows.reduce((n, r) => n + r.texts.join(' ').length, 0) / len(s.id),
     })
   }
 

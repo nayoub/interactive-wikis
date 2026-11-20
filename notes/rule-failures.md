@@ -206,3 +206,63 @@ first public university, was established".
 - The population and climate tables never appear as cards while three other suggestions outrank them; they appear only once the others are made or dismissed. A table is the most direct visual on a city article; the ranking undervalues it.
 - The Infrastructure map (airport, port, stations) is valid but marginal; "Not useful here" is the expected answer.
 - The lead has dated sentences and places but no heading to sit beside, so it is never suggested.
+
+# Follow-up round (PR 8 follow-up)
+
+## Non-events: years that are part of a name
+
+Rule (`host/loadArticle.ts`, general tool only): a bare year is not a date
+chip when it sits inside a link's text but not at its start, or right after
+two or more capitalised words. Removed on Bilbao:
+
+| Year | Context | Right? |
+| --- | --- | --- |
+| 2000 | "Bilbao Ría 2000" | yes: a name |
+| 2018 | "Best European City 2018" | miss: the name of an award Bilbao received in 2018; the date is real |
+| 2018 | "Urbanism Awards 2018" | miss: same |
+| 2010 | "World Cities Summit 2010" | yes, by luck: the same sentence already dates the prize, "18 May 2010" |
+
+Kept (the year leads the link, so it is an event): "2018 MTV Europe Music
+Awards", "2008 financial crisis". The capitalised-words rule cannot tell an
+award's name from an organisation's; it errs towards dropping the chip.
+
+## Quantities over time in a sentence
+
+Rule: two or more "<number> [inhabitants|people|…] in <year>" pairs in one
+prose sentence → a series; its years are chart evidence, not date chips, and
+the sentence gets a "Show as a chart" chip (a line, one point per pair, the
+sentence as the source of each point). The measure is the subject before the
+verb ("The population increased …" → "Population"); without one, "Value".
+
+- Found on Bilbao: one, "from 11,000 in 1880 to 80,000 in 1900" (History).
+- What the rule would miss (none on Bilbao): one pair plus a change in words
+  ("10,000 in 1850, and doubled by 1900"), and pairs in list items (skipped on
+  purpose: lists are usually tables in disguise).
+  "347,342 people as of 2024" and "1,037,847 people" in Demographics have one
+  pair or none, so no series.
+
+## Label spans, recounted
+
+With 1880, 1900 (series) and Bilbao Ría 2000 (a name) no longer dates, History
+has **33** eligible dated sentences; the default span is **right for 23**,
+**wrong for 10** (1323, 1327, 1335, 1376, 1476, 1902, 1948, 1947, 1979,
+26 August 1983 — as in the table above).
+
+## Map suggestion: which places count
+
+Rule (`general/cards.ts`): the subject's type comes from its infobox class
+(settlement, country, island, region, river, mountain, lake, park … → a
+place). For a place: linked places within about 50 km (0.5°) of the subject's
+own coordinates (the infobox's `.geo`, else the median of the places). For a
+person, an organisation or a work: every linked place with coordinates. On
+Bilbao, the airport's destinations (London, Frankfurt …) are left out.
+
+## Chips on tables
+
+All five Bilbao tables qualify (a time or category column and a number
+column): Climate, Historical population, Foreign population by country of
+birth, Districts, Basque-speaking population. The foreign-population and
+Basque-speaking tables make weaker figures (the first is a list of
+countries, the second has groups as rows and census years as columns, which
+the rules read as small columns at best); "Not useful here" is the expected
+answer there.

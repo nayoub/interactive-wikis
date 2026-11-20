@@ -5,7 +5,7 @@
  * the first or last word to let it go. Keyboard: Shift+→ / Shift+← move the
  * end by a word; Alt+Shift+→ / Alt+Shift+← move the start.
  */
-import { onBeforeUnmount, onMounted, watch, type Ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue'
 
 import type { Item } from '../model/visual'
 import { words, type Span } from '../pick/labelSpan'
@@ -45,20 +45,28 @@ export function useSpanEditor(o: Options) {
     return { item, block, ws, span: item.source.span }
   }
 
+  /** Which end is being dragged (null: none). While dragging, the page holds still. */
+  const dragging = ref<'start' | 'end' | null>(null)
+  let handles: { start: HTMLButtonElement; end: HTMLButtonElement } | null = null
+
   function clear() {
     layer?.remove()
     layer = null
+    handles = null
   }
 
+  /**
+   * Draw the underline and place the two ends. The layer and its handles live
+   * as long as the span is shown: re-drawing only moves them, so a handle
+   * being dragged keeps the pointer (re-creating it lost the drag).
+   */
   function render() {
-    clear()
-    if (!o.active.value) return
+    if (!o.active.value) return clear()
     const at = locate()
-    if (!at) return
+    if (!at) return clear()
     // A word is in the span when it starts inside it (words carry their punctuation: "Biscay,").
     const inSpan = at.ws.filter((w) => w.start >= at.span.start && w.start < at.span.end && w.range)
-    if (!inSpan.length) return
-    // One underline per line of the span.
+    if (!inSpan.length) return clear()
     const lines: { left: number; right: number; bottom: number }[] = []
     for (const w of inSpan) {
       for (const r of Array.from(w.range!.getClientRects())) {
@@ -70,42 +78,41 @@ export function useSpanEditor(o: Options) {
       }
     }
     lines.sort((x, y) => x.bottom - y.bottom || x.left - y.left)
-    layer = document.createElement('div')
-    layer.className = 'gm-span'
-    layer.setAttribute('aria-hidden', 'false')
+    if (!layer) {
+      layer = document.createElement('div')
+      layer.className = 'gm-span'
+      handles = { start: handle('start'), end: handle('end') }
+      layer.append(handles.start, handles.end)
+      document.body.appendChild(layer)
+    }
+    layer.querySelectorAll('.gm-span__line').forEach((el) => el.remove())
     const sx = window.scrollX
     const sy = window.scrollY
     for (const l of lines) {
       const bar = document.createElement('div')
       bar.className = 'gm-span__line'
-      Object.assign(bar.style, {
-        left: `${l.left + sx}px`,
-        top: `${l.bottom + sy}px`,
-        width: `${l.right - l.left}px`,
-      })
-      layer.appendChild(bar)
+      Object.assign(bar.style, { left: `${l.left + sx}px`, top: `${l.bottom + sy}px`, width: `${l.right - l.left}px` })
+      layer.prepend(bar)
     }
     const first = lines[0]
     const last = lines[lines.length - 1]
-    layer.appendChild(handle('start', first.left + sx, first.bottom + sy))
-    layer.appendChild(handle('end', last.right + sx, last.bottom + sy))
-    document.body.appendChild(layer)
+    Object.assign(handles!.start.style, { left: `${first.left + sx}px`, top: `${first.bottom + sy}px` })
+    Object.assign(handles!.end.style, { left: `${last.right + sx}px`, top: `${last.bottom + sy}px` })
   }
 
-  function handle(side: 'start' | 'end', x: number, y: number) {
+  function handle(side: 'start' | 'end') {
     const h = document.createElement('button')
     h.type = 'button'
     h.className = `gm-span__handle gm-span__handle--${side}`
     h.setAttribute(
       'aria-label',
-      side === 'start'
-        ? 'Start of the label: drag, or use Alt+Shift+arrows'
-        : 'End of the label: drag, or use Shift+arrows',
+      side === 'start' ? 'Start of the label: drag, or use Alt+Shift+arrows' : 'End of the label: drag, or use Shift+arrows',
     )
-    Object.assign(h.style, { left: `${x}px`, top: `${y}px` })
     h.addEventListener('pointerdown', (e) => {
       e.preventDefault()
+      e.stopPropagation()
       o.begin()
+      dragging.value = side
       try {
         h.setPointerCapture(e.pointerId)
       } catch {
@@ -116,6 +123,8 @@ export function useSpanEditor(o: Options) {
         h.removeEventListener('pointermove', move)
         h.removeEventListener('pointerup', up)
         h.removeEventListener('pointercancel', up)
+        dragging.value = null
+        requestAnimationFrame(render)
       }
       h.addEventListener('pointermove', move)
       h.addEventListener('pointerup', up)
@@ -229,5 +238,5 @@ export function useSpanEditor(o: Options) {
     ],
     () => requestAnimationFrame(render),
   )
-  return { render }
+  return { render, dragging }
 }

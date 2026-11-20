@@ -24,7 +24,7 @@ import {
   type ParsedTable,
 } from '../pick/tables'
 import { indexBlock, proseBlocks, rangeFor, sentences } from '../pick/textIndex'
-import type { ArticleSection, EventImage, PartialDate, Seating } from '../model/types'
+import type { ArticleSection, EventImage, PartialDate, Seating, SourceAnchor } from '../model/types'
 import type { DateMention, PlaceInfo, PlaceMention, TableMention } from '../pick/types'
 
 export type { DateMention, PlaceMention, TableMention }
@@ -61,6 +61,20 @@ export interface RelatedArticle {
   seating?: Seating
 }
 
+/**
+ * A quantity over time told in one sentence ("grew from 11,000 in 1880 to
+ * 80,000 in 1900"): evidence for a chart, not events for a timeline (general tool).
+ */
+export interface SeriesMention {
+  id: string
+  sentence: string
+  anchor: SourceAnchor
+  inList: boolean
+  /** What the numbers measure, from the sentence's subject ("Population"), else "Value". */
+  measure: string
+  points: { id: string; year: number; value: number; text: string }[]
+}
+
 export interface LoadedArticle {
   html: string
   /** Date mentions (timeline). */
@@ -69,6 +83,14 @@ export interface LoadedArticle {
   places: PlaceMention[]
   /** Data tables (visual). */
   tables: TableMention[]
+  /** Quantities over time told in a sentence (general tool). */
+  series: SeriesMention[]
+  /**
+   * What the article is about, from its infobox type: a place (ib-settlement,
+   * ib-country…) or anything else (biography, organisation, event, work), and
+   * the place's own coordinates (the infobox's geo) when it has them.
+   */
+  subject: { name: string; birth?: PartialDate; kind: 'place' | 'other'; coords?: { lat: number; lon: number } }
   /** Election infobox: chamber size, majority, the article's party order. */
   infobox: InfoboxElection
   previous: RelatedArticle[]
@@ -89,8 +111,19 @@ export interface LoadedArticle {
   topSection: Record<string, { id: string; title: string }>
   /** {{Use dmy dates}}: write "6 May 2025", as the article does. */
   dayFirst: boolean
-  /** The article's subject; `birth` from the infobox when it has one. */
-  subject: { name: string; birth?: PartialDate }
+}
+
+/** "11,000 in 1880": a number, an optional unit word, then "in <year>". */
+const PAIR = /(\d[\d,.]*)(?:\s+(?:inhabitants|people|residents|workers|tonnes|tons|visitors|students))?\s+in\s+(1\d{3}|20[0-3]\d)\b/g
+/** The subject before "grew/rose/fell from": "the population grew from" → "population". */
+const SUBJECT = /(?:the\s+)?([a-z][a-z ]{2,30}?)\s+(?:of\s+[A-Z]\w+\s+)?(?:grew|rose|increased|fell|declined|dropped|went|doubled|tripled)\b[^.]*$/i
+
+/** A place or not, from the infobox's type class; its coordinates from the infobox's geo. */
+function subjectOf(body: HTMLElement): { kind: 'place' | 'other'; coords?: { lat: number; lon: number } } {
+  const box = body.querySelector('table.infobox')
+  const place = /\bib-(settlement|country|island|region|river|mountain|lake|body-of-water|protected-area|park|city|state)\b|\bgeography\b/.test(box?.className ?? '')
+  const geo = body.querySelector('.geo')?.textContent?.match(/(-?\d+(?:\.\d+)?)\s*;\s*(-?\d+(?:\.\d+)?)/)
+  return { kind: place ? 'place' : 'other', coords: geo ? { lat: Number(geo[1]), lon: Number(geo[2]) } : undefined }
 }
 
 const cache = new Map<string, Promise<LoadedArticle>>()
@@ -239,6 +272,8 @@ function process(
 
   const mentions: DateMention[] = []
   const places: PlaceMention[] = []
+  const series: SeriesMention[] = []
+  let seriesCount = 0
   let dateCount = 0
   let placeCount = 0
 
@@ -302,11 +337,54 @@ function process(
       })
     }
 
+    // Non-events (general tool only; the earlier prototypes keep their rules):
+    //   - a year inside a link's text (not at its start), or right after a capitalised
+    //     multi-word name ("Bilbao Ría 2000"), is part of a name: no date chip
+    //   - a sentence with two or more "<number> in <year>" pairs ("from 11,000 in 1880 to
+    //     80,000 in 1900") is a quantity over time: its years are chart evidence, not dates
+    const seriesYears = new Map<number, { id: string }>()
+    if (source.general) {
+      for (const sent of sents) {
+        const pairs = [...sent.text.matchAll(PAIR)]
+        if (pairs.length < 2) continue
+        const id = `s${++seriesCount}`
+        const subject = sent.text.slice(0, pairs[0].index).match(SUBJECT)
+        const points = pairs.map((m, k) => {
+          const yearAt = sent.start + m.index! + m[0].lastIndexOf(m[2])
+          const pid = `${id}-y${k}`
+          seriesYears.set(yearAt, { id: pid })
+          return { id: pid, year: Number(m[2]), value: Number(m[1].replace(/,/g, '')), text: m[0].trim() }
+        })
+        series.push({
+          id,
+          sentence: sent.text,
+          anchor: anchorFor(points[0].id, sent),
+          inList: ctx.el.tagName === 'LI',
+          measure: subject ? subject[1][0].toUpperCase() + subject[1].slice(1) : 'Value',
+          points,
+        })
+      }
+    }
+    const inName = (m: DateMatch) =>
+      m.date.precision === 'year' &&
+      /^\d{4}$/.test(m.text) &&
+      // In a link, but not leading it ("the 2018 MTV Europe Music Awards" is an event; "Bilbao Ría 2000" a name).
+      (block.links.some((l) => l.start < m.start && l.end >= m.end) ||
+        /(?:\p{Lu}[\p{L}’'-]*\s+){2,}$/u.test(block.text.slice(Math.max(0, m.start - 60), m.start)))
+
     // Dates: wrapped in spans.
-    const wraps: { range: Range; id: string }[] = []
+    const wraps: { range: Range; id: string; kind?: string }[] = []
     for (const match of found) {
       const sent = sentenceAt(match.start)
       if (!sent) continue
+      if (source.general && inName(match)) continue
+      const yearOf = seriesYears.get(match.start)
+      if (yearOf) {
+        // Kept in the text as an anchor for the chart's points, never a chip.
+        const range = rangeFor(block, match.start, match.end)
+        if (range) wraps.push({ range, id: yearOf.id, kind: 'series' })
+        continue
+      }
       const id = `d${++dateCount}`
       const others = found
         .filter((o) => o !== match && o.start >= sent.start && o.end <= sent.end)
@@ -334,10 +412,10 @@ function process(
       if (range) wraps.push({ range, id })
     }
     // Wrap last-to-first so earlier ranges stay valid.
-    for (const { range, id } of wraps.reverse()) {
+    for (const { range, id, kind } of wraps.reverse()) {
       const span = doc.createElement('span')
-      span.className = 'tl-mention'
-      span.dataset.kind = 'date'
+      span.className = kind === 'series' ? 'tl-series-year' : 'tl-mention'
+      span.dataset.kind = kind ?? 'date'
       span.dataset.tlId = id
       span.id = `tl-src-${id}`
       try {
@@ -468,6 +546,7 @@ function process(
     mentions,
     places,
     tables,
+    series,
     infobox,
     previous,
     compare: [],
@@ -479,6 +558,6 @@ function process(
     sectionLength,
     images,
     sections,
-    subject: { name: source.title, birth },
+    subject: { name: source.title, birth, ...subjectOf(body) },
   }
 }

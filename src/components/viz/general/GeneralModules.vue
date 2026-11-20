@@ -30,6 +30,7 @@ import {
   cdxIconChart,
   cdxIconDraggable,
   cdxIconEllipsis,
+  cdxIconSettings,
 } from '@wikimedia/codex-icons'
 
 import ArticleRenderer from '@/components/article/ArticleRenderer.vue'
@@ -50,16 +51,19 @@ import type { FormId, Item } from '../model/visual'
 import { scrollToEl, showPassage } from '../pick/passage'
 import { END_MATTER } from '../pick/textIndex'
 import { useSelectMode } from '../pick/useSelectMode'
-import { cards, dismiss, dismissed } from './cards'
+import { cards, chipSources, dismiss, dismissed, type InlineChip } from './cards'
 import ColumnsDialog from './ColumnsDialog.vue'
 import {
   chooseValueColumn,
+  compareOptions,
+  draftFromSeries,
   emptyDraft,
   itemsOf,
   pickImage,
   pickStateOf,
   pickTable,
   refreshForm,
+  setCompare,
   setRole,
   setSpan,
   tableOf,
@@ -70,13 +74,14 @@ import {
 } from './draft'
 import EditorBar from './EditorBar.vue'
 import { defaultsOf, FORMS } from './forms'
+import InlineChips from './InlineChips.vue'
 import KindChooser from './KindChooser.vue'
 import { formsFor } from './rules'
 import SuggestionLayer from './SuggestionLayer.vue'
 import { useSpanEditor } from './useSpanEditor'
 import VisualFrame from './VisualFrame.vue'
 
-type Kind = Exclude<PickFilter, 'all'>
+type Kind = Exclude<PickFilter, 'all' | 'series'>
 
 const props = defineProps<{
   store: ModulesStore
@@ -204,6 +209,7 @@ watch(bodyEl, (el) => el && setTimeout(ensureMounts, 50))
 // The block grows with every pick: when it sits above what the editor is reading, keep the text still.
 let grow: ResizeObserver | null = null
 let lastHeight = 0
+let heldShift = 0
 watch(
   () => (picking.value && draft.value?.editingId ? mountEls[draft.value.editingId] : null),
   (mount) => {
@@ -215,7 +221,11 @@ watch(
       const r = mount.getBoundingClientRect()
       const delta = r.height - lastHeight
       lastHeight = r.height
-      if (delta && r.bottom < window.innerHeight * 0.3) window.scrollBy(0, delta)
+      if (!delta || r.bottom >= window.innerHeight * 0.3) return
+      // While a label end is dragged the page holds still (the end stays under the pointer);
+      // the shift is applied once on release.
+      if (spans.dragging.value) heldShift += delta
+      else window.scrollBy(0, delta)
     })
     grow.observe(mount)
   },
@@ -396,7 +406,8 @@ onMounted(() => window.addEventListener('keydown', onKeydown))
 onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 
 // ── Spotlight: one kind, one section ───────────────────────────────────────
-const PROMPT: Record<Kind, string> = {
+const PROMPT: Record<Exclude<PickFilter, 'all'>, string> = {
+  series: 'A chart from one sentence',
   date: 'Tap a date in the text',
   place: 'Tap a place in the text',
   table: 'Tap “Use this” on a table',
@@ -520,21 +531,41 @@ const items = computed(() => (draft.value ? itemsOf(draft.value) : []))
 const fits = computed<FormId[]>(() => formsFor(items.value))
 const currentItem = computed(() => items.value.find((i) => i.id === draft.value?.currentId) ?? null)
 const columnsOpen = ref(false)
-function onMore(action: string) {
+/** The bar's scope control: the whole article, or back to the section it started in. */
+function setWhole(on: boolean) {
   const d = draft.value
-  const a = article.value
-  if (!d || !a) return
-  if (action === 'whole') d.scope = null
-  else if (action === 'section') d.scope = currentSection()
-  else if (action === 'addAll') addAll()
-  else if (action === 'columns') columnsOpen.value = true
+  if (!d) return
+  d.scope = on ? null : (startScope.value ?? currentSection())
+}
+const startScope = ref<string | null>(null)
+watch(
+  () => draft.value?.editingId,
+  () => (startScope.value = draft.value?.scope ?? null),
+)
+/** The visual's own settings, on its block while it is being made: form options, columns, form. */
+const settingsItems = computed(() => {
+  const d = draft.value
+  if (!d) return []
+  const def = FORMS[d.visual.form]
+  const out: { value: string; label: string }[] = []
+  for (const st of def.settings ?? []) {
+    const on = d.visual.options[st.key] !== undefined ? !!d.visual.options[st.key] : st.default
+    out.push({ value: `setting:${st.key}`, label: `${st.label}: ${on ? 'on' : 'off'}` })
+  }
+  if (def.ordered) out.push({ value: 'order', label: 'Order: drag the items on the visual' })
+  if (d.tableId) out.push({ value: 'columns', label: 'Adjust columns' })
+  for (const f of fits.value) if (f !== d.visual.form) out.push({ value: `form:${f}`, label: `Change form: ${FORMS[f].label}` })
+  return out
+})
+function onSetting(action: string | null) {
+  const d = draft.value
+  if (!d || !action) return
+  if (action === 'columns') columnsOpen.value = true
   else if (action.startsWith('setting:')) {
     const key = action.slice(8)
-    const s = FORMS[d.visual.form].settings?.find((x) => x.key === key)
+    const st = FORMS[d.visual.form].settings?.find((x) => x.key === key)
     record()
-    d.visual.options[key] = !(d.visual.options[key] !== undefined
-      ? d.visual.options[key]
-      : s?.default)
+    d.visual.options[key] = !(d.visual.options[key] !== undefined ? d.visual.options[key] : st?.default)
   } else if (action.startsWith('form:')) chooseForm(action.slice(5) as FormId)
 }
 function chooseForm(f: FormId) {
@@ -579,13 +610,23 @@ function toBlock() {
 }
 
 // ── Labels: spans of the sentence, adjusted in the text ────────────────────
-useSpanEditor({
+const spans = useSpanEditor({
   root: bodyEl,
   item: currentItem,
   active: picking,
   begin: record,
   change: (span) => currentItem.value && setSpan(currentItem.value, span),
 })
+
+watch(
+  () => spans.dragging.value,
+  (d) => {
+    if (!d && heldShift) {
+      window.scrollBy(0, heldShift)
+      heldShift = 0
+    }
+  },
+)
 
 // ── Edit on the visual ─────────────────────────────────────────────────────
 const findItem = (id: string) => items.value.find((i) => i.id === id)
@@ -733,21 +774,114 @@ function moveBlock(v: PlacedVisual, delta: number) {
   nextTick(() => setTimeout(() => mountEls[v.id] && scrollToEl(mountEls[v.id]!, 'center'), 60))
 }
 function blockMenu(v: PlacedVisual) {
-  return [
-    { value: 'edit', label: 'Edit' },
+  const out = [{ value: 'edit', label: 'Edit' }]
+  if (canCompare(v)) out.push({ value: 'compare', label: 'Compare with…' })
+  if (v.visual.sets.length > 1) out.push({ value: 'uncompare', label: 'Remove comparison' })
+  out.push(
     { value: 'up', label: 'Move up' },
     { value: 'down', label: 'Move down' },
     { value: 'remove', label: 'Remove' },
-  ].filter(() => !!v)
+  )
+  return out
 }
 function onBlockMenu(v: PlacedVisual, action: string | null) {
   if (action === 'edit') reEnter(v.id)
+  else if (action === 'compare') compareFor.value = v.id
+  else if (action === 'uncompare') applyCompare(v.id, null)
   else if (action === 'up') moveBlock(v, -1)
   else if (action === 'down') moveBlock(v, 1)
   else if (action === 'remove') {
     state.visuals = state.visuals.filter((x) => x.id !== v.id)
     state.fromExample = false
   }
+}
+
+// ── Compare: a second set from another snapshotted article ─────────────────
+/** Forms that draw a second set (line, columns, bars, rows of small columns), from a table another article also has. */
+function canCompare(v: PlacedVisual) {
+  return (
+    !!FORMS[v.visual.form].compare &&
+    !!article.value &&
+    compareOptions(article.value, v.pick?.tableId ?? null).length > 0
+  )
+}
+const compareFor = ref<string | null>(null)
+const compareChoices = computed(() => {
+  const v = state.visuals.find((x) => x.id === compareFor.value)
+  return v && article.value ? compareOptions(article.value, v.pick?.tableId ?? null) : []
+})
+function applyCompare(id: string, title: string | null) {
+  const v = state.visuals.find((x) => x.id === id)
+  const a = article.value
+  compareFor.value = null
+  if (!v || !a || !v.pick) return
+  const d: VisualDraft = {
+    ...emptyDraft(v.pick.kind),
+    visual: JSON.parse(JSON.stringify(v.visual)),
+    tableId: v.pick.tableId,
+    roles: [...v.pick.roles],
+  }
+  setCompare(d, a, title)
+  state.visuals = state.visuals.map((x) =>
+    x.id === id ? { ...x, visual: d.visual, pick: { ...x.pick!, compareWith: title } } : x,
+  )
+  state.fromExample = false
+  announce(title ? `Compared with ${title}.` : 'Comparison removed.')
+}
+
+// ── Chips on their source: a table, a sentence of numbers over time ─────────
+const shownChips = computed<InlineChip[]>(() => {
+  const a = article.value
+  const body = bodyEl.value
+  if (!editing.value || picking.value || !hub.suggestions || !a || !body) return []
+  const out: InlineChip[] = []
+  for (const c of chipSources(a, state.visuals, gone.value)) {
+    const anchor =
+      c.kind === 'table'
+        ? body.querySelector<HTMLElement>(`[data-pick-table="${c.ref}"]`)
+        : body.querySelector<HTMLElement>(`[data-tl-id="${c.ref}-y0"]`)?.closest<HTMLElement>('p, li')
+    if (anchor?.offsetParent) out.push({ id: c.id, label: c.label, anchor })
+  }
+  return out
+})
+function useChip(id: string) {
+  const a = article.value
+  if (!a) return
+  if (id.startsWith('table:')) {
+    // The same as "Use this" on the table: the figure right after it.
+    const t = a.tables.find((x) => x.id === id.slice(6))
+    if (!t) return
+    start('table', topOf(t.anchor.sectionId).id)
+    toggle(t.id)
+    undoStack.value = []
+    return
+  }
+  const sid = id.slice(7)
+  const d = draftFromSeries(a, sid)
+  const p = bodyEl.value
+    ?.querySelector<HTMLElement>(`[data-tl-id="${sid}-y0"]`)
+    ?.closest<HTMLElement>('p, li')
+  if (!d || !p) return
+  const vid = `v${Date.now().toString(36)}${++ids}`
+  const sec = sectionIdOf(p)
+  state.visuals = [
+    ...state.visuals,
+    {
+      id: vid,
+      visual: d.visual,
+      placement: { kind: 'after', anchorId: ensureId(p), sectionId: sec, sectionTitle: topOf(sec).title },
+    },
+  ]
+  state.vdraft = { ...d, editingId: vid, isNew: true, scope: null, currentId: null, question: null }
+  undoStack.value = []
+  redoStack.value = []
+  state.panelOpen = true
+  announce(`Line chart from one sentence: ${d.visual.sets[0].items.length} points.`)
+}
+function onChipDismiss(id: string, reason: string) {
+  dismiss(id, reason)
+  gone.value = dismissed()
+  announce('Suggestion dismissed.')
 }
 
 // ── Suggestion cards ───────────────────────────────────────────────────────
@@ -831,7 +965,9 @@ const languages = computed(() =>
     : [],
 )
 const insertItems = [{ value: 'visual', label: 'Visual', icon: cdxIconChart }]
-const prompt = computed(() => (draft.value ? (PROMPT[draft.value.filter as Kind] ?? '') : ''))
+const prompt = computed(() =>
+  draft.value && draft.value.filter !== 'all' ? PROMPT[draft.value.filter] : '',
+)
 </script>
 
 <template>
@@ -931,6 +1067,7 @@ const prompt = computed(() => (draft.value ? (PROMPT[draft.value.filter as Kind]
           @start="(c) => start(c.kind, c.section.id)"
           @dismiss="onDismiss"
         />
+        <InlineChips v-if="shownChips.length" :chips="shownChips" :page="pageEl" @use="useChip" @dismiss="onChipDismiss" />
       </div>
     </VisualEditorPageLayout>
 
@@ -947,6 +1084,19 @@ const prompt = computed(() => (draft.value ? (PROMPT[draft.value.filter as Kind]
           }"
           @click="onBlockClick(v, $event)"
         >
+          <!-- While it is being made: the visual's own settings, on the block. -->
+          <div v-if="picking && draft?.editingId === v.id && settingsItems.length" class="gm-block__tools">
+            <CdxMenuButton
+              :selected="null"
+              :menu-items="settingsItems"
+              weight="quiet"
+              size="small"
+              aria-label="Settings for this visual"
+              @update:selected="onSetting"
+            >
+              <CdxIcon :icon="cdxIconSettings" size="small" />
+            </CdxMenuButton>
+          </div>
           <div v-if="editing && !picking" class="gm-block__tools">
             <button
               v-if="!narrow"
@@ -1000,7 +1150,6 @@ const prompt = computed(() => (draft.value ? (PROMPT[draft.value.filter as Kind]
       :prompt="prompt"
       :scoped="!!draft.scope"
       :can-add-all="draft.filter === 'date' || draft.filter === 'place'"
-      :is-table="!!draft.tableId"
       :narrow="narrow"
       @undo="undo"
       @cancel="cancel()"
@@ -1008,7 +1157,8 @@ const prompt = computed(() => (draft.value ? (PROMPT[draft.value.filter as Kind]
       @to-block="toBlock"
       @answer="answer"
       @form="chooseForm"
-      @more="onMore"
+      @whole="setWhole"
+      @add-all="addAll"
     />
 
     <KindChooser
@@ -1035,6 +1185,17 @@ const prompt = computed(() => (draft.value ? (PROMPT[draft.value.filter as Kind]
       :subject="article.source.title"
       @choose="onImage"
     />
+    <CdxDialog
+      :open="!!compareFor"
+      title="Compare with…"
+      :use-close-button="true"
+      @update:open="(o: boolean) => !o && (compareFor = null)"
+    >
+      <p>The same table in another article, as a second set.</p>
+      <div class="gm-compare">
+        <CdxButton v-for="t in compareChoices" :key="t" @click="applyCompare(compareFor!, t)">{{ t }}</CdxButton>
+      </div>
+    </CdxDialog>
     <CdxDialog
       v-model:open="confirmCancel"
       title="Discard this visual?"
@@ -1097,6 +1258,11 @@ const prompt = computed(() => (draft.value ? (PROMPT[draft.value.filter as Kind]
   height: 1px;
   overflow: hidden;
   clip: rect(0 0 0 0);
+}
+.gm-compare {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-50);
 }
 .gm-drop {
   position: fixed;
@@ -1230,11 +1396,12 @@ const prompt = computed(() => (draft.value ? (PROMPT[draft.value.filter as Kind]
   border-top: var(--border-width-thick, 2px) solid var(--border-color-progressive);
   transform: translateY(1px);
 }
+/* Each end: a 44×44 target around a thin bar and a dot (the look is unchanged). */
 .gm-span__handle {
   position: absolute;
-  width: 12px;
-  height: 22px;
-  margin: -20px 0 0 -6px;
+  width: 44px;
+  height: 44px;
+  margin: -34px 0 0 -22px;
   padding: 0;
   border: 0;
   background: none;
@@ -1245,8 +1412,8 @@ const prompt = computed(() => (draft.value ? (PROMPT[draft.value.filter as Kind]
 .gm-span__handle::before {
   content: '';
   position: absolute;
-  left: 5px;
-  top: 0;
+  left: 21px;
+  top: 12px;
   width: 2px;
   height: 22px;
   background: var(--background-color-progressive);
@@ -1254,8 +1421,8 @@ const prompt = computed(() => (draft.value ? (PROMPT[draft.value.filter as Kind]
 .gm-span__handle::after {
   content: '';
   position: absolute;
-  left: 1px;
-  bottom: -4px;
+  left: 17px;
+  top: 32px;
   width: 10px;
   height: 10px;
   border-radius: 50%;

@@ -1,13 +1,14 @@
 <script setup lang="ts">
 /**
  * The one bar while a visual is being made: docked at the bottom on every
- * screen. Kind and count, a miniature (tap: back to the block), Undo, More,
- * Cancel and Done. Above it, only when needed: the one question about a
+ * screen. Kind and count, a miniature (tap: back to the block), Undo, the
+ * scope (Whole article) and Add all, Cancel and Done. The visual's own
+ * settings (form options, columns, form) are on the block, not here. Above it, only when needed: the one question about a
  * table, or two or three forms to choose from.
  */
 import { computed } from 'vue'
-import { CdxButton, CdxIcon, CdxMenuButton } from '@wikimedia/codex'
-import { cdxIconClose, cdxIconEllipsis, cdxIconUndo } from '@wikimedia/codex-icons'
+import { CdxButton, CdxIcon, CdxToggleButton } from '@wikimedia/codex'
+import { cdxIconClose, cdxIconUndo } from '@wikimedia/codex-icons'
 
 import type { FormId, Item, Visual } from '../model/visual'
 import { FORMS } from './forms'
@@ -24,7 +25,6 @@ const props = defineProps<{
   prompt: string
   scoped: boolean
   canAddAll: boolean
-  isTable: boolean
   narrow: boolean
 }>()
 const emit = defineEmits<{
@@ -34,7 +34,9 @@ const emit = defineEmits<{
   toBlock: []
   answer: [col: number]
   form: [form: FormId]
-  more: [action: string]
+  /** Whole article (true) or only this section (false). */
+  whole: [on: boolean]
+  addAll: []
 }>()
 
 const def = computed(() => FORMS[props.visual.form])
@@ -44,25 +46,6 @@ const count = computed(
 )
 const thumb = computed(() => def.value.thumb(props.items))
 
-const moreItems = computed(() => {
-  const out: { value: string; label: string }[] = []
-  out.push(
-    props.scoped
-      ? { value: 'whole', label: 'Whole article' }
-      : { value: 'section', label: 'Only this section' },
-  )
-  if (props.canAddAll) out.push({ value: 'addAll', label: 'Add all in this section' })
-  for (const s of def.value.settings ?? []) {
-    const on = props.visual.options[s.key] !== undefined ? !!props.visual.options[s.key] : s.default
-    out.push({ value: `setting:${s.key}`, label: `${s.label}: ${on ? 'on' : 'off'}` })
-  }
-  if (props.isTable) out.push({ value: 'columns', label: 'Adjust columns' })
-  if (props.fits.length > 1)
-    for (const f of props.fits)
-      if (f !== props.visual.form)
-        out.push({ value: `form:${f}`, label: `Change form: ${FORMS[f].label}` })
-  return out
-})
 const showForms = computed(() => n.value > 0 && props.fits.length > 1 && !props.question)
 </script>
 
@@ -99,6 +82,16 @@ const showForms = computed(() => n.value > 0 && props.fits.length > 1 && !props.
       </button>
     </div>
 
+    <!-- Phone: the scope controls on their own row, so the main row keeps Done in reach. -->
+    <div v-if="narrow" class="eb__ask eb__scope">
+      <CdxToggleButton :model-value="!scoped" quiet size="small" @update:model-value="(on: boolean) => emit('whole', on)"
+        >Whole article</CdxToggleButton
+      >
+      <CdxButton v-if="canAddAll" weight="quiet" size="small" @click="emit('addAll')">{{
+        scoped ? 'Add all in this section' : 'Add all'
+      }}</CdxButton>
+    </div>
+
     <div class="eb__main">
       <div class="eb__what" aria-live="polite">
         <strong v-if="n">{{ count }}</strong>
@@ -117,15 +110,14 @@ const showForms = computed(() => n.value > 0 && props.fits.length > 1 && !props.
       <CdxButton weight="quiet" :disabled="!canUndo" aria-label="Undo" @click="emit('undo')">
         <CdxIcon :icon="cdxIconUndo" />
       </CdxButton>
-      <CdxMenuButton
-        :selected="null"
-        :menu-items="moreItems"
-        weight="quiet"
-        aria-label="More"
-        @update:selected="(v: string | null) => v && emit('more', v)"
-      >
-        <CdxIcon :icon="cdxIconEllipsis" />
-      </CdxMenuButton>
+      <template v-if="!narrow">
+        <CdxToggleButton :model-value="!scoped" quiet @update:model-value="(on: boolean) => emit('whole', on)"
+          >Whole article</CdxToggleButton
+        >
+        <CdxButton v-if="canAddAll" weight="quiet" @click="emit('addAll')">{{
+          scoped ? 'Add all in this section' : 'Add all'
+        }}</CdxButton>
+      </template>
       <span class="eb__end">
         <CdxButton
           weight="quiet"

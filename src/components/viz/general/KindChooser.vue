@@ -13,12 +13,12 @@ const props = defineProps<{
   anchor: HTMLElement | null
   /** The section's title, and which kinds it has. */
   section: string
-  kinds: Record<Exclude<PickFilter, 'all'>, boolean>
+  kinds: Record<Exclude<PickFilter, 'all' | 'series'>, boolean>
   /** Kinds present anywhere in the article (when the section has none). */
-  anywhere: Record<Exclude<PickFilter, 'all'>, boolean>
+  anywhere: Record<Exclude<PickFilter, 'all' | 'series'>, boolean>
 }>()
 const open = defineModel<boolean>('open', { required: true })
-const emit = defineEmits<{ choose: [kind: Exclude<PickFilter, 'all'>, whole: boolean] }>()
+const emit = defineEmits<{ choose: [kind: Exclude<PickFilter, 'all' | 'series'>, whole: boolean] }>()
 
 const LABEL = { date: 'Dates', place: 'Places', table: 'A table', image: 'An image' } as const
 const here = computed(() =>

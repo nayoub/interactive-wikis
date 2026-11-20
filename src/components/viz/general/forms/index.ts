@@ -201,6 +201,7 @@ export const FORMS: Record<FormId, FormDef> = {
   },
   smallColumns: {
     id: 'smallColumns',
+    compare: true,
     noun: ['value', 'values'],
     label: 'Rows of small columns',
     component: SmallColumnsForm,
