@@ -81,6 +81,10 @@ watch(
   () => (draftLabel.value = allItems.value.find((i) => i.id === selectedId.value)?.label ?? ''),
   { immediate: true, deep: true },
 )
+function removeSelected() {
+  if (selected.value) emit('remove', selected.value.id)
+  selectedId.value = null
+}
 function commitLabel() {
   const t = draftLabel.value.replace(/\s+/g, ' ').trim()
   if (selected.value && t && t !== selected.value.label) emit('rename', selected.value.id, t)
@@ -225,10 +229,7 @@ function onKeydown(e: KeyboardEvent) {
         <button
           type="button"
           class="vf__remove"
-          @click="
-            emit('remove', selected.id)
-            selectedId = null
-          "
+          @click="removeSelected"
         >
           <small>Remove</small>
         </button>
