@@ -5,6 +5,7 @@ import type { LoadedArticle } from '../host/loadArticle'
 import type { Collection } from './events'
 import type { Occurrence } from './occurrences'
 import type { Navigator } from './useNavigator'
+import type { Authoring } from './ruler/authoring'
 
 export interface NavContext {
   collection: Collection
@@ -19,6 +20,8 @@ export interface NavContext {
   occurrences: Occurrence[]
   articleId: 'frank-gehry' | 'bilbao' | 'test-fixture'
   variant: string
+  /** B's authored timeline and its editor. */
+  authoring: Authoring
 }
 
 export const NAV: InjectionKey<NavContext> = Symbol('timeline-navigation')

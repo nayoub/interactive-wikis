@@ -436,3 +436,127 @@ motion on, plus the in-app browser:
   so a window without images (early Bilbao) has empty space below the line.
 - **Long dates** such as "February 28, 1929" overflow their block into the gap between
   neighbours. Very long era dates in the fixture could touch.
+
+---
+
+# B, Time ruler: a simpler reader, and editing from dates
+
+Same URL: `/timeline-navigation?variant=ruler`. Captures: `screenshots/ruler-authoring/authoring.mp4`
+(dates → live timeline → trimmed label → Commons image → Done) and `reader.mp4` (the approved
+reading sequence on the simplified surface). Builder's checks, not user research.
+
+## One authored dataset
+
+- **What is saved:** the timeline is the general tool's item list (`model/visual.ts`), one per
+  article, in the prototype store (`host/store.ts`, localStorage key
+  `protowiki-timeline-navigation:v1`). See `ruler/authoring.ts`.
+- **How the reader gets it:** through `toNavEvents`, a thin equivalent of `toTimelineEvents`
+  that also keeps each event's mention id and article order for the reading anchor. The
+  navigator indexes these events (`TimelineNavigation.vue`).
+- **First visit:** the article's curated picks are written into the store once. After that the
+  saved list is the only source, so edits are never overwritten on reload. An emptied timeline
+  stays removed.
+- **Identity:** each event is identified by its source occurrence (the date mention's id), so
+  two events in 1954 stay distinct.
+
+## Reader
+
+- **Header:**
+  - The title is "Timeline", with a plain **Edit timeline** link beside it.
+  - Docked, the header reads `2003 · Walt Disney Concert Hall` with the reading caret. There
+    is no "Reading" sentence or section text.
+  - There is no Explore button on the open overview. Once docked, a single chevron (with an
+    accessible name and `aria-expanded`) opens and closes the timeline.
+  - Return to reading appears only after a real jump.
+- **Removed:** previous/next, the filter and date range, range dragging, the event count and
+  date span, help, the Event list, the "n yrs" gap labels and dotted gaps, and the years under
+  the compact strip.
+- **Region:** the selected event's sentence (date in bold, citation, Commons credit) and
+  **Read passage**, which stays reachable however long the sentence is. Nothing selected shows
+  one quiet hint.
+- **Layout:**
+  - Slots are wider: about 6.5 events across a desktop column and 2.5 on a phone, with part of
+    the next one showing.
+  - Blocks are up to 240px wide.
+  - Label lines follow the longest label, and images shrink before lines are cut.
+  - An always-visible native scrollbar; arrow keys, Home and End move between events; Enter
+    selects.
+  - The blocks are an `<ol>` inside a `<figure>` whose description says even spacing shows
+    order, not elapsed time.
+
+## Editing
+
+- **Getting in:**
+  - **New:** the article's Edit tab opens the editor toolbar (`VeToolbar`), and
+    **Insert → Timeline** starts an empty draft. It replaces the current timeline on Done.
+  - **Existing:** Edit timeline opens a draft of the saved list.
+- **Dates in the article:**
+  - Every date becomes a chip (`pick/useSelectMode.ts`), and links stop looking like links
+    while picking.
+  - Selecting a date adds an event at once (`itemFromDate`: the default source span as its
+    label, plus the exact span, section, citation and date precision) and selects it.
+  - The timeline stays in date order. Selecting a picked date again removes it.
+- **The selected event's actions:**
+  - Its label is the underlined span in the sentence; trim it by dragging the ends or with
+    Shift/Alt+Shift+arrows (`general/useSpanEditor.ts`). "Show in the article" scrolls to it.
+  - **Add image / Change image** opens the existing `curate/ImagePicker.vue`. It offers the
+    article's own images, and a Commons search seeded from the sentence's linked subject.
+  - **Remove image** and **Remove event**.
+- **Bar:** one bar at the bottom (`ruler/AuthorBar.vue`) with the count (or "Select dates in
+  the article to add events"), Undo, Cancel and Done.
+  - Undo reverses picks, label trims, image changes and removals.
+  - Done saves and returns to reading; Cancel keeps the saved version.
+  - Leaving editing removes the chip and span handlers, so links and previews behave normally.
+- **Commons images** keep their file title, page URL, thumbnail, author, licence, licence URL
+  and caption (the file's own name or description) through Done, reload and re-editing.
+- **Shared fix:** `pick/labelSpan.ts` `cleanLabel` now also drops a leading ")" or "]". Before
+  this, "Walt Disney Concert Hall (2003) in downtown…" started its draft label with ")".
+
+## Checks run
+
+Authoring, desktop 1440×900, in the in-app browser:
+
+1. **New timeline:** Edit → Insert → Timeline gave an empty draft, with 184 date chips.
+   Selecting 1997, then 1989, then 2003 gave the order 1989, 1997, 2003. Each keeps its own
+   mention (d24, d32, d33).
+2. **Trim:** the 1997 label went from "Gehry vaulted … when the Guggenheim Museum Bilbao opened
+   in Bilbao" to "The Guggenheim Museum Bilbao opened".
+3. **Image:** Commons search opened seeded with "Guggenheim Museum Bilbao", and I chose
+   `File:Guggenheim Museum Bilbao 2.jpg` (kallerna, CC BY-SA 4.0). The saved item has the
+   title, artist, licence, licence URL, page URL and thumbnail.
+4. **Done:** the reader shows the three events, the trimmed label and the photo, with no
+   chips and no toolbar.
+5. **Reload:** the same timeline came back. Edit timeline → Remove event → Undo restored it;
+   Cancel kept the saved version.
+6. **Real change:** I swapped the photo for the article's own image and trimmed 2003 to "Walt
+   Disney Concert Hall". Done, then reload: both persisted.
+
+Also checked:
+
+- **Phone (headless, 390×844):** Edit timeline → a date chip adds an event with its span
+  underlined → Add image opens the picker (358px wide) → Done.
+- **Keyboard:** date chips work with Enter and have accessible names ("1962: add to the
+  timeline").
+
+Reader, with the seeded timeline in headless Chrome at reduced motion, at 1440×900, 1280×600 and
+390×844:
+
+- **Sequence:** reading 1997 → contract → 2003 → open → preview 1989 (scroll 0) → close (dy 0)
+  → Read passage 1989 → Return (dy 0).
+- **Opening from the overview:** opening a preview from the un-docked overview moved the page
+  0px.
+- **Keyboard:** arrows and Home move focus along the events; Enter previews; the first Escape
+  closes the preview (focus back on the event), the second collapses.
+- **Dark theme**, type-check, build and eslint are clean.
+
+## Not verified / limitations
+
+- **Draft labels:** a new event's first label is the existing default span, which can be long
+  or odd (for 2003: "In downtown Los Angeles is the centerpiece…") until it is trimmed.
+- **Article editor:** the toolbar's own buttons other than Insert, Undo and Publish (text
+  style, link, cite…) are inert here.
+- **Picking near the top:** the open timeline sits below the introduction, so dates in the
+  introduction are picked with the timeline out of view until you scroll it into place.
+- **Chip contrast:** a picked chip under the sentence hover highlight shows white text on grey.
+- **Not yet tried:** touch dragging of the span handles on a real phone, a screen reader,
+  Firefox and Safari.

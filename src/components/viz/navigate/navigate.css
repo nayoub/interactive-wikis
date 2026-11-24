@@ -230,3 +230,107 @@ a.tn-wl:focus-visible {
   display: flex;
   flex-direction: column;
 }
+
+/*
+ * B, editing: the article's dates become chips (the article editor's look,
+ * host/ArticleModules.vue), picked ones filled; links stop being blue while
+ * picking so the dates are the targets. Same metrics as the text: picking
+ * never reflows the article.
+ */
+.tn-page--authoring .tn-body a:not(.tl-mention--candidate) {
+  color: inherit;
+}
+.tn-page--authoring .mw-parser-output .tl-mention--candidate {
+  padding: 1px 3px;
+  margin: -1px -3px;
+  border-radius: var(--border-radius-base, 2px);
+  background-color: var(--background-color-progressive-subtle);
+  color: var(--color-progressive);
+  cursor: pointer;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  transition:
+    background-color 120ms,
+    color 120ms,
+    box-shadow 240ms;
+}
+.tn-page--authoring .mw-parser-output .tl-mention--candidate:hover {
+  background-color: var(--background-color-progressive-subtle--hover);
+}
+.tn-page--authoring .mw-parser-output .tl-mention--candidate:focus-visible {
+  outline: 2px solid var(--outline-color-progressive--focus, #36c);
+  outline-offset: 1px;
+}
+.tn-page--authoring .mw-parser-output .tl-mention--candidate.tl-mention--picked {
+  background-color: var(--background-color-progressive);
+  color: var(--color-inverted-fixed, #fff);
+}
+.tn-page--authoring .mw-parser-output .tl-mention--picked:hover {
+  background-color: var(--background-color-progressive--hover);
+}
+.tn-page--authoring .mw-parser-output .tl-mention--pop {
+  animation: tn-ring 420ms ease-out;
+}
+@keyframes tn-ring {
+  from {
+    box-shadow: 0 0 0 0 var(--border-color-progressive);
+  }
+  to {
+    box-shadow: 0 0 0 6px transparent;
+  }
+}
+::highlight(tl-hover) {
+  background-color: var(--background-color-interactive-subtle--hover, #eaecf0);
+}
+/* Room for the editing bar at the bottom. */
+.tn-page--authoring {
+  padding-block-end: 120px;
+}
+
+/* B, editing: the label is a span of its sentence, underlined, with an end to drag at each side (general/useSpanEditor.ts). */
+.gm-span {
+  position: absolute;
+  inset: 0 auto auto 0;
+  pointer-events: none;
+  z-index: 6;
+}
+.gm-span__line {
+  position: absolute;
+  height: 0;
+  border-top: var(--border-width-thick, 2px) solid var(--border-color-progressive);
+  transform: translateY(1px);
+}
+.gm-span__handle {
+  position: absolute;
+  width: 44px;
+  height: 44px;
+  margin: -34px 0 0 -22px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: ew-resize;
+  pointer-events: auto;
+  touch-action: none;
+}
+.gm-span__handle::before {
+  content: '';
+  position: absolute;
+  left: 21px;
+  top: 12px;
+  width: 2px;
+  height: 22px;
+  background: var(--background-color-progressive);
+}
+.gm-span__handle::after {
+  content: '';
+  position: absolute;
+  left: 17px;
+  top: 32px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--background-color-progressive);
+}
+.gm-span__handle:focus-visible {
+  outline: var(--border-width-thick, 2px) solid var(--outline-color-progressive--focus, #36c);
+}

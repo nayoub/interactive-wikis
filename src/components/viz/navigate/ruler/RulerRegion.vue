@@ -1,191 +1,186 @@
 <script setup lang="ts">
 /**
- * The ruler's one bounded region. It shows one thing at a time and scrolls
- * inside its allocation, so opening different previews never resizes the
- * panel:
+ * The ruler's one bounded region, below the timeline while it is open.
  *
- *   results   the events matching the filter (the readable list alternative)
- *   cluster   the events behind a count mark
- *   help      How to read this timeline
- *   preview   one event: date and label, source section, the source
- *             sentence, then Read this passage (the only control that moves
- *             the article)
+ *   reading  the selected event's source sentence (its date in bold), the
+ *            image credit when it is a Commons file, and Read passage: the
+ *            only control that moves the article. No repeated heading: the
+ *            selected event stays visible on the line above.
+ *   editing  the event being edited: its label is trimmed in the text (the
+ *            underlined span), its image added, changed or removed, or the
+ *            event removed. Nothing selected: what to do next.
  */
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed } from 'vue'
 import { CdxButton, CdxIcon, CdxMessage } from '@wikimedia/codex'
-import { cdxIconArrowPrevious, cdxIconArticle } from '@wikimedia/codex-icons'
+import { cdxIconArticle, cdxIconImage, cdxIconTrash } from '@wikimedia/codex-icons'
 
 import type { NavEvent } from '../events'
 import { msg } from '../messages'
-import { formatWhen, kindPhrase } from '../time'
-
-export type RegionView = 'results' | 'cluster' | 'help' | 'preview'
+import { formatWhen } from '../time'
 
 const props = defineProps<{
-  view: RegionView
-  results: NavEvent[]
-  resultsTitle: string
-  cluster: NavEvent[]
-  clusterTitle: string
-  preview: NavEvent | null
-  previewOutside: boolean
-  previewMissing: boolean
-  selectedId: string | null
-  readingId: string | null
+  mode: 'reading' | 'editing'
+  event: NavEvent | null
+  missing: boolean
   era: boolean
 }>()
-const emit = defineEmits<{ open: [id: string]; read: [e: NavEvent]; back: [] }>()
-
-const section = (e: NavEvent) => (e.sourceAnchor.sectionTitle === 'Lead' ? 'Introduction' : e.sourceAnchor.sectionTitle)
+const emit = defineEmits<{ read: [e: NavEvent]; image: []; removeImage: []; remove: []; showInText: [] }>()
 
 /** The source sentence, cut around its date when long; the date text in bold. */
 const excerpt = computed(() => {
-  const e = props.preview
+  const e = props.event
   if (!e?.sourceText) return null
   const text = e.sourceText.trim()
   const d = e.sourceDateText ? text.indexOf(e.sourceDateText) : -1
   let a = 0
   let b = text.length
-  if (text.length > 280) {
-    const c = d >= 0 ? d : 0
-    a = Math.max(0, c - 120)
-    b = Math.min(text.length, a + 260)
+  if (text.length > 320) {
+    a = Math.max(0, (d >= 0 ? d : 0) - 140)
+    b = Math.min(text.length, a + 300)
   }
   const cut = text.slice(a, b)
   const i = d >= 0 ? d - a : -1
-  const pre = (a > 0 ? '…' : '') + (i >= 0 ? cut.slice(0, i) : cut)
-  const date = i >= 0 ? cut.slice(i, i + e.sourceDateText.length) : ''
-  const post = (i >= 0 ? cut.slice(i + e.sourceDateText.length) : '') + (b < text.length ? '…' : '')
-  return { pre, date, post }
+  const len = e.sourceDateText.length
+  return {
+    pre: (a > 0 ? '…' : '') + (i >= 0 ? cut.slice(0, i) : cut),
+    date: i >= 0 ? cut.slice(i, i + len) : '',
+    post: (i >= 0 ? cut.slice(i + len) : '') + (b < text.length ? '…' : ''),
+  }
 })
-
-const list = computed(() => (props.view === 'cluster' ? props.cluster : props.results))
-const root = ref<HTMLElement | null>(null)
-watch(
-  () => [props.view, props.preview?.id],
-  () => nextTick(() => root.value?.scrollTo({ top: 0 })),
-)
-defineExpose({ root })
+const img = computed(() => props.event?.image ?? null)
 </script>
 
 <template>
-  <div
-    ref="root"
-    class="rr"
-  >
-    <article
-      v-if="view === 'preview' && preview"
-      class="rr__preview"
-      aria-labelledby="rr-preview-title"
-    >
-      <h3
-        id="rr-preview-title"
-        class="rr__heading"
-        tabindex="-1"
+  <div class="rr">
+    <!-- Reading -->
+    <template v-if="mode === 'reading'">
+      <div
+        v-if="event"
+        class="rr__preview"
       >
-        <span class="rr__when">{{ formatWhen(preview.date, era) }}</span> · {{ preview.label }}
-        <span class="rr__section">{{ msg.inSection(section(preview)) }}</span>
-      </h3>
-      <p
-        v-if="excerpt"
-        class="rr__quote"
-      >
-        {{ excerpt.pre }}<b>{{ excerpt.date }}</b>{{ excerpt.post }}
-      </p>
-      <p class="rr__meta">
-        <span v-if="kindPhrase(preview.date)">{{ kindPhrase(preview.date) }}</span>
-        <span v-if="previewOutside">{{ msg.trOutsideRangeNote }}</span>
-      </p>
-      <CdxMessage
-        v-if="previewMissing"
-        type="warning"
-        :inline="true"
-      >
-        {{ msg.trMissing }}
-      </CdxMessage>
-      <div class="rr__actions">
-        <CdxButton
-          action="progressive"
-          weight="normal"
-          :disabled="previewMissing"
-          @click="emit('read', preview)"
+        <p
+          v-if="excerpt"
+          class="rr__quote"
         >
-          <CdxIcon :icon="cdxIconArticle" />{{ msg.readPassage }}
-        </CdxButton>
-        <CdxButton
-          weight="quiet"
-          @click="emit('back')"
+          {{ excerpt.pre }}<b>{{ excerpt.date }}</b>{{ excerpt.post }}<sup
+            v-if="event.citation"
+            class="rr__cite"
+          ><a
+            :href="event.citation.href"
+          >{{ event.citation.label }}</a></sup>
+        </p>
+        <p
+          v-if="img?.source === 'commons'"
+          class="rr__credit"
         >
-          <CdxIcon :icon="cdxIconArrowPrevious" />{{ msg.trBackToList }}
-        </CdxButton>
-      </div>
-    </article>
-
-    <div
-      v-else-if="view === 'help'"
-      class="rr__help"
-    >
-      <h3 class="rr__heading">
-        {{ msg.trHowToRead }}
-      </h3>
-      <ul>
-        <li>{{ msg.trEvenNote }}</li>
-        <li>{{ msg.trLegendShapes }}</li>
-        <li>{{ msg.trLegendReading }}</li>
-        <li>{{ msg.trLegendRange }}</li>
-        <li>{{ msg.blankMeaning }}</li>
-      </ul>
-      <CdxButton
-        weight="quiet"
-        @click="emit('back')"
-      >
-        <CdxIcon :icon="cdxIconArrowPrevious" />{{ msg.trBackToList }}
-      </CdxButton>
-    </div>
-
-    <template v-else>
-      <p class="rr__list-head">
-        {{ view === 'cluster' ? clusterTitle : resultsTitle }}
-        <CdxButton
-          v-if="view === 'cluster'"
-          weight="quiet"
-          size="small"
-          @click="emit('back')"
+          {{ msg.trImageCredit }}
+          <a
+            :href="img.pageUrl"
+            target="_blank"
+            rel="noopener"
+          >{{ img.artist }}</a>, <a
+            v-if="img.licenseUrl"
+            :href="img.licenseUrl"
+            target="_blank"
+            rel="noopener"
+          >{{ img.license }}</a><template v-else>
+            {{ img.license }}
+          </template>
+        </p>
+        <CdxMessage
+          v-if="missing"
+          type="warning"
+          :inline="true"
         >
-          {{ msg.trBackToList }}
-        </CdxButton>
-      </p>
-      <ol class="rr__list">
-        <li
-          v-for="e in list"
-          :key="e.id"
-        >
-          <button
-            type="button"
-            class="rr__row"
-            :class="{ 'rr__row--selected': selectedId === e.id }"
-            :aria-pressed="selectedId === e.id ? 'true' : 'false'"
-            :data-event="e.id"
-            @click="emit('open', e.id)"
+          {{ msg.trMissing }}
+        </CdxMessage>
+        <div class="rr__actions">
+          <CdxButton
+            action="progressive"
+            :disabled="missing"
+            @click="emit('read', event)"
           >
-            <span class="rr__date">{{ formatWhen(e.date, era) }}</span>
-            <span class="rr__what">
-              {{ e.label }}
-              <span class="rr__row-section">{{ section(e) }}<template v-if="kindPhrase(e.date)"> · {{ kindPhrase(e.date) }}</template></span>
+            <CdxIcon :icon="cdxIconArticle" />{{ msg.trReadPassage }}
+          </CdxButton>
+        </div>
+      </div>
+      <p
+        v-else
+        class="rr__hint"
+      >
+        {{ msg.trSelectHint }}
+      </p>
+    </template>
+
+    <!-- Editing -->
+    <template v-else>
+      <div
+        v-if="event"
+        class="rr__edit"
+      >
+        <p class="rr__what">
+          <b>{{ formatWhen(event.date, era) }}</b> · {{ event.label }}
+        </p>
+        <p class="rr__hint">
+          {{ msg.trTrimHint }}
+          <CdxButton
+            weight="quiet"
+            size="small"
+            @click="emit('showInText')"
+          >
+            {{ msg.trShowInText }}
+          </CdxButton>
+        </p>
+        <div class="rr__image">
+          <template v-if="img">
+            <img
+              class="rr__thumb"
+              :src="img.src"
+              :alt="img.caption"
+            >
+            <span class="rr__img-meta">
+              {{ img.caption }}
+              <template v-if="img.source === 'commons'"> · {{ img.artist }}, {{ img.license }}</template>
             </span>
-            <span
-              v-if="readingId === e.id"
-              class="rr__reading"
-            >{{ msg.trReading }}</span>
-          </button>
-        </li>
-        <li
-          v-if="!list.length"
-          class="rr__empty"
-        >
-          {{ msg.noEventsIn }}
-        </li>
-      </ol>
+          </template>
+          <div class="rr__actions">
+            <CdxButton
+              size="small"
+              @click="emit('image')"
+            >
+              <CdxIcon
+                :icon="cdxIconImage"
+                size="small"
+              />{{ img ? msg.trChangeImage : msg.trAddImage }}
+            </CdxButton>
+            <CdxButton
+              v-if="img"
+              size="small"
+              weight="quiet"
+              @click="emit('removeImage')"
+            >
+              {{ msg.trRemoveImage }}
+            </CdxButton>
+            <CdxButton
+              size="small"
+              weight="quiet"
+              action="destructive"
+              @click="emit('remove')"
+            >
+              <CdxIcon
+                :icon="cdxIconTrash"
+                size="small"
+              />{{ msg.trRemoveEvent }}
+            </CdxButton>
+          </div>
+        </div>
+      </div>
+      <p
+        v-else
+        class="rr__hint"
+      >
+        {{ msg.trEditHint }}
+      </p>
     </template>
   </div>
 </template>
@@ -194,151 +189,61 @@ defineExpose({ root })
 .rr {
   box-sizing: border-box;
   height: 100%;
-  padding-block-start: var(--spacing-25);
+  padding-block: var(--spacing-50) 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   font-size: var(--font-size-small);
   line-height: var(--line-height-small);
 }
-.mw-parser-output .rr__heading,
-.rr__heading {
-  margin: 0;
-  padding: 0;
-  border: 0;
-  font-family: var(--font-family-base);
-  font-size: var(--font-size-medium);
-  line-height: var(--line-height-medium);
-  font-weight: var(--font-weight-bold);
-}
-.rr__heading:focus {
-  outline: none;
-}
-.rr__heading:focus-visible {
-  outline: var(--border-width-thick) solid var(--outline-color-progressive--focus);
-}
-.rr__when {
-  font-variant-numeric: tabular-nums;
-  unicode-bidi: plaintext;
-}
 .mw-parser-output .rr p,
 .rr p {
-  margin: 0;
-}
-.rr__section {
-  margin-inline-start: var(--spacing-50);
-  color: var(--color-subtle);
-  font-size: var(--font-size-small);
-  font-weight: var(--font-weight-normal);
+  margin: 0 0 var(--spacing-50);
 }
 .mw-parser-output .rr .rr__quote,
 .rr__quote {
-  margin: var(--spacing-25) 0;
-  padding: 0 0 0 var(--spacing-75);
-  border-inline-start: var(--border-width-thick) solid var(--border-color-subtle);
+  max-width: 48em;
   color: var(--color-base);
-  font-size: var(--font-size-small);
-  font-style: normal;
+  font-size: var(--font-size-medium);
+  line-height: var(--line-height-medium);
 }
-.rr__meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0 var(--spacing-75);
+.rr__cite {
+  font-size: 0.75em;
+}
+.rr__credit,
+.rr__hint,
+.rr__img-meta {
   color: var(--color-subtle);
 }
-.rr__preview {
-  padding-block-end: var(--spacing-50);
+.rr__what {
+  font-size: var(--font-size-medium);
 }
-/* The one action that moves the article stays reachable however short the region is. */
 .rr__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-50);
+}
+/* Read passage stays in reach however long the sentence (the sentence scrolls above it). */
+.rr__preview .rr__actions {
   position: sticky;
   inset-block-end: 0;
+  padding-block: var(--spacing-25) var(--spacing-50);
+  background: var(--background-color-base);
+}
+.rr__image {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--spacing-50);
-  margin-block-start: var(--spacing-50);
-  padding-block: var(--spacing-25);
-  background: var(--background-color-base);
-}
-.rr__help ul {
-  margin: var(--spacing-25) 0 var(--spacing-50) var(--spacing-125);
-}
-.rr__list-head {
-  position: sticky;
-  inset-block-start: 0;
-  z-index: 1;
-  display: flex;
   align-items: center;
-  justify-content: space-between;
-  min-height: 28px;
-  background: var(--background-color-base);
-  border-block-end: var(--border-width-base) solid var(--border-color-subtle);
-  font-weight: var(--font-weight-bold);
+  gap: var(--spacing-50) var(--spacing-75);
 }
-.mw-parser-output .rr__list,
-.rr__list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
+.rr__thumb {
+  width: 72px;
+  height: 48px;
+  object-fit: cover;
+  background: var(--background-color-neutral-subtle);
 }
-.mw-parser-output .rr__list li,
-.rr__list li {
-  margin: 0;
-}
-.rr__row {
-  display: grid;
-  grid-template-columns: 8.5em minmax(0, 1fr) auto;
-  gap: var(--spacing-50);
-  align-items: baseline;
-  width: 100%;
-  padding: var(--spacing-25) var(--spacing-50);
-  border: 0;
-  border-block-end: var(--border-width-base) solid var(--border-color-subtle);
-  background: none;
-  color: var(--color-base);
-  font: inherit;
-  text-align: start;
-  cursor: pointer;
-}
-.rr__row:hover {
-  background: var(--background-color-interactive-subtle--hover);
-}
-.rr__row:focus-visible {
-  outline: var(--border-width-thick) solid var(--outline-color-progressive--focus);
-  outline-offset: -2px;
-}
-.rr__row--selected {
-  box-shadow: inset 3px 0 0 var(--color-progressive);
-}
-[dir='rtl'] .rr__row--selected {
-  box-shadow: inset -3px 0 0 var(--color-progressive);
-}
-.rr__row--selected .rr__what {
-  font-weight: var(--font-weight-bold);
-}
-.rr__date {
-  color: var(--color-subtle);
-  font-variant-numeric: tabular-nums;
-  unicode-bidi: plaintext;
-}
-.rr__row-section {
-  display: block;
-  color: var(--color-subtle);
-  font-weight: var(--font-weight-normal);
-}
-.rr__reading {
-  padding-inline: var(--spacing-25);
-  border: var(--border-width-base) solid var(--border-color-base);
-  border-radius: var(--border-radius-base);
-  color: var(--color-base);
-  font-size: var(--font-size-x-small, 12px);
-}
-.rr__empty {
-  padding: var(--spacing-50);
-  color: var(--color-subtle);
-}
-@media (max-width: 639px) {
-  .rr__row {
-    grid-template-columns: 6.5em minmax(0, 1fr) auto;
-  }
+.rr__img-meta {
+  flex: 1 1 12em;
+  min-width: 0;
 }
 </style>

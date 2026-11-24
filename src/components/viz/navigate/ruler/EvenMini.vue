@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * Phones: the persistent overview of every event, evenly spaced across the
- * full width, with the same line, dotted gaps, reading caret and selected
+ * full width, with the same line, reading caret and selected
  * dot as the track. A bracket shows the part of the track in view; tapping
  * moves the track there (it never moves the article).
  */
@@ -9,8 +9,7 @@ import { computed } from 'vue'
 
 import type { NavEvent } from '../events'
 import { msg } from '../messages'
-import { interval, overlaps, timeKind, yearLabel } from '../time'
-import { gaps as gapsOf } from './layout'
+import { timeKind } from '../time'
 
 const props = withDefaults(
   defineProps<{
@@ -20,11 +19,10 @@ const props = withDefaults(
     selectedId?: string | null
     readingId?: string | null
     readingState?: 'at' | 'after' | 'before'
-    range?: [number, number] | null
     /** Visible part of the track, as fractional event indexes; null hides the bracket. */
     window?: [number, number] | null
   }>(),
-  { era: false, selectedId: null, readingId: null, readingState: 'before', range: null, window: null },
+  { era: false, selectedId: null, readingId: null, readingState: 'before', window: null },
 )
 const emit = defineEmits<{ go: [index: number] }>()
 
@@ -32,8 +30,6 @@ const PAD = 14
 const n = computed(() => props.events.length)
 const step = computed(() => (n.value > 1 ? (props.width - 2 * PAD) / (n.value - 1) : 0))
 const x = (i: number) => PAD + i * step.value
-const gaps = computed(() => gapsOf(props.events))
-const inRange = (e: NavEvent) => !props.range || overlaps(interval(e.date), props.range)
 const readingIndex = computed(() => props.events.findIndex((e) => e.id === props.readingId))
 const bracket = computed(() => {
   const w = props.window
@@ -48,11 +44,6 @@ function onClick(e: MouseEvent) {
   const px = rtl ? r.right - e.clientX : e.clientX - r.left
   emit('go', step.value ? (px - PAD) / step.value : 0)
 }
-const first = computed(() => (props.events[0] ? yearLabel(props.events[0].date.start.y, props.era) : ''))
-const last = computed(() => {
-  const e = props.events[n.value - 1]
-  return e ? yearLabel((e.date.end ?? e.date.start).y, props.era) : ''
-})
 const pxs = (v: number) => `${Math.round(v * 10) / 10}px`
 </script>
 
@@ -70,11 +61,9 @@ const pxs = (v: number) => `${Math.round(v * 10) / 10}px`
       :style="{ insetInlineStart: pxs(bracket.start), inlineSize: pxs(bracket.size) }"
     />
     <span
-      v-for="g in gaps"
-      :key="'s' + g.i"
+      v-if="n > 1"
       class="em__seg"
-      :class="{ 'em__seg--elided': g.skipped }"
-      :style="{ insetInlineStart: pxs(x(g.i - 1)), inlineSize: pxs(step) }"
+      :style="{ insetInlineStart: pxs(x(0)), inlineSize: pxs(x(n - 1) - x(0)) }"
     />
     <span
       v-for="(e, i) in events"
@@ -83,7 +72,6 @@ const pxs = (v: number) => `${Math.round(v * 10) / 10}px`
       :class="{
         'em__dot--approx': timeKind(e.date) === 'approximate',
         'em__dot--on': selectedId === e.id,
-        'em__dot--out': !inRange(e),
       }"
       :style="{ insetInlineStart: pxs(x(i)) }"
     />
@@ -98,20 +86,18 @@ const pxs = (v: number) => `${Math.round(v * 10) / 10}px`
     >
       <path d="M6 1.2 L11 9 L1 9 Z" />
     </svg>
-    <span class="em__end em__end--start">{{ first }}</span>
-    <span class="em__end em__end--end">{{ last }}</span>
   </div>
 </template>
 
 <style scoped>
 .em {
   position: relative;
-  height: 32px;
+  height: 22px;
   cursor: pointer;
 }
 .em__window {
   position: absolute;
-  inset-block: 1px 15px;
+  inset-block: 1px 2px;
   border: var(--border-width-thick) solid var(--border-color-progressive);
   border-radius: 2px;
   background: var(--background-color-progressive-subtle);
@@ -159,19 +145,5 @@ const pxs = (v: number) => `${Math.round(v * 10) / 10}px`
 }
 .em__caret--after path {
   stroke-dasharray: 2 1.6;
-}
-.em__end {
-  position: absolute;
-  inset-block-start: 18px;
-  color: var(--color-subtle);
-  font-size: var(--font-size-x-small, 12px);
-  line-height: 14px;
-  font-variant-numeric: tabular-nums;
-}
-.em__end--start {
-  inset-inline-start: 0;
-}
-.em__end--end {
-  inset-inline-end: 0;
 }
 </style>

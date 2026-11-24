@@ -42,7 +42,7 @@ export function cleanLabel(text: string): string {
     .replace(/\[[^\]]*\]/g, '')
     .replace(/\s+/g, ' ')
     .trim()
-    .replace(/^[,;:–—-]\s*/, '')
+    .replace(/^[,;:–—)\]-]\s*/, '')
     .replace(/[\s,;:.–—-]+$/, '')
   return t ? t[0].toUpperCase() + t.slice(1) : t
 }

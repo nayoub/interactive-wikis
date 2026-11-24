@@ -1,61 +1,56 @@
 <script setup lang="ts">
 /**
- * B · Time ruler: the earlier evenly spaced timeline, carried by the ruler's
- * reading interaction. One persistent timeline, three presentations:
+ * B · Time ruler: the article's authored timeline (ruler/authoring.ts),
+ * read and edited in the same place.
  *
- *   overview   below the introduction: the even timeline (dates, short labels,
- *              occasional article images on stems above and below one line)
- *   compact    docked under the wiki header (about 68px): the same line and
- *              dots drawn up, years under them, the reading caret, the passage
- *              being read, and Explore timeline
- *   explore    the same object expanded where it is, plus one bounded region
- *              for the results or a preview (≤ 44% of the visible height)
+ * Reading. One persistent timeline in three presentations:
+ *   overview   below the introduction, open: the even timeline (dates, short
+ *              labels, occasional images on stems around one line)
+ *   compact    docked under the wiki header: the same line and dots drawn up,
+ *              the reading caret, "2003 · Walt Disney Concert Hall" and one
+ *              chevron to open it again
+ *   explore    the same object open where it is, plus one region: the
+ *              selected event's sentence and Read passage
+ * The timeline itself is the control: scroll it sideways (a native
+ * scrollbar, arrow keys), select an event to see its sentence, Read passage
+ * to go there, Return to reading after a jump. Docking, anchoring (the
+ * article follows the panel's lower edge; ruler/useDock.ts), the reading
+ * anchor, preview-before-navigation and return are unchanged.
  *
- * The timeline (ruler/EvenTrack.vue) stays mounted: positions, order and its
- * horizontal scroll offset survive every change; only vertical geometry and
- * opacity animate (one motion value, MOTION_MS). On phones the persistent
- * object is an overview of every event (ruler/EvenMini.vue); the timeline
- * itself is the nearby-period view above it, withdrawn when docked.
- *
- * This component keeps everything the visual pass must not change: docking
- * (separate from expansion), anchoring (the article follows the panel's
- * lower edge; native scroll anchoring held off while the panel moves; see
- * ruler/useDock.ts), the reading anchor, and the separate selection, preview,
- * filter and navigation origin. Picking a block previews it and never moves
- * the article; only Read this passage navigates; Resume reading closes at the
- * current passage; Return to reading restores the origin of a real jump.
+ * Editing (Edit timeline, or the article editor's Insert → Timeline): the
+ * dates in the article become chips; selecting one adds it to the live
+ * timeline (in date order, whatever order they are picked in) or removes it.
+ * Selecting an event shows only its own actions: trim its label in the text
+ * (the underlined span), add, change or remove its image (article images or
+ * Wikimedia Commons), remove it. Undo, Cancel and Done are in one bar; Done
+ * saves to the prototype store and returns to reading.
  */
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue'
 import { CdxButton, CdxIcon } from '@wikimedia/codex'
-import {
-  cdxIconArrowPrevious,
-  cdxIconClose,
-  cdxIconCollapse,
-  cdxIconExpand,
-  cdxIconFunnel,
-  cdxIconInfo,
-  cdxIconNext,
-  cdxIconPrevious,
-} from '@wikimedia/codex-icons'
+import { cdxIconArrowPrevious, cdxIconClose, cdxIconCollapse, cdxIconExpand } from '@wikimedia/codex-icons'
 
+import ImagePicker from '../../curate/ImagePicker.vue'
+import { useSpanEditor } from '../../general/useSpanEditor'
+import { useSelectMode } from '../../pick/useSelectMode'
 import { NAV, type NavContext } from '../context'
 import type { NavEvent } from '../events'
 import { msg } from '../messages'
-import { formatWhen, interval, midpoint, overlaps, yearLabel } from '../time'
+import { formatWhen } from '../time'
+import AuthorBar from '../ruler/AuthorBar.vue'
 import EvenMini from '../ruler/EvenMini.vue'
 import EvenTrack from '../ruler/EvenTrack.vue'
-import { COMPACT, MINI_H, MOTION_MS, richLayout, SLOT_MIN, SLOT_MIN_PHONE, slotWidth } from '../ruler/layout'
-import RulerRegion, { type RegionView } from '../ruler/RulerRegion.vue'
+import { blockFor, COMPACT, linesNeeded, MINI_H, MOTION_MS, richLayout, slotFor } from '../ruler/layout'
+import RulerRegion from '../ruler/RulerRegion.vue'
 import { useDock } from '../ruler/useDock'
 import { useReading } from '../ruler/useReading'
 
 const ctx = inject(NAV) as NavContext & { leadMount: Ref<HTMLElement | null> }
 const nav = ctx.nav
 const era = ctx.era
-const events = [...ctx.collection.events].sort((a, b) => midpoint(a.date) - midpoint(b.date) || a.order - b.order)
-const intervals = events.map((e) => interval(e.date))
-const lo = Math.floor(Math.min(...intervals.map((v) => v[0])))
-const hi = Math.ceil(Math.max(...intervals.map((v) => v[1])))
+const authoring = ctx.authoring
+const editing = computed(() => authoring.editing.value)
+/** The authored events, in date order (the saved timeline, or the draft being edited). */
+const events = computed<NavEvent[]>(() => authoring.events.value)
 const narrow = computed(() => ctx.width.value === 'narrow')
 
 const reduced = () =>
@@ -78,53 +73,54 @@ async function settle() {
 
 // ── Docking and reading ──────────────────────────────────────────────────
 const dock = useDock(ctx.leadMount)
+const bodyEl = ref<HTMLElement | null>(null)
 const body = () => document.querySelector<HTMLElement>('.tn-body')
-const { reading, update: updateReading, set: setReading } = useReading({ body, events: () => events, resolve: nav.resolve })
+const { reading, update: updateReading, set: setReading } = useReading({ body, events: () => events.value, resolve: nav.resolve })
 
-// ── Presentation (docking ≠ expansion) ───────────────────────────────────
+// ── Presentation (docking ≠ expansion; editing keeps it open) ────────────
 const exploring = ref(false)
-const view = ref<RegionView>('results')
 const previewId = ref<string | null>(null)
-const filterOpen = ref(false)
 const presentation = computed<'overview' | 'compact' | 'explore'>(() =>
-  exploring.value ? 'explore' : dock.contracted.value ? 'compact' : 'overview',
+  exploring.value || editing.value ? 'explore' : dock.contracted.value ? 'compact' : 'overview',
 )
 const compact = computed(() => presentation.value === 'compact')
 
 // ── Measurements ─────────────────────────────────────────────────────────
 const root = ref<HTMLElement | null>(null)
 const topEl = ref<HTMLElement | null>(null)
-const filterEl = ref<HTMLElement | null>(null)
 const track = ref<InstanceType<typeof EvenTrack> | null>(null)
 const width = ref(0)
-const topH = ref(28)
-const filterH = ref(0)
+const topH = ref(30)
 let ro: ResizeObserver | null = null
-watch([root, topEl, filterEl], () => {
+watch([root, topEl], () => {
   ro?.disconnect()
   ro = new ResizeObserver(() => {
     if (root.value) width.value = root.value.clientWidth
     if (topEl.value) topH.value = topEl.value.offsetHeight
-    filterH.value = filterEl.value?.offsetHeight ?? 0
   })
-  for (const el of [root.value, topEl.value, filterEl.value]) if (el) ro.observe(el)
-  filterH.value = filterEl.value?.offsetHeight ?? 0
+  for (const el of [root.value, topEl.value]) if (el) ro.observe(el)
 })
 onBeforeUnmount(() => ro?.disconnect())
 
 // ── Geometry ─────────────────────────────────────────────────────────────
 const PADY = 2
-const minRegion = computed(() => (narrow.value ? 96 : 104))
-const slot = computed(() => slotWidth(events.length, width.value || 600, narrow.value ? SLOT_MIN_PHONE : SLOT_MIN))
+const minRegion = computed(() => (editing.value ? 120 : 84))
+const slot = computed(() => slotFor(width.value, narrow.value))
+const blockW = computed(() => blockFor(slot.value, narrow.value))
 const sb = computed(() => track.value?.sb ?? 0)
 const avail = computed(() => dock.viewH.value - dock.header.value)
-/** The cap: the whole expanded panel stays within about 44% of the visible height below the header. */
+/** The cap: the whole open panel stays within about 44% of the visible height below the header. */
 const cap = computed(() => Math.round(avail.value * 0.44))
 const miniH = computed(() => (narrow.value ? MINI_H : 0))
-const head = computed(() => 2 * PADY + topH.value + (compact.value ? 0 : filterH.value))
+const head = computed(() => 2 * PADY + topH.value)
 /** The overview is in flow, not docked: it may be as rich as the reference figure. */
-const richOverview = computed(() => richLayout(events, Math.max(cap.value, avail.value * 0.55) - head.value - miniH.value - sb.value))
-const richExplore = computed(() => richLayout(events, cap.value - head.value - miniH.value - sb.value - minRegion.value))
+const maxLines = computed(() => linesNeeded(events.value, blockW.value))
+const richOverview = computed(() =>
+  richLayout(events.value, Math.max(cap.value, avail.value * 0.55) - head.value - miniH.value - sb.value, maxLines.value),
+)
+const richExplore = computed(() =>
+  richLayout(events.value, cap.value - head.value - miniH.value - sb.value - minRegion.value, maxLines.value),
+)
 const rich = computed(() => (presentation.value === 'explore' ? richExplore.value : richOverview.value))
 const trackMode = computed<'rich' | 'compact' | 'hidden'>(() => (compact.value ? (narrow.value ? 'hidden' : 'compact') : 'rich'))
 const trackH = computed(() =>
@@ -142,81 +138,34 @@ watch(panelH, (h, old) => {
   dock.holdAnchoring(settledNow)
 })
 
-// ── Filter range (by real dates; the controls own its count) ─────────────
-const range = computed({ get: () => nav.range.value, set: (r) => (nav.range.value = r) })
-const inRange = (e: NavEvent) => !range.value || overlaps(interval(e.date), range.value)
-const matching = computed(() => events.filter(inRange))
-const rangeLabel = computed(() => {
-  const r = range.value
-  if (!r) return ''
-  const a = yearLabel(r[0], era)
-  const b = yearLabel(r[1] - 1, era)
-  return a === b ? a : `${a}–${b}`
-})
-/** The bounds offered are the events' own dates, never invented in-between years. */
-const fromOptions = computed(() =>
-  [...new Set([...intervals.map((v) => Math.floor(v[0])), ...(range.value ? [range.value[0]] : [])])].sort((a, b) => a - b),
-)
-const toOptions = computed(() =>
-  [...new Set([...intervals.map((v) => Math.ceil(v[1]) - 1), ...(range.value ? [range.value[1] - 1] : [])])].sort((a, b) => a - b),
-)
-function setFrom(v: string) {
-  if (v === '') return void (range.value = range.value && range.value[1] < hi ? [lo, range.value[1]] : null)
-  const a = Number(v)
-  const b = range.value?.[1] ?? hi
-  range.value = [a, Math.max(b, a + 1)]
-}
-function setTo(v: string) {
-  if (v === '') return void (range.value = range.value && range.value[0] > lo ? [range.value[0], hi] : null)
-  const b = Number(v) + 1
-  const a = range.value?.[0] ?? lo
-  range.value = [Math.min(a, b - 1), b]
-}
-// A range that excludes the open preview closes it; the selection is kept.
-watch(range, () => {
-  const p = previewId.value ? events.find((e) => e.id === previewId.value) : null
-  if (p && !inRange(p)) {
-    previewId.value = null
-    if (view.value === 'preview') view.value = 'results'
-  }
-})
-
-// ── Preview, selection, stepping ─────────────────────────────────────────
-const preview = computed(() => (previewId.value ? (events.find((e) => e.id === previewId.value) ?? null) : null))
-const previewMissing = computed(() => !!preview.value && !nav.resolve(preview.value))
-function open(id: string) {
-  const e = events.find((v) => v.id === id)
+// ── Selecting an event: a reader preview, or the event being edited ──────
+const selectedId = computed(() => (editing.value ? authoring.currentId.value : nav.selectedId.value))
+const preview = computed(() => (previewId.value ? (events.value.find((e) => e.id === previewId.value) ?? null) : null))
+const editEvent = computed(() => (authoring.currentId.value ? (events.value.find((e) => e.id === authoring.currentId.value) ?? null) : null))
+const regionEvent = computed(() => (editing.value ? editEvent.value : preview.value))
+const previewMissing = computed(() => !editing.value && !!preview.value && !nav.resolve(preview.value))
+function pick(id: string) {
+  const e = events.value.find((v) => v.id === id)
   if (!e) return
+  track.value?.reveal(id, { smooth: !reduced() })
+  if (editing.value) {
+    authoring.currentId.value = authoring.currentId.value === id ? null : id
+    return
+  }
   nav.selectedId.value = id
   previewId.value = id
-  view.value = 'preview'
   exploring.value = true
-  track.value?.reveal(id, { smooth: !reduced() })
-  nav.announce(`${formatWhen(e.date, era)}: ${e.label}. ${msg.inSection(e.sourceAnchor.sectionTitle)}.`)
+  nav.announce(`${formatWhen(e.date, era)}: ${e.label}.`)
 }
-function stepBy(dir: 1 | -1) {
-  const list = matching.value
-  if (!list.length) return
-  // From the block that has keyboard focus, else the preview, the selection, then the passage being read.
-  const onBlock = (document.activeElement as HTMLElement | null)?.closest?.<HTMLElement>('.et__block')
-  const curId = onBlock?.dataset.event ?? previewId.value ?? nav.selectedId.value ?? reading.value.id
-  const cur = curId ? events.find((e) => e.id === curId) : null
-  let next: NavEvent | undefined
-  const i = cur ? list.indexOf(cur) : -1
-  if (i >= 0) next = list[i + dir]
-  else if (cur) {
-    const t = midpoint(cur.date)
-    next = dir > 0 ? list.find((e) => midpoint(e.date) > t) : [...list].reverse().find((e) => midpoint(e.date) < t)
-  } else next = dir > 0 ? list[0] : list[list.length - 1]
-  if (!next) return
-  open(next.id)
-  if (onBlock) nextTick(() => root.value?.querySelector<HTMLElement>(`.et__block[data-event="${CSS.escape(next!.id)}"]`)?.focus({ preventScroll: true }))
-}
+// An event that leaves the timeline (removed while editing) leaves the preview too.
+watch(events, (list) => {
+  if (previewId.value && !list.some((e) => e.id === previewId.value)) previewId.value = null
+})
 
-// ── Explore, resume, read, return ────────────────────────────────────────
+// ── Open, close, read, return ────────────────────────────────────────────
 const modeBtn = ref<InstanceType<typeof CdxButton> | null>(null)
 const focusModeButton = () => ((modeBtn.value?.$el as HTMLElement | undefined) ?? null)?.focus({ preventScroll: true })
-/** If collapsing would hide the focused control, focus moves to the surviving button (without scrolling). */
+/** If closing would hide the focused control, focus moves to the chevron (without scrolling). */
 watch(
   presentation,
   (p) => {
@@ -228,29 +177,22 @@ watch(
   { flush: 'pre' },
 )
 function explore() {
-  view.value = previewId.value ? 'preview' : 'results'
   exploring.value = true
 }
 function resume() {
   exploring.value = false
   previewId.value = null
-  view.value = 'results'
 }
-const modeAction = computed(() =>
+/** The one chevron, once the timeline has docked (or is open beyond the overview). */
+const showToggle = computed(() => !editing.value && presentation.value !== 'overview')
+const toggle = computed(() =>
   presentation.value === 'explore'
-    ? { label: dock.stuck.value ? msg.trResume : msg.trClose, icon: cdxIconCollapse, run: resume }
-    : { label: msg.trExplore, icon: cdxIconExpand, run: explore },
+    ? { label: msg.trCloseTimeline, icon: cdxIconCollapse, run: resume, expanded: true }
+    : { label: msg.trOpenTimeline, icon: cdxIconExpand, run: explore, expanded: false },
 )
-function toggleHelp() {
-  if (view.value === 'help' && exploring.value) view.value = previewId.value ? 'preview' : 'results'
-  else {
-    view.value = 'help'
-    exploring.value = true
-  }
-}
 
 let jumpTarget: string | null = null
-/** Read this passage: resolve first, settle the compact geometry, then place the passage below it. */
+/** Read passage: resolve first, settle the compact geometry, then place the passage below it. */
 async function read(e: NavEvent) {
   const el = nav.resolve(e)
   if (!el) {
@@ -277,28 +219,72 @@ async function back() {
 
 // ── Keyboard inside the ruler (no global handlers) ───────────────────────
 function onKeydown(ev: KeyboardEvent) {
-  const t = ev.target as HTMLElement
-  if (ev.key === 'Escape') {
-    if (view.value !== 'results' && exploring.value) {
+  if (ev.key !== 'Escape') return
+  if (editing.value) {
+    if (authoring.currentId.value) {
       ev.preventDefault()
-      const id = previewId.value
-      previewId.value = null
-      view.value = 'results'
-      if (t.closest('.tr__region'))
-        nextTick(() => root.value?.querySelector<HTMLElement>(`.rr__row[data-event="${CSS.escape(id ?? '')}"], .rr__row`)?.focus({ preventScroll: true }))
-    } else if (exploring.value) {
-      ev.preventDefault()
-      resume()
+      authoring.currentId.value = null
     }
     return
   }
-  if ((ev.key === 'ArrowLeft' || ev.key === 'ArrowRight') && !compact.value) {
-    if (t.matches('select, input, textarea')) return
+  if (previewId.value) {
     ev.preventDefault()
-    const rtl = getComputedStyle(root.value!).direction === 'rtl'
-    stepBy((ev.key === 'ArrowRight') !== rtl ? 1 : -1)
+    const id = previewId.value
+    previewId.value = null
+    nextTick(() => track.value?.focusBlock(id))
+  } else if (exploring.value) {
+    ev.preventDefault()
+    resume()
   }
 }
+
+// ── Editing: dates in the article, the label span, images ────────────────
+const picked = computed(() => new Set(authoring.items.value.map((i) => i.id)))
+useSelectMode({
+  root: bodyEl,
+  active: editing,
+  kind: ref('date'),
+  picked: picked as unknown as Ref<Set<string>>,
+  describe: (id) => {
+    const m = ctx.article.mentions.find((x) => x.id === id)
+    return picked.value.has(id) ? `${m?.text ?? id}: on the timeline; select to remove` : `${m?.text ?? id}: add to the timeline`
+  },
+  toggle: (id) => {
+    if (authoring.toggle(id) === 'added') nextTick(() => track.value?.reveal(id, { smooth: !reduced() }))
+  },
+  sentenceOf: (id) => {
+    const m = ctx.article.mentions.find((x) => x.id === id)
+    return m ? { start: m.anchor.sentenceStart, end: m.anchor.sentenceEnd } : null
+  },
+})
+useSpanEditor({
+  root: bodyEl,
+  item: authoring.current,
+  active: computed(() => editing.value && !!authoring.currentId.value),
+  begin: authoring.begin,
+  change: (span) => authoring.currentId.value && authoring.setLabelSpan(authoring.currentId.value, span),
+})
+function showInText() {
+  const e = editEvent.value
+  const el = e ? nav.resolve(e) : null
+  el?.scrollIntoView({ block: 'center', behavior: reduced() ? 'auto' : 'smooth' })
+}
+const pickerOpen = ref(false)
+function chooseImage(img: Parameters<typeof authoring.setImage>[1]) {
+  const id = authoring.currentId.value
+  if (id && img) authoring.setImage(id, img)
+}
+function startEdit() {
+  previewId.value = null
+  authoring.startEdit()
+}
+watch(editing, (on) => {
+  if (!on) {
+    exploring.value = false
+    previewId.value = null
+    pickerOpen.value = false
+  }
+})
 
 // ── The timeline's sideways window ───────────────────────────────────────
 const win = ref<[number, number] | null>(null)
@@ -310,11 +296,11 @@ function onMiniGo(i: number) {
   if (compact.value) explore()
   nextTick(() => track.value?.scrollToIndex(i, !reduced()))
 }
-// While reading (not exploring), the timeline keeps the passage being read in view.
+// While reading (not exploring or editing), the timeline keeps the passage being read in view.
 watch(
   () => reading.value.id,
   (id) => {
-    if (id && !exploring.value) track.value?.reveal(id, { smooth: !reduced() })
+    if (id && !exploring.value && !editing.value) track.value?.reveal(id, { smooth: !reduced() })
   },
 )
 
@@ -349,11 +335,15 @@ watch(
     jumpTarget = null
   },
 )
+// The timeline changed (an edit): the reading anchor is recomputed against it.
+watch(events, () => nextTick(() => updateReading(readingLine())))
 const onResize = () => dock.check()
 onMounted(() => {
+  bodyEl.value = body()
   window.addEventListener('scroll', onScroll, { passive: true })
   window.addEventListener('resize', onResize)
   const first = () => {
+    bodyEl.value = body()
     dock.check()
     updateReading(readingLine())
     if (reading.value.id) track.value?.reveal(reading.value.id, { center: true })
@@ -368,123 +358,65 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', onResize)
 })
 
-// ── The passage label (the compact hierarchy follows reading, not selection) ──
-const readingEvent = computed(() => (reading.value.id ? (events.find((e) => e.id === reading.value.id) ?? null) : null))
-const readingText = computed(() => {
+// ── The header ───────────────────────────────────────────────────────────
+/** Docked, the header follows reading ("2003 · Walt Disney Concert Hall"); open, it is the title. */
+const headerText = computed(() => {
+  if (editing.value) return msg.trEditingTitle
+  if (!compact.value) return msg.trTitle
   const r = reading.value
-  const e = readingEvent.value
+  const e = r.id ? events.value.find((v) => v.id === r.id) : null
   if (e && r.state === 'at') return msg.trReadingAt(formatWhen(e.date, era), e.label)
-  if (e && r.state === 'after') return msg.trReadingAfter(formatWhen(e.date, era), r.section)
-  return r.section
+  if (e && r.state === 'after') return msg.trReadingAfterShort(formatWhen(e.date, era))
+  return msg.trTitle
 })
-const spanLabel = `${yearLabel(events[0]?.date.start.y ?? lo, era)}–${yearLabel((events[events.length - 1]?.date.end ?? events[events.length - 1]?.date.start)?.y ?? hi, era)}`
-const resultsTitle = computed(() => (range.value ? msg.trEventsIn(matching.value.length, rangeLabel.value) : msg.trAllEvents(events.length)))
+const shown = computed(() => events.value.length > 0 || editing.value)
 const px = (n: number) => `${Math.round(n)}px`
 </script>
 
 <template>
   <Teleport
-    v-if="ctx.leadMount.value"
+    v-if="ctx.leadMount.value && shown"
     :to="ctx.leadMount.value"
   >
     <section
       ref="root"
       class="tr"
-      :class="[`tr--${presentation}`, `tr--${motion}`, { 'tr--stuck': dock.stuck.value, 'tr--narrow': narrow }]"
+      :class="[`tr--${presentation}`, `tr--${motion}`, { 'tr--stuck': dock.stuck.value, 'tr--narrow': narrow, 'tr--editing': editing }]"
       :style="{ height: px(panelH), '--tr-motion': `${MOTION_MS}ms` }"
       aria-labelledby="tr-title"
       @keydown="onKeydown"
     >
-      <h2
-        id="tr-title"
-        class="tn-visually-hidden"
-      >
-        {{ msg.trRulerLabel }}
-      </h2>
-
-      <!-- Header: the passage being read, quiet secondary tools, and the one mode button. -->
+      <!-- Header: the title (or, docked, the passage being read), Edit timeline, Return, the chevron. -->
       <div
         ref="topEl"
         class="tr__top"
       >
-        <p
-          class="tr__reading tr__keep"
-          :aria-label="msg.trReadingAria(readingText)"
+        <h2
+          id="tr-title"
+          class="tr__title tr__keep"
+          :class="{ 'tr__title--reading': compact }"
         >
           <svg
+            v-if="compact && reading.state !== 'before'"
             class="tr__caret"
-            :class="{ 'tr__caret--after': reading.state === 'after', 'tr__caret--none': reading.state === 'before' }"
+            :class="{ 'tr__caret--after': reading.state === 'after' }"
             width="12"
             height="10"
             viewBox="0 0 12 10"
             aria-hidden="true"
           ><path d="M6 1.2 L11 9 L1 9 Z" /></svg>
-          <span class="tr__reading-word">{{ msg.trReading }}</span>
-          <span class="tr__reading-text">{{ readingText }}</span>
-        </p>
-        <div
-          v-show="!compact"
-          class="tr__tools"
+          <span class="tr__title-text">{{ headerText }}</span>
+        </h2>
+        <button
+          v-if="!compact && !editing"
+          type="button"
+          class="tr__edit"
+          @click="startEdit"
         >
-          <span class="tr__span">{{ spanLabel }}</span>
-          <CdxButton
-            size="small"
-            weight="quiet"
-            :aria-label="msg.trPrev"
-            :title="msg.trPrev"
-            :disabled="!matching.length"
-            @click="stepBy(-1)"
-          >
-            <CdxIcon
-              :icon="cdxIconPrevious"
-              size="small"
-            />
-          </CdxButton>
-          <CdxButton
-            size="small"
-            weight="quiet"
-            :aria-label="msg.trNext"
-            :title="msg.trNext"
-            :disabled="!matching.length"
-            @click="stepBy(1)"
-          >
-            <CdxIcon
-              :icon="cdxIconNext"
-              size="small"
-            />
-          </CdxButton>
-          <CdxButton
-            size="small"
-            weight="quiet"
-            class="tr__filter-btn"
-            :aria-expanded="filterOpen ? 'true' : 'false'"
-            aria-controls="tr-filter"
-            :aria-label="range ? `${msg.trFilter}: ${rangeLabel}, ${msg.trRangeCount(matching.length, events.length)}` : msg.trFilter"
-            @click="filterOpen = !filterOpen"
-          >
-            <CdxIcon
-              :icon="cdxIconFunnel"
-              size="small"
-            /><span
-              v-if="range"
-              class="tr__filter-on"
-            >{{ rangeLabel }}</span>
-          </CdxButton>
-          <CdxButton
-            size="small"
-            weight="quiet"
-            :aria-label="msg.trHowToRead"
-            :title="msg.trHowToRead"
-            :aria-pressed="view === 'help' && exploring ? 'true' : 'false'"
-            @click="toggleHelp"
-          >
-            <CdxIcon
-              :icon="cdxIconInfo"
-              size="small"
-            />
-          </CdxButton>
-        </div>
-        <template v-if="nav.origin.value">
+          {{ msg.trEditTimeline }}
+        </button>
+        <span class="tr__spacer" />
+        <template v-if="nav.origin.value && !editing">
           <CdxButton
             size="small"
             class="tr__return tr__keep"
@@ -512,71 +444,18 @@ const px = (n: number) => `${Math.round(n)}px`
           </CdxButton>
         </template>
         <CdxButton
+          v-if="showToggle"
           ref="modeBtn"
           size="small"
-          class="tr__mode tr__keep"
-          :aria-expanded="presentation === 'explore' ? 'true' : 'false'"
-          @click="modeAction.run"
-        >
-          <CdxIcon
-            :icon="modeAction.icon"
-            size="small"
-          />
-          {{ modeAction.label }}
-        </CdxButton>
-      </div>
-
-      <!-- The date filter: a disclosure, by the events' own dates. -->
-      <div
-        v-if="filterOpen && !compact"
-        id="tr-filter"
-        ref="filterEl"
-        class="tr__filter"
-        role="group"
-        :aria-label="msg.trFilter"
-      >
-        <label class="tr__field">
-          <span>{{ msg.trFrom }}</span>
-          <select
-            class="cdx-select tr__select"
-            :value="range ? String(range[0]) : ''"
-            @change="setFrom(($event.target as HTMLSelectElement).value)"
-          >
-            <option value="">{{ msg.trAny }}</option>
-            <option
-              v-for="y in fromOptions"
-              :key="y"
-              :value="String(y)"
-            >{{ yearLabel(y, era) }}</option>
-          </select>
-        </label>
-        <label class="tr__field">
-          <span>{{ msg.trTo }}</span>
-          <select
-            class="cdx-select tr__select"
-            :value="range ? String(range[1] - 1) : ''"
-            @change="setTo(($event.target as HTMLSelectElement).value)"
-          >
-            <option value="">{{ msg.trAny }}</option>
-            <option
-              v-for="y in toOptions"
-              :key="y"
-              :value="String(y)"
-            >{{ yearLabel(y, era) }}</option>
-          </select>
-        </label>
-        <CdxButton
-          v-if="range"
-          size="small"
           weight="quiet"
-          @click="range = null"
+          class="tr__mode tr__keep"
+          :aria-label="toggle.label"
+          :title="toggle.label"
+          :aria-expanded="toggle.expanded ? 'true' : 'false'"
+          @click="toggle.run"
         >
-          {{ msg.trClearRange }}
+          <CdxIcon :icon="toggle.icon" />
         </CdxButton>
-        <span
-          class="tr__count"
-          aria-live="polite"
-        >{{ msg.trRangeCount(matching.length, events.length) }}</span>
       </div>
 
       <!-- The timeline: the one persistent object on desktop; the nearby-period view on phones. -->
@@ -585,16 +464,15 @@ const px = (n: number) => `${Math.round(n)}px`
         class="tr__track"
         :events="events"
         :slot-w="slot"
+        :block-w="blockW"
         :mode="trackMode"
         :geom="rich"
         :era="era"
-        :selected-id="nav.selectedId.value"
+        :selected-id="selectedId"
         :reading-id="reading.id"
         :reading-state="reading.state"
-        :range="range"
-        :draggable="!narrow"
-        @pick="open"
-        @commit="(r) => (range = r)"
+        :description="msg.trFigure"
+        @pick="pick"
         @tap="onTrackTap"
         @scrolled="onTrackScroll"
       />
@@ -606,39 +484,54 @@ const px = (n: number) => `${Math.round(n)}px`
         :events="events"
         :width="width"
         :era="era"
-        :selected-id="nav.selectedId.value"
+        :selected-id="selectedId"
         :reading-id="reading.id"
         :reading-state="reading.state"
-        :range="range"
         :window="compact ? null : win"
         @go="onMiniGo"
       />
 
-      <!-- One bounded region: results, help, or one preview. -->
+      <!-- One region: the selected event's sentence and Read passage (or, editing, its actions). -->
       <div
         class="tr__region"
         :style="{ height: px(regionH) }"
         :inert="presentation !== 'explore' || undefined"
       >
         <RulerRegion
-          :view="view"
-          :results="matching"
-          :results-title="resultsTitle"
-          :cluster="[]"
-          cluster-title=""
-          :preview="preview"
-          :preview-outside="!!preview && !inRange(preview)"
-          :preview-missing="previewMissing"
-          :selected-id="nav.selectedId.value"
-          :reading-id="reading.id"
+          :mode="editing ? 'editing' : 'reading'"
+          :event="regionEvent"
+          :missing="previewMissing"
           :era="era"
-          @open="open"
           @read="read"
-          @back="view = 'results'"
+          @image="pickerOpen = true"
+          @remove-image="authoring.currentId.value && authoring.setImage(authoring.currentId.value, undefined)"
+          @remove="authoring.currentId.value && authoring.remove(authoring.currentId.value)"
+          @show-in-text="showInText"
         />
       </div>
     </section>
   </Teleport>
+
+  <Teleport
+    v-if="editing"
+    to="body"
+  >
+    <AuthorBar
+      :count="authoring.items.value.length"
+      :is-new="!!authoring.draft.value?.isNew"
+      :can-undo="authoring.canUndo.value"
+      @undo="authoring.undo()"
+      @cancel="authoring.cancel()"
+      @done="authoring.done()"
+    />
+  </Teleport>
+  <ImagePicker
+    v-model:open="pickerOpen"
+    :images="ctx.article.images"
+    :event="editEvent"
+    :subject="ctx.article.subject.name"
+    @choose="chooseImage"
+  />
 </template>
 
 <style scoped>
@@ -664,6 +557,9 @@ const px = (n: number) => `${Math.round(n)}px`
   border-block-end-color: var(--border-color-base);
   box-shadow: 0 6px 6px -6px rgba(0, 0, 0, 0.2);
 }
+.tr--editing {
+  border-block-start: var(--border-width-thick) solid var(--border-color-progressive);
+}
 .tr > * {
   flex: none;
 }
@@ -671,25 +567,36 @@ const px = (n: number) => `${Math.round(n)}px`
 /* Header */
 .tr__top {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 0 var(--spacing-50);
-  min-height: 28px;
+  gap: var(--spacing-25) var(--spacing-75);
+  min-height: 30px;
 }
-.mw-parser-output .tr__reading,
-.tr__reading {
+.mw-parser-output .tr__title,
+.tr__title {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: var(--spacing-25);
-  flex: 1 1 12em;
   min-width: 0;
   margin: 0;
+  padding: 0;
+  border: 0;
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-medium);
+  line-height: var(--line-height-medium);
+  font-weight: var(--font-weight-bold);
+}
+.tr__title-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.tr__title--reading {
   font-size: var(--font-size-small);
-  line-height: var(--line-height-small);
 }
 .tr__caret {
   flex: none;
-  align-self: center;
   overflow: visible;
 }
 .tr__caret path {
@@ -701,70 +608,30 @@ const px = (n: number) => `${Math.round(n)}px`
 .tr__caret--after path {
   stroke-dasharray: 2 1.6;
 }
-.tr__caret--none {
-  visibility: hidden;
-}
-.tr__reading-word {
+/* Edit timeline: a plain text link beside the title. */
+.tr__edit {
   flex: none;
-  color: var(--color-subtle);
-}
-.tr__reading-text {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-weight: var(--font-weight-bold);
-  font-variant-numeric: tabular-nums;
-}
-/* Secondary tools: quiet icons, a subdued date range. */
-.tr__tools {
-  display: flex;
-  align-items: center;
-  gap: 0;
-  color: var(--color-subtle);
-}
-.tr__span {
-  margin-inline-end: var(--spacing-25);
-  color: var(--color-placeholder);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-progressive);
+  font: inherit;
   font-size: var(--font-size-small);
-  font-variant-numeric: tabular-nums;
+  cursor: pointer;
 }
-.tr__filter-on {
-  margin-inline-start: var(--spacing-25);
-  font-size: var(--font-size-small);
-  font-weight: var(--font-weight-normal);
+.tr__edit:hover {
+  text-decoration: underline;
 }
-.tr__tools :deep(.cdx-button) {
-  color: var(--color-subtle);
+.tr__edit:focus-visible {
+  outline: var(--border-width-thick) solid var(--outline-color-progressive--focus);
+  outline-offset: 1px;
+}
+.tr__spacer {
+  flex: 1;
 }
 .tr__mode,
 .tr__return {
   flex: none;
-}
-.tr__filter {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--spacing-25) var(--spacing-75);
-  padding-block: var(--spacing-25);
-}
-.tr__field {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-25);
-  color: var(--color-subtle);
-  font-size: var(--font-size-small);
-}
-.tr__select {
-  min-width: 0;
-  min-height: 28px;
-  padding-block: 0;
-  font-size: var(--font-size-small);
-}
-.tr__count {
-  color: var(--color-placeholder);
-  font-size: var(--font-size-small);
-  font-variant-numeric: tabular-nums;
 }
 /* The region fades first when contracting (0–70 ms) and last when expanding. */
 .tr__region {
@@ -781,14 +648,9 @@ const px = (n: number) => `${Math.round(n)}px`
     height var(--tr-motion) var(--tr-ease);
 }
 
-/* Phones: the reading word and button texts give way. */
-.tr--narrow .tr__btn-text,
-.tr--narrow .tr__reading-word,
-.tr--narrow .tr__span {
+/* Phones: button texts give way. */
+.tr--narrow .tr__btn-text {
   display: none;
-}
-.tr--narrow .tr__select {
-  width: 6em;
 }
 
 @media (prefers-reduced-motion: reduce) {

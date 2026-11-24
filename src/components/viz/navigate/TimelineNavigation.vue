@@ -14,10 +14,12 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter, type LocationQuery } from 'vue-router'
 import { CdxMessage, CdxProgressBar } from '@wikimedia/codex'
+import { cdxIconCalendar } from '@wikimedia/codex-icons'
 
 import ArticleRenderer from '@/components/article/ArticleRenderer.vue'
 import ArticleWrapper from '@/components/article/ArticleWrapper.vue'
 import ChromeWrapper from '@/components/chrome/ChromeWrapper.vue'
+import VeToolbar from '@/components/visual-editor/VeToolbar.vue'
 import { globalSkin } from '@/theme'
 
 import '../tokens.css'
@@ -31,6 +33,7 @@ import { OCCURRENCE_VARIANTS, VARIANTS, type VariantId } from './messages'
 import { buildOccurrences, type Occurrences } from './occurrences'
 import NavMenu from './NavMenu.vue'
 import { createNavigator } from './useNavigator'
+import { useAuthoredTimeline } from './ruler/authoring'
 import VariantContents from './variants/VariantContents.vue'
 import VariantMilestones from './variants/VariantMilestones.vue'
 import VariantParallel from './variants/VariantParallel.vue'
@@ -126,12 +129,22 @@ async function load(id: ArticleId) {
 watch(articleId, load, { immediate: true })
 
 const bodyEl = ref<HTMLElement | null>(null)
-/** What the navigator indexes: the shared collection, or the richer occurrence records (pass 2). */
+/** B's timeline is authored: one saved item list per article, edited in place (ruler/authoring.ts). */
+const authoring = useAuthoredTimeline({ articleId, article, collection })
+/** What the navigator indexes: the shared collection, the richer occurrence records (pass 2), or B's authored timeline. */
 const events = computed(() =>
-  OCCURRENCE_VARIANTS.has(variant.value)
-    ? (occurrences.value?.items ?? [])
-    : (collection.value?.events ?? []),
+  variant.value === 'ruler'
+    ? authoring.events.value
+    : OCCURRENCE_VARIANTS.has(variant.value)
+      ? (occurrences.value?.items ?? [])
+      : (collection.value?.events ?? []),
 )
+// The article editor belongs to B only; leaving B or the article ends any edit.
+watch([variant, articleId], () => authoring.cancel())
+const insertItems = [{ value: 'timeline', label: 'Timeline', icon: cdxIconCalendar }]
+function onEditTab() {
+  if (variant.value === 'ruler') authoring.ve.value = true
+}
 const nav = createNavigator({ body: bodyEl, events })
 
 // ── Mount below the introduction (before the first section heading) ───────
@@ -195,6 +208,7 @@ const ctx = computed<NavContext | null>(() =>
         variant: variant.value,
         width,
         skin,
+        authoring,
       }
     : null,
 )
@@ -226,7 +240,7 @@ provide(NAV, provided)
 
     <div
       class="tn-page"
-      :class="[`tn-page--${variant}`, margin && `tn-page--margin-${margin}`]"
+      :class="[`tn-page--${variant}`, margin && `tn-page--margin-${margin}`, { 'tn-page--authoring': authoring.editing.value }]"
       :data-variant="variant"
     >
       <aside
@@ -238,7 +252,27 @@ provide(NAV, provided)
         <ArticleWrapper
           :title="collection?.title ?? ''"
           :dir="dir"
+          :active-view="authoring.ve.value ? 'edit' : 'read'"
+          @edit-click="onEditTab"
+          @read-click="authoring.cancel()"
         >
+          <!-- B: the article editor's toolbar; Insert → Timeline starts a timeline from dates in the text. -->
+          <VeToolbar
+            v-if="authoring.ve.value && variant === 'ruler'"
+            :skin="skin"
+            :suggestions-on="false"
+            :count="0"
+            :show-suggestions-toggle="false"
+            :can-undo="authoring.canUndo.value"
+            :can-redo="false"
+            :can-publish="authoring.editing.value"
+            :review="false"
+            :insert-items="insertItems"
+            @insert="authoring.startNew()"
+            @undo="authoring.undo()"
+            @publish="authoring.done()"
+            @close="authoring.cancel()"
+          />
           <CdxProgressBar
             v-if="!article && !loadError"
             inline
