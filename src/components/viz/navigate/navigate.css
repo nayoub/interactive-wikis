@@ -145,3 +145,57 @@ html[data-tn-motion='reduce'] *::after {
 .tn-link {
   unicode-bidi: isolate;
 }
+
+/*
+ * Linked names in the navigators, styled as Wikipedia links (Codex link
+ * tokens): visited state kept, red only for links the source marks `new`
+ * (a missing page). Never used for any other meaning.
+ */
+a.tn-wl {
+  color: var(--color-progressive);
+  text-decoration: none;
+  unicode-bidi: isolate;
+}
+a.tn-wl:visited {
+  color: var(--color-visited);
+}
+a.tn-wl.new {
+  color: var(--color-link-red);
+}
+a.tn-wl.new:visited {
+  color: var(--color-link-red--visited);
+}
+a.tn-wl:hover {
+  text-decoration: underline;
+}
+a.tn-wl:focus-visible {
+  outline: var(--border-width-thick, 2px) solid var(--outline-color-progressive--focus, #36c);
+  outline-offset: 1px;
+  border-radius: var(--border-radius-base);
+}
+
+/* Connections (pass 2): four kinds, four different marks in the text. */
+::highlight(tn-thread) {
+  background-color: var(--background-color-progressive-subtle);
+  text-decoration: underline 2px var(--color-progressive);
+}
+::highlight(tn-topic) {
+  background-color: var(--background-color-neutral);
+}
+::highlight(tn-rel-end) {
+  background-color: var(--background-color-progressive-subtle);
+}
+::highlight(tn-rel-words) {
+  background-color: var(--background-color-progressive-subtle--active);
+  text-decoration: underline 2px var(--color-base);
+}
+::highlight(tn-together) {
+  text-decoration: underline dotted 2px var(--color-subtle);
+}
+
+/* Connections: the evidence card sits at the end of the margin column so it can stick to the bottom of the screen. */
+.tn-page--connect-brackets #tn-margin-end,
+.tn-page--connect-paths #tn-margin-end {
+  display: flex;
+  flex-direction: column;
+}

@@ -7,6 +7,7 @@
  * contract (useNavigator.ts) to move to a passage.
  *
  * URL: ?variant=contents|ruler|trail|parallel|milestones
+ *              |field|field-margin|link-columns|link-chronology|connect-brackets|connect-paths|paired
  *      &article=frank-gehry|bilbao|test-fixture  &event=<id>  &dir=rtl  &motion=reduce
  * Changing the variant keeps the selected event.
  */
@@ -26,7 +27,8 @@ import { setDayFirst } from '../model/dates'
 import { NAV, type NavContext } from './context'
 import { ARTICLES, buildCollection, type ArticleId, type Collection } from './events'
 import { buildFixture, FIXTURE_SOURCE } from './fixture'
-import { VARIANTS, type VariantId } from './messages'
+import { OCCURRENCE_VARIANTS, VARIANTS, type VariantId } from './messages'
+import { buildOccurrences, type Occurrences } from './occurrences'
 import NavMenu from './NavMenu.vue'
 import { createNavigator } from './useNavigator'
 import VariantContents from './variants/VariantContents.vue'
@@ -34,6 +36,10 @@ import VariantMilestones from './variants/VariantMilestones.vue'
 import VariantParallel from './variants/VariantParallel.vue'
 import VariantRuler from './variants/VariantRuler.vue'
 import VariantTrail from './variants/VariantTrail.vue'
+import VariantConnections from './variants/VariantConnections.vue'
+import VariantField from './variants/VariantField.vue'
+import VariantLinks from './variants/VariantLinks.vue'
+import VariantPaired from './variants/VariantPaired.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -68,6 +74,13 @@ const VARIANT_COMPONENTS = {
   trail: VariantTrail,
   parallel: VariantParallel,
   milestones: VariantMilestones,
+  field: VariantField,
+  'field-margin': VariantField,
+  'link-columns': VariantLinks,
+  'link-chronology': VariantLinks,
+  'connect-brackets': VariantConnections,
+  'connect-paths': VariantConnections,
+  paired: VariantPaired,
 }
 
 // ── Layout ─────────────────────────────────────────────────────────────────
@@ -83,18 +96,20 @@ const skin = computed(() => globalSkin.value)
 /** Which margin column the variant uses when wide. */
 const margin = computed<'start' | 'end' | null>(() => {
   if (width.value !== 'wide') return null
-  if (variant.value === 'contents') return 'start'
-  if (variant.value === 'trail') return 'end'
+  if (variant.value === 'contents' || variant.value === 'field-margin') return 'start'
+  if (variant.value === 'trail' || variant.value.startsWith('connect-')) return 'end'
   return null
 })
 
 // ── Article and collection ────────────────────────────────────────────────
 const article = shallowRef<LoadedArticle | null>(null)
 const collection = shallowRef<Collection | null>(null)
+const occurrences = shallowRef<Occurrences | null>(null)
 const loadError = ref<string | null>(null)
 async function load(id: ArticleId) {
   article.value = null
   collection.value = null
+  occurrences.value = null
   loadError.value = null
   try {
     const source = id === 'test-fixture' ? FIXTURE_SOURCE : ARTICLES[id].source
@@ -102,6 +117,7 @@ async function load(id: ArticleId) {
     if (articleId.value !== id) return
     setDayFirst(a.dayFirst)
     collection.value = id === 'test-fixture' ? buildFixture(a) : buildCollection(id, a)
+    occurrences.value = buildOccurrences(id, a, collection.value)
     article.value = a
   } catch (e) {
     loadError.value = String((e as Error)?.message ?? e)
@@ -110,7 +126,12 @@ async function load(id: ArticleId) {
 watch(articleId, load, { immediate: true })
 
 const bodyEl = ref<HTMLElement | null>(null)
-const events = computed(() => collection.value?.events ?? [])
+/** What the navigator indexes: the shared collection, or the richer occurrence records (pass 2). */
+const events = computed(() =>
+  OCCURRENCE_VARIANTS.has(variant.value)
+    ? (occurrences.value?.items ?? [])
+    : (collection.value?.events ?? []),
+)
 const nav = createNavigator({ body: bodyEl, events })
 
 // ── Mount below the introduction (before the first section heading) ───────
@@ -148,10 +169,10 @@ watch(
   },
 )
 watch(
-  [collection, () => one(route.query, 'event')],
-  ([c, id]) => {
-    if (!c) return
-    nav.selectedId.value = id && c.events.some((e) => e.id === id) ? id : null
+  [events, () => one(route.query, 'event')],
+  ([list, id]) => {
+    if (!list.length) return
+    nav.selectedId.value = id && list.some((e) => e.id === id) ? id : null
   },
   { immediate: true },
 )
@@ -169,6 +190,9 @@ const ctx = computed<NavContext | null>(() =>
         article: article.value,
         nav,
         era: !!collection.value.era,
+        occurrences: occurrences.value?.items ?? [],
+        articleId: articleId.value,
+        variant: variant.value,
         width,
         skin,
       }
@@ -271,6 +295,7 @@ provide(NAV, provided)
 
 <style scoped>
 .tn-page {
+  position: relative;
   /* Room for the bars fixed at the bottom, so they never cover the article's last lines. */
   padding-block-end: 96px;
   display: grid;

@@ -3,6 +3,7 @@ import type { ComputedRef, InjectionKey, Ref } from 'vue'
 
 import type { LoadedArticle } from '../host/loadArticle'
 import type { Collection } from './events'
+import type { Occurrence } from './occurrences'
 import type { Navigator } from './useNavigator'
 
 export interface NavContext {
@@ -14,6 +15,10 @@ export interface NavContext {
   /** Viewport width class: 'wide' leaves room for a margin column beside the full reading width. */
   width: Ref<'narrow' | 'medium' | 'wide'>
   skin: ComputedRef<'desktop' | 'mobile'>
+  /** Dated occurrences with their linked names (pass 2); a superset of the collection's events. */
+  occurrences: Occurrence[]
+  articleId: 'frank-gehry' | 'bilbao' | 'test-fixture'
+  variant: string
 }
 
 export const NAV: InjectionKey<NavContext> = Symbol('timeline-navigation')

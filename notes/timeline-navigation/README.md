@@ -92,3 +92,108 @@ cross-topic; task 3 → B; task 4 → C; task 5 → all equal, because they shar
 - Firefox and Safari. Without the CSS Highlight API (Firefox before 140) there is no
   sentence wash; the paragraph's margin bar remains.
 - The GitHub Pages and PR-preview build of this route (built locally only).
+
+---
+
+# Pass 2: time field, links, connections
+
+Seven compositions on the same route; A–E stay as baselines. Screenshots: `screenshots/pass-2/`.
+Again: **builder's walkthrough observations, not user-research findings.**
+
+| Direction | Composition | URL (`/timeline-navigation?…`) |
+| --- | --- | --- |
+| 1 Events in time | 1a field in the article | `variant=field` |
+| | 1b field in the margin | `variant=field-margin` |
+| 2 Timeline from links | 2a period columns | `variant=link-columns` |
+| | 2b chronology | `variant=link-chronology` |
+| 3 Connections | 3a marginal brackets | `variant=connect-brackets&connection=relation:named-effect` |
+| | 3b curved paths | `variant=connect-paths&connection=topic:fish` |
+| Further variation | 4 paired chronology | `variant=paired&article=bilbao` |
+
+Calendar paths were not built: neither fixture has a short, day-by-day episode
+(Bilbao's 1936–37 events are a day and a month apart, not a sequence). The paired view
+says so on the page.
+
+## Source records
+
+- **Occurrences** (`navigate/occurrences.ts`): 52 for Frank Gehry, 36 for Bilbao. The
+  20 and 19 shared events are reused with the same ids, plus the article's other dated works,
+  exhibitions, honours and Bilbao's plans and completions. Every record is checked when it is
+  built:
+  - the date is a mention already in the snapshot (found by its text and a snippet of its
+    sentence);
+  - each linked name is a real link in that sentence, copied with its own href and classes;
+  - the qualifier is a verbatim span of the sentence.
+
+  The build reports 0 problems. One event per mark: Gehry's birth, death, Pritzker Prize and
+  World Cup of Hockey trophy are each told twice and kept as `also` passages. Two museums that
+  open in one sentence ("Biomuseo … and the Fondation Louis Vuitton") are two events on one
+  passage.
+- **Red links** are only where the source marks `new`: Gehry has one (American Center in
+  Paris). Bilbao has many in district lists, none in these records. Gehry's records also keep
+  `mw-redirect` and one `external text` link (Library).
+- **Connections** (`navigate/connections.ts`, Gehry):
+  - Same-subject threads come at run time from prose links with the same target, the only
+    identity treated as verified.
+  - 3 curated topics: Fish as a motif, the "Bilbao effect", "Starchitect".
+  - 7 stated relationships, each with from, to and supporting-span anchors: "As a result of
+    his fascination", "spun off", "was acquired by", "For example … completed for $3M less",
+    "After the phenomenal success … critics began referring to", "attempts to replicate this
+    effect", and "in collaboration with" (undirected).
+  - 2 co-mentions.
+  - One endpoint match is the editor's judgement and is labelled on the page ("his firm" =
+    the 1962 practice).
+
+## What I checked in the browser
+
+- **Widths:** 1440×900 and 390×844 for all seven, by emulation in the in-app browser and
+  headless Chrome. One dark-theme check each for 1a and 3b.
+- **Selecting stays put:** selecting a mark or entry (click, or Enter with the keyboard) shows
+  the event and moves nothing (scroll delta 0).
+- **Reading moves you:** Read this passage moves to the sentence and focuses it, and Return to
+  reading appears.
+- **Follow mentions:** it lists Guggenheim Museum Bilbao's 3 verified linked mentions and its
+  other dated appearance (the 2002 exhibition). Each mention jumps to its sentence.
+- **Links stay links:** linked names keep their href and `target` like the article's links. The
+  red link renders in `--color-link-red`. Names follow links; dates and Read this passage
+  navigate locally.
+- **Connections:**
+  - Each kind paints differently in the text: underline for a thread, neutral wash for a topic,
+    endpoint wash plus underlined stating words for a relation, dotted underline for a
+    co-mention.
+  - A relation's card quotes the supporting sentence with the span marked, plus its citation.
+  - Destination references update as you scroll (above / in view / below).
+  - On phones there are no lines: highlights plus the list.
+
+## Not verified
+
+- A screen reader, real zoom, a physical phone, and touch hover behaviour. The Follow-mentions
+  button in 2a appears on hover or focus, and always under `hover: none`.
+- Smooth scrolling (checks ran with `motion=reduce`).
+- Firefox and Safari. Without the CSS Highlight API, the text marks for connections don't show;
+  the card and list still do.
+- With long topics, the evidence card at the bottom of the margin can cover part of the drawing.
+
+## Which composition does what best (builder's judgement)
+
+- **Reveals time:** 1a, the field in the article. Binned stacks show density, and blank
+  columns show gaps. Durations and approximate dates have their own rows, so they never pose
+  as precise. 1b is close but squeezed.
+- **Easiest to follow subjects:** 2b, the chronology. Every linked name is readable, with its
+  qualifier and section, and Follow mentions is one action away. 2a is more striking but
+  truncates, and its follow action is hidden until hover or focus.
+- **Easiest to inspect relationships:** 3a, the brackets. Endpoints, the stating span and
+  "states it" line up in the margin, and the card quotes the evidence with its citation. 3b's
+  curves show distance and direction better, but they start at the column edge (past
+  figures), not at the sentence.
+
+## Main tradeoffs
+
+- **1a:** five-year bins hide order within a bin. Height is a count, which readers may read as
+  time.
+- **1b:** the 232px margin leaves room only for direct labels.
+- **2a:** names truncate, and the column height (a count) competes with reading.
+- **2b:** it's long.
+- **3a / 3b:** they need the 1300px+ margin; below that, connections are only highlights and a
+  list. Curated topics and relationships are editorial work for each article.
+- **4:** sorting statements into "planned" and "built" is editorial, and only Bilbao supports it.

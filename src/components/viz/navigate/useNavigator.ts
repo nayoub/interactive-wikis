@@ -205,14 +205,46 @@ export function createNavigator(opts: {
       return false
     }
     unresolved.value = null
-    if (!origin.value && !how.keepOrigin) origin.value = captureOrigin()
     selectedId.value = e.id
+    return goTo(
+      el,
+      () => sentenceRange(body.value!, e.sourceAnchor, e.sourceText || undefined),
+      `${formatWhen(e.date)}: ${e.label}. In “${e.sourceAnchor.sectionTitle}”.`,
+      how,
+    )
+  }
+
+  /**
+   * Deliberate navigation to any passage (a sentence found by text, a link
+   * mention): the same reveal, mark, focus and origin rules as `jump`.
+   * `range` is measured after a collapsed section has opened.
+   */
+  async function jumpTo(
+    el: HTMLElement,
+    range: () => Range | null,
+    description: string,
+    how: { keepOrigin?: boolean; keepFocus?: boolean } = {},
+  ): Promise<boolean> {
+    if (!el.isConnected) {
+      announce(`${description} could not be found in this revision of the article.`)
+      return false
+    }
+    unresolved.value = null
+    return goTo(el, range, description, how)
+  }
+
+  async function goTo(
+    el: HTMLElement,
+    range: () => Range | null,
+    description: string,
+    how: { keepOrigin?: boolean; keepFocus?: boolean },
+  ): Promise<boolean> {
+    if (!origin.value && !how.keepOrigin) origin.value = captureOrigin()
     revealSection(el)
     // Let an opened section lay out before measuring.
     await frame()
     await frame()
-    const root = body.value!
-    const r = sentenceRange(root, e.sourceAnchor, e.sourceText || undefined)
+    const r = range()
     const block = el.closest<HTMLElement>('p, li, td, th, dd') ?? el
     whileScrolling()
     scrollTargetTo((r ?? block).getBoundingClientRect() as DOMRect)
@@ -223,7 +255,7 @@ export function createNavigator(opts: {
       block.focus({ preventScroll: true })
     }
     jumps.value++
-    announce(`${formatWhen(e.date)}: ${e.label}. In “${e.sourceAnchor.sectionTitle}”.`)
+    announce(description)
     return true
   }
 
@@ -337,6 +369,7 @@ export function createNavigator(opts: {
     byId,
     resolve,
     jump,
+    jumpTo,
     returnToOrigin,
     endExploration,
     reobserve,

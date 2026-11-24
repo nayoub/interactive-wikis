@@ -110,8 +110,19 @@ const themeButtons = [
           <template #label>
             {{ msg.menuVariant }}
           </template>
+          <span class="nm__subhead">{{ msg.menuPass2 }}</span>
           <CdxRadio
-            v-for="v in VARIANTS"
+            v-for="v in VARIANTS.filter((x) => x.group === 'pass2')"
+            :key="v.id"
+            v-model="variant"
+            name="nm-variant"
+            :input-value="v.id"
+          >
+            {{ v.letter }} · {{ v.label }}
+          </CdxRadio>
+          <span class="nm__subhead">{{ msg.menuBaselines }}</span>
+          <CdxRadio
+            v-for="v in VARIANTS.filter((x) => x.group === 'baseline')"
             :key="v.id"
             v-model="variant"
             name="nm-variant"
@@ -212,6 +223,8 @@ const themeButtons = [
 <style scoped>
 .nm {
   min-width: min(20rem, calc(100vw - var(--spacing-200)));
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
 }
 .nm__tag {
   color: var(--color-subtle);
