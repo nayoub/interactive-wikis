@@ -332,3 +332,107 @@ Repeated with motion on in headless Chrome: dy was 0px at 1440×900, 0–1px at 
 - **Phone close-up:** it has no labels, so marks are identified by tapping or through the
   list. At 390px, 2002–2003 still form a count even in the 25-year close-up.
 - **Bilbao** (700 years) was not walked through for this pass.
+
+---
+
+# B, Time ruler: the earlier even timeline, same reading behaviour
+
+Same URL: `/timeline-navigation?variant=ruler`. This pass changes the look only; the approved
+behaviour is untouched: docking, contraction, anchoring, reading, preview, Read this passage,
+Resume and Return. Screenshots: `screenshots/ruler-even/`.
+`before-after.mp4` plays the same 1280×720 sequence on the previous build (top) and this one
+(bottom).
+
+## How the earlier renderer was adapted
+
+`render/TimelineView.vue` itself is **not** used or changed. It lays events out on a grid
+of natural heights and falls back to a vertical list when they don't fit, and it owns its own
+selection. None of that can animate into the 68px strip or stay under the ruler's control.
+Instead, `ruler/EvenTrack.vue` reproduces its even-spacing composition:
+
+- **Layout:** event i at the centre of slot i+1. Blocks alternate above and below one thin
+  line, each two slots wide.
+- **Marks:** small neutral dots and short straight stems.
+- **Type:** bold 18px dates, 14px short labels in the subtle colour, and the article's own
+  images at 72–96px wide.
+- **Gaps:** gaps of 8 years or more are drawn dotted and labelled "n yrs". There are no year
+  ticks.
+
+It uses the same tokens (Codex colours, `--viz-slot-min` 80px, `--viz-gap-years` 8) and the
+ruler stays in charge of everything else. The adapter contract from the brief:
+
+- **Picking a block** sends `pick`, the old `focus`. It previews and selects; it never moves
+  the article.
+- **Navigating to the source**, the old `select`, stays the ruler's Read this passage.
+- **Reading and selection** are separate props with separate looks. Reading is the outlined
+  caret, placed on the side of the dot that has no stem (dashed once past). Selection is a
+  progressive date, dot and stem. Selecting fades the other blocks only slightly (to 0.78).
+- **Too many events to fit:** instead of the old vertical fallback, the track scrolls sideways
+  with soft edges. It is the same scroller in every presentation, so the offset survives
+  contraction and expansion. While you read (not explore), it keeps the reading event in view.
+
+## Presentations
+
+- **Overview** (in flow, about 376px at 1440×900): 3 label lines and 64px images, close to the
+  reference figure.
+- **Compact** (68px): blocks fade (0–60ms) and withdraw with the line, stems shorten into it,
+  the line rises (100–240ms), and short years fade in under the dots. The same dots, caret and
+  selected dot stay.
+- **Explore** (the existing 44% cap): space goes first to the preview region (≥104px), then
+  to the blocks. Images shrink before label lines are cut, and text is never scaled.
+  - At 1440×900: 2 lines with 40px images.
+  - At 1280×600: 1 line and no images. Labels there end in an ellipsis; the full label is in
+    the preview and the list.
+- **Phones:** the persistent object is an overview of all 20 events, evenly spaced across the
+  width (`EvenMini.vue`), with the reading caret, the selected dot and a bracket for the part
+  in view. Tapping it scrolls the timeline there. Above it, the even timeline is the
+  nearby-period view; it withdraws when docked.
+
+## Data and controls
+
+- **Short labels:** each event gained an optional `short` label in `events.ts`, made of words
+  from its own sentence (for example "Pritzker Architecture Prize", "Practice in Los Angeles").
+  Previews, the list and the Reading label keep the full label. Ages are left out.
+- **Spans and approximate dates:** a span is a short fixed capsule (not proportional) with the
+  range written in its date. An approximate date has an open dot and keeps "c." or "1970s".
+- **Range:**
+  - A mouse drag picks the events under it and commits their real date bounds; the live
+    readout shows, for example, "1984 – 1997 · 4 events".
+  - From and To list only the events' own years.
+  - Touch scrolls the timeline sideways instead; the filter is the alternative.
+- **Controls:**
+  - The header keeps the passage label and the one mode button (Explore timeline / Resume
+    reading).
+  - Previous, Next, a filter disclosure (showing the active range), help and a subdued date
+    span are quiet icons, hidden in the strip.
+  - Read this passage is now an outlined progressive button, so the preview's heading and
+    quote lead.
+
+## Checks run
+
+1440×900, 1280×600 and 390×844, scripted in headless Chrome, with reduced motion and with
+motion on, plus the in-app browser:
+
+- **The sequence:** reading 1997 → contract → 2003 → expand (horizontal offset unchanged) →
+  preview 1989 (scroll 0; Reading still 2003) → Resume (dy 0) → read 1989 → Return (dy 0).
+  With motion on, dy was 0–1px.
+- **All events:** all 20 Gehry blocks render, and the list shows 20 rows. There are no
+  proportional ticks; the gap labels are "8 yrs", "10 yrs" and "23 yrs".
+- **Filter and selection:** the range drag maps to real dates, a 1984–1997 filter shows 4 of 20
+  in dark theme, and selection stays independent of Reading.
+- **Keyboard:** stepping from a focused block (a fix in this pass) goes 1989 → 1994–96 → 1997
+  and back. Escape closes the preview, then contracts.
+- **Other articles:** Bilbao (19 events, gaps up to 226 years) and the edge-case fixture
+  (BCE, centuries, "c. 1200 CE") render without console errors.
+- **Build:** type-check, build and eslint are clean.
+
+## Not verified / limitations
+
+- **Not yet tried:** touch scrolling of the timeline on a real phone, a screen reader,
+  Firefox and Safari, and real zoom.
+- **Short windows:** the docked explore view at 1280×600 shows one-line labels with an
+  ellipsis.
+- **Blank space:** each side's height is reserved for the tallest block anywhere on the track,
+  so a window without images (early Bilbao) has empty space below the line.
+- **Long dates** such as "February 28, 1929" overflow their block into the gap between
+  neighbours. Very long era dates in the fixture could touch.

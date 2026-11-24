@@ -1,156 +1,113 @@
 /**
- * Geometry of the one persistent ruler (B). The same marks are laid out in
- * two vertical geometries; their horizontal positions never change for a
- * given width, whatever the presentation, filter or selection.
+ * Geometry of B's timeline: the earlier evenly spaced timeline
+ * (render/TimelineView.vue, `spacing="even"`) carried by the ruler's
+ * reading interaction.
  *
- *   expanded  label rows above the marks, roomy lanes for durations, tick labels
- *   compact   no label rows, lanes drawn together, the same axis and ticks
+ * Even spacing, as in the earlier renderer: event i sits at the centre of
+ * slot i + 1 (half a slot of margin at each end), alternating above and below
+ * one line; each block spans two slots, so neighbours on the same side never
+ * touch. Distance is order, not elapsed time: gaps of `GAP_YEARS` or more are
+ * drawn dotted and labelled with their length, and there are no year ticks.
  *
- * Everything here is plain numbers so the component can animate explicit
- * geometry (height, translate) and opacity, never `transition: all`.
+ * The same marks have two vertical geometries:
+ *   rich     blocks (image, date, short label) on stems above and below the line
+ *   compact  the line and dots only, drawn up under the header, with years
+ * Horizontal positions depend only on the slot width, so they never move
+ * between presentations, filters or selections.
  */
 import type { NavEvent } from '../events'
-import { interval, midpoint } from '../time'
+import { dateYears } from '../../model/dates'
+import { interval } from '../time'
 
 /** One motion value for every presentation change (Codex `--transition-timing-function-user` easing). */
 export const MOTION_MS = 240
 
-export const PAD_X = 12
-export const LABEL_ROW = 20
+/** Narrowest slot before the track scrolls sideways (the earlier renderer's `--viz-slot-min`). */
+export const SLOT_MIN = 80
+export const SLOT_MIN_PHONE = 88
+/** Gaps of at least this many years are dotted and labelled (`--viz-gap-years`). */
+export const GAP_YEARS = 8
 
-export interface SceneLayout {
-  compact: boolean
-  labelRows: number
-  /** Centre line of the point marks. */
-  pointsY: number
-  /** Centre of the first duration lane, and the distance between lanes. */
-  rangeY0: number
-  rangeStep: number
-  barH: number
-  axisY: number
-  height: number
+// Type and block metrics (px), matched to the CSS in EvenTrack.vue.
+export const STEM = 14
+export const DATE_LINE = 24
+export const LABEL_LINE = 20
+export const IMG_GAP = 6
+export const BLOCK_PAD = 8
+
+/** Compact strip: the line near the top, the reading caret under it, then years. */
+export const COMPACT = { axisY: 9, height: 36 }
+/** The phone's always-visible overview of every event. */
+export const MINI_H = 32
+
+export const slotWidth = (n: number, width: number, min: number) => Math.max(min, width / (n + 1))
+export const cx = (i: number, slot: number) => slot * (i + 1)
+export const above = (i: number) => i % 2 === 0
+
+export interface Gap {
+  /** The gap before event i. */
+  i: number
+  years: number
+  skipped: boolean
+  label: string | null
 }
-
-export function sceneLayout(compact: boolean, rangeRows: number, labelRows: number): SceneLayout {
-  const extra = Math.max(0, rangeRows - 1)
-  if (compact) {
-    const pointsY = 7
-    const rangeY0 = 15
-    const rangeStep = 3
-    const axisY = rangeY0 + extra * rangeStep + 6
-    return { compact, labelRows: 0, pointsY, rangeY0, rangeStep, barH: 2, axisY, height: axisY + 17 }
-  }
-  const top = labelRows * LABEL_ROW
-  const pointsY = top + (labelRows ? 24 : 14)
-  const rangeY0 = pointsY + (labelRows ? 24 : 20)
-  const rangeStep = 18
-  const axisY = rangeY0 + extra * rangeStep + (labelRows ? 16 : 12)
-  return { compact, labelRows, pointsY, rangeY0, rangeStep, barH: 5, axisY, height: axisY + 26 }
-}
-
-export const xAt = (y: number, domain: [number, number], width: number) =>
-  PAD_X + ((y - domain[0]) / (domain[1] - domain[0] || 1)) * Math.max(1, width - 2 * PAD_X)
-export const yearAtX = (px: number, domain: [number, number], width: number) =>
-  domain[0] + Math.min(1, Math.max(0, (px - PAD_X) / Math.max(1, width - 2 * PAD_X))) * (domain[1] - domain[0])
-
-export const isRange = (e: NavEvent) => !!e.date.end
-
-export type PointMark = { kind: 'point'; key: string; e: NavEvent; x: number }
-export type ClusterMark = { kind: 'cluster'; key: string; events: NavEvent[]; x: number; extent: [number, number] }
-export type RangeMark = { key: string; e: NavEvent; x0: number; x1: number; row: number }
-
-/**
- * Points closer than `minGap` share one count-bearing cluster (never spread
- * apart from their dates). `minGap` is the hit-target width, so targets never overlap.
- */
-export function pointMarks(events: NavEvent[], domain: [number, number], width: number, minGap: number) {
-  const pts = events
-    .filter((e) => !isRange(e))
-    .map((e) => ({ e, x: xAt(midpoint(e.date), domain, width) }))
-    .sort((p, q) => p.x - q.x)
-  const groups: { events: NavEvent[]; xs: number[] }[] = []
-  for (const p of pts) {
-    const last = groups[groups.length - 1]
-    if (last && p.x - last.xs[last.xs.length - 1] < minGap) {
-      last.events.push(p.e)
-      last.xs.push(p.x)
-    } else groups.push({ events: [p.e], xs: [p.x] })
-  }
-  return groups.map<PointMark | ClusterMark>((g) => {
-    if (g.events.length === 1) return { kind: 'point', key: g.events[0].id, e: g.events[0], x: g.xs[0] }
-    const iv = g.events.map((e) => interval(e.date))
-    return {
-      kind: 'cluster',
-      key: g.events.map((e) => e.id).join('+'),
-      events: g.events,
-      x: (g.xs[0] + g.xs[g.xs.length - 1]) / 2,
-      extent: [Math.min(...iv.map((i) => i[0])), Math.max(...iv.map((i) => i[1]))],
-    }
+export function gaps(events: NavEvent[]): Gap[] {
+  const ys = events.map((e) => dateYears(e.date))
+  return events.slice(1).map((_, k) => {
+    const i = k + 1
+    const years = Math.round(ys[i] - ys[i - 1])
+    const skipped = years >= GAP_YEARS
+    return { i, years, skipped, label: skipped ? `${years} yrs` : null }
   })
 }
 
-/** Durations and approximate ranges, packed into lanes so none overlap; positions stay exact. */
-export function rangeMarks(events: NavEvent[], domain: [number, number], width: number): RangeMark[] {
-  const ends: number[] = []
-  return events
-    .filter(isRange)
-    .map((e) => {
-      const [a, b] = interval(e.date)
-      const x0 = xAt(a, domain, width)
-      return { key: e.id, e, x0, x1: Math.max(xAt(b, domain, width), x0 + 4) }
-    })
-    .sort((p, q) => p.x0 - q.x0)
-    .map((r) => {
-      let row = ends.findIndex((end) => end + 6 <= r.x0)
-      if (row === -1) {
-        row = ends.length
-        ends.push(r.x1)
-      } else ends[row] = r.x1
-      return { ...r, row }
-    })
+/** How much of each block fits: label lines and image height, richest first. */
+export interface Richness {
+  lines: number
+  imgH: number
 }
+const LADDER: Richness[] = [
+  { lines: 3, imgH: 64 },
+  { lines: 3, imgH: 48 },
+  { lines: 2, imgH: 48 },
+  { lines: 2, imgH: 40 },
+  { lines: 3, imgH: 0 },
+  { lines: 2, imgH: 0 },
+  { lines: 1, imgH: 0 },
+]
+export const imgWidth = (imgH: number) => (imgH >= 60 ? 96 : 72)
 
-let canvas: HTMLCanvasElement | null = null
-function textWidth(text: string, font: string) {
-  canvas ??= document.createElement('canvas')
-  const c = canvas.getContext('2d')!
-  c.font = font
-  return c.measureText(text).width
+export interface RichLayout extends Richness {
+  aboveH: number
+  belowH: number
+  /** Height of the drawn track (without a scrollbar). */
+  height: number
 }
-
-export interface PlacedLabel {
-  e: NavEvent
-  x: number
-  row: number
-  width: number
-  align: 'start' | 'end'
+function sideH(r: Richness, hasImg: boolean) {
+  return STEM + DATE_LINE + r.lines * LABEL_LINE + (hasImg && r.imgH ? r.imgH + IMG_GAP : 0) + 4
 }
-
 /**
- * Direct labels for the editor's milestones, greedily placed in the label
- * rows; a label that does not fit is left out (the mark keeps its name for
- * hover, focus and assistive tech). The set depends only on the width, so
- * labels never rearrange when something is selected or filtered.
+ * The richest blocks that fit `budget` px of track. Ages are left out, image
+ * height gives way first, then label lines; text is never scaled down.
  */
-export function placeLabels(
-  items: { e: NavEvent; x: number; text: string }[],
-  width: number,
-  rows: number,
-  font: string,
-  maxW: number,
-): PlacedLabel[] {
-  const used: [number, number][][] = Array.from({ length: rows }, () => [])
-  const out: PlacedLabel[] = []
-  for (const it of [...items].sort((a, b) => a.x - b.x)) {
-    const w = Math.min(maxW, Math.ceil(textWidth(it.text, font)) + 2)
-    const align: 'start' | 'end' = it.x + w > width - 2 ? 'end' : 'start'
-    const a = align === 'start' ? it.x - 3 : it.x - w + 3
-    const ext: [number, number] = [a - 6, a + w + 6]
-    if (ext[0] < -4) continue
-    const row = used.findIndex((spans) => spans.every(([p, q]) => ext[1] <= p || ext[0] >= q))
-    if (row === -1) continue
-    used[row].push(ext)
-    out.push({ e: it.e, x: it.x, row, width: w, align })
+export function richLayout(events: NavEvent[], budget: number): RichLayout {
+  const imgAbove = events.some((e, i) => above(i) && e.image)
+  const imgBelow = events.some((e, i) => !above(i) && e.image)
+  const make = (r: Richness): RichLayout => {
+    const aboveH = sideH(r, imgAbove)
+    const belowH = sideH(r, imgBelow)
+    return { ...r, aboveH, belowH, height: aboveH + belowH }
   }
-  return out
+  for (const r of LADDER) {
+    const l = make(r)
+    if (l.height <= budget) return l
+  }
+  return make(LADDER[LADDER.length - 1])
+}
+
+/** The real date bounds of a run of events (for a range picked on the even axis). */
+export function boundsOf(list: NavEvent[]): [number, number] | null {
+  if (!list.length) return null
+  const iv = list.map((e) => interval(e.date))
+  return [Math.min(...iv.map((v) => v[0])), Math.max(...iv.map((v) => v[1]))]
 }

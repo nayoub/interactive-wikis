@@ -1,32 +1,29 @@
 <script setup lang="ts">
 /**
- * B · Time ruler: one persistent ruler, three presentations.
+ * B · Time ruler: the earlier evenly spaced timeline, carried by the ruler's
+ * reading interaction. One persistent timeline, three presentations:
  *
- *   overview   below the introduction: the ruler with milestone labels and
- *              the exploration controls (about 260px, never more than the cap)
- *   compact    docked under the wiki header (about 68px): the same axis and
- *              marks drawn together, the reading caret, the passage being
- *              read, and Explore timeline
- *   explore    the same object expanded where it is: labels, controls and one
- *              bounded region for the results or a preview (≤ 44% of the
- *              visible height below the header)
+ *   overview   below the introduction: the even timeline (dates, short labels,
+ *              occasional article images on stems above and below one line)
+ *   compact    docked under the wiki header (about 68px): the same line and
+ *              dots drawn up, years under them, the reading caret, the passage
+ *              being read, and Explore timeline
+ *   explore    the same object expanded where it is, plus one bounded region
+ *              for the results or a preview (≤ 44% of the visible height)
  *
- * The marks stay mounted and keep their horizontal positions; only vertical
- * geometry and opacity animate (one motion value, MOTION_MS). Docking (the
- * sticky mount reaching the header) is separate from expansion: docking
- * contracts the overview; Explore timeline stays open until Resume reading,
- * Close, Escape or Read this passage.
+ * The timeline (ruler/EvenTrack.vue) stays mounted: positions, order and its
+ * horizontal scroll offset survive every change; only vertical geometry and
+ * opacity animate (one motion value, MOTION_MS). On phones the persistent
+ * object is an overview of every event (ruler/EvenMini.vue); the timeline
+ * itself is the nearby-period view above it, withdrawn when docked.
  *
- * Anchoring: the mount is sticky but still in flow, so while docked a change
- * of panel height moves the article after it by the same amount: the line
- * under the panel follows its lower edge. Native scroll anchoring is off for
- * the length of each transition only, so nothing else compensates (see
- * ruler/useDock.ts).
- *
- * States kept apart: the reading anchor (from article position), the
- * selected event (a deliberate choice), the preview (what the region shows),
- * the filter range, and the navigation origin (saved only by Read this
- * passage, restored once by Return to reading).
+ * This component keeps everything the visual pass must not change: docking
+ * (separate from expansion), anchoring (the article follows the panel's
+ * lower edge; native scroll anchoring held off while the panel moves; see
+ * ruler/useDock.ts), the reading anchor, and the separate selection, preview,
+ * filter and navigation origin. Picking a block previews it and never moves
+ * the article; only Read this passage navigates; Resume reading closes at the
+ * current passage; Return to reading restores the origin of a real jump.
  */
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue'
 import { CdxButton, CdxIcon } from '@wikimedia/codex'
@@ -35,6 +32,7 @@ import {
   cdxIconClose,
   cdxIconCollapse,
   cdxIconExpand,
+  cdxIconFunnel,
   cdxIconInfo,
   cdxIconNext,
   cdxIconPrevious,
@@ -43,10 +41,11 @@ import {
 import { NAV, type NavContext } from '../context'
 import type { NavEvent } from '../events'
 import { msg } from '../messages'
-import { domainOf, formatWhen, interval, midpoint, overlaps, tickStep, yearLabel } from '../time'
-import { MOTION_MS, placeLabels, rangeMarks, sceneLayout, xAt } from '../ruler/layout'
+import { formatWhen, interval, midpoint, overlaps, yearLabel } from '../time'
+import EvenMini from '../ruler/EvenMini.vue'
+import EvenTrack from '../ruler/EvenTrack.vue'
+import { COMPACT, MINI_H, MOTION_MS, richLayout, SLOT_MIN, SLOT_MIN_PHONE, slotWidth } from '../ruler/layout'
 import RulerRegion, { type RegionView } from '../ruler/RulerRegion.vue'
-import RulerScene from '../ruler/RulerScene.vue'
 import { useDock } from '../ruler/useDock'
 import { useReading } from '../ruler/useReading'
 
@@ -54,9 +53,13 @@ const ctx = inject(NAV) as NavContext & { leadMount: Ref<HTMLElement | null> }
 const nav = ctx.nav
 const era = ctx.era
 const events = [...ctx.collection.events].sort((a, b) => midpoint(a.date) - midpoint(b.date) || a.order - b.order)
-const domain = domainOf(events.map((e) => interval(e.date)))
+const intervals = events.map((e) => interval(e.date))
+const lo = Math.floor(Math.min(...intervals.map((v) => v[0])))
+const hi = Math.ceil(Math.max(...intervals.map((v) => v[1])))
 const narrow = computed(() => ctx.width.value === 'narrow')
 
+const reduced = () =>
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches || document.documentElement.dataset.tnMotion === 'reduce'
 const frame = () =>
   new Promise<void>((r) => {
     let done = false
@@ -82,7 +85,7 @@ const { reading, update: updateReading, set: setReading } = useReading({ body, e
 const exploring = ref(false)
 const view = ref<RegionView>('results')
 const previewId = ref<string | null>(null)
-const cluster = ref<{ events: NavEvent[]; extent: [number, number] } | null>(null)
+const filterOpen = ref(false)
 const presentation = computed<'overview' | 'compact' | 'explore'>(() =>
   exploring.value ? 'explore' : dock.contracted.value ? 'compact' : 'overview',
 )
@@ -91,78 +94,55 @@ const compact = computed(() => presentation.value === 'compact')
 // ── Measurements ─────────────────────────────────────────────────────────
 const root = ref<HTMLElement | null>(null)
 const topEl = ref<HTMLElement | null>(null)
-const controlsEl = ref<HTMLElement | null>(null)
+const filterEl = ref<HTMLElement | null>(null)
+const track = ref<InstanceType<typeof EvenTrack> | null>(null)
 const width = ref(0)
 const topH = ref(28)
-const controlsH = ref(40)
+const filterH = ref(0)
 let ro: ResizeObserver | null = null
-watch([root, topEl, controlsEl], () => {
+watch([root, topEl, filterEl], () => {
   ro?.disconnect()
   ro = new ResizeObserver(() => {
     if (root.value) width.value = root.value.clientWidth
     if (topEl.value) topH.value = topEl.value.offsetHeight
-    if (controlsEl.value) controlsH.value = controlsEl.value.offsetHeight
+    filterH.value = filterEl.value?.offsetHeight ?? 0
   })
-  for (const el of [root.value, topEl.value, controlsEl.value]) if (el) ro.observe(el)
+  for (const el of [root.value, topEl.value, filterEl.value]) if (el) ro.observe(el)
+  filterH.value = filterEl.value?.offsetHeight ?? 0
 })
 onBeforeUnmount(() => ro?.disconnect())
 
 // ── Geometry ─────────────────────────────────────────────────────────────
 const PADY = 2
-const MIN_REGION = 96
-const LOCAL_HEAD = 34
-const rangeRows = computed(() => Math.max(1, ...rangeMarks(events, domain, Math.max(width.value, 1)).map((r) => r.row + 1)))
-const scene = (c: boolean, rows: number) => sceneLayout(c, rangeRows.value, rows)
+const minRegion = computed(() => (narrow.value ? 96 : 104))
+const slot = computed(() => slotWidth(events.length, width.value || 600, narrow.value ? SLOT_MIN_PHONE : SLOT_MIN))
+const sb = computed(() => track.value?.sb ?? 0)
+const avail = computed(() => dock.viewH.value - dock.header.value)
 /** The cap: the whole expanded panel stays within about 44% of the visible height below the header. */
-const cap = computed(() => Math.round((dock.viewH.value - dock.header.value) * 0.44))
-const block = (rows: number) => PADY + topH.value + scene(false, rows).height + controlsH.value + PADY
-const pickRows = (fits: (r: number) => boolean) => [3, 2, 1, 0].find(fits) ?? 0
-const overviewRows = computed(() => pickRows((r) => block(r) <= Math.max(cap.value, block(0))))
-const exploreRows = computed(() => pickRows((r) => block(r) + MIN_REGION <= cap.value))
-/** The phone close-up has no label rows: its room goes to the preview (tapping a mark shows it). */
-const localRows = computed(() => 0)
-const compactH = computed(() => PADY + topH.value + scene(true, 0).height + PADY)
-
-const fullLayout = computed(() => {
-  if (presentation.value === 'compact') return scene(true, 0)
-  if (presentation.value === 'explore') return narrow.value ? scene(true, 0) : scene(false, exploreRows.value)
-  return scene(false, overviewRows.value)
-})
-const localLayout = computed(() => scene(false, localRows.value))
-const localH = computed(() => (presentation.value === 'explore' && narrow.value ? LOCAL_HEAD + localLayout.value.height : 0))
-const baseH = computed(() =>
-  presentation.value === 'compact'
-    ? compactH.value
-    : PADY + topH.value + localH.value + fullLayout.value.height + controlsH.value + PADY,
+const cap = computed(() => Math.round(avail.value * 0.44))
+const miniH = computed(() => (narrow.value ? MINI_H : 0))
+const head = computed(() => 2 * PADY + topH.value + (compact.value ? 0 : filterH.value))
+/** The overview is in flow, not docked: it may be as rich as the reference figure. */
+const richOverview = computed(() => richLayout(events, Math.max(cap.value, avail.value * 0.55) - head.value - miniH.value - sb.value))
+const richExplore = computed(() => richLayout(events, cap.value - head.value - miniH.value - sb.value - minRegion.value))
+const rich = computed(() => (presentation.value === 'explore' ? richExplore.value : richOverview.value))
+const trackMode = computed<'rich' | 'compact' | 'hidden'>(() => (compact.value ? (narrow.value ? 'hidden' : 'compact') : 'rich'))
+const trackH = computed(() =>
+  trackMode.value === 'rich' ? rich.value.height + sb.value : trackMode.value === 'compact' ? COMPACT.height + sb.value : 0,
 )
+const compactH = computed(() => 2 * PADY + topH.value + (narrow.value ? MINI_H : COMPACT.height + sb.value))
+const baseH = computed(() => (compact.value ? compactH.value : head.value + trackH.value + miniH.value))
 const panelH = computed(() => (presentation.value === 'explore' ? Math.max(cap.value, baseH.value + 80) : baseH.value))
 const regionH = computed(() => (presentation.value === 'explore' ? panelH.value - baseH.value : 0))
 
-// Every presentation change is a panel transition: suspend native anchoring for it.
+// Every presentation change is a panel transition: hold native anchoring off until it lands.
 const motion = ref<'expand' | 'collapse'>('expand')
 watch(panelH, (h, old) => {
   motion.value = h >= (old ?? 0) ? 'expand' : 'collapse'
   dock.holdAnchoring(settledNow)
 })
 
-// ── Labels (depend on the width only, so they never rearrange on selection) ──
-const labelFont = () => {
-  const cs = root.value ? getComputedStyle(root.value) : null
-  return `14px ${cs?.fontFamily ?? 'sans-serif'}`
-}
-const fullLabels = computed(() =>
-  width.value
-    ? placeLabels(
-        events.filter((e) => e.milestone).map((e) => ({ e, x: xAt(midpoint(e.date), domain, width.value), text: `${formatWhen(e.date, era)} ${e.label}` })),
-        width.value,
-        3,
-        labelFont(),
-        narrow.value ? 150 : 220,
-      )
-    : [],
-)
-
-// ── Filter range (the controls own its count) ────────────────────────────
+// ── Filter range (by real dates; the controls own its count) ─────────────
 const range = computed({ get: () => nav.range.value, set: (r) => (nav.range.value = r) })
 const inRange = (e: NavEvent) => !range.value || overlaps(interval(e.date), range.value)
 const matching = computed(() => events.filter(inRange))
@@ -173,21 +153,23 @@ const rangeLabel = computed(() => {
   const b = yearLabel(r[1] - 1, era)
   return a === b ? a : `${a}–${b}`
 })
-const step = tickStep(domain[1] - domain[0], 30)
-const bounds: number[] = []
-for (let y = Math.ceil(domain[0] / step) * step; y <= domain[1]; y += step) bounds.push(y)
-const fromOptions = computed(() => [...new Set([...bounds, ...(range.value ? [range.value[0]] : [])])].sort((a, b) => a - b))
-const toOptions = computed(() => [...new Set([...bounds, ...(range.value ? [range.value[1] - 1] : [])])].sort((a, b) => a - b))
+/** The bounds offered are the events' own dates, never invented in-between years. */
+const fromOptions = computed(() =>
+  [...new Set([...intervals.map((v) => Math.floor(v[0])), ...(range.value ? [range.value[0]] : [])])].sort((a, b) => a - b),
+)
+const toOptions = computed(() =>
+  [...new Set([...intervals.map((v) => Math.ceil(v[1]) - 1), ...(range.value ? [range.value[1] - 1] : [])])].sort((a, b) => a - b),
+)
 function setFrom(v: string) {
-  if (v === '') return void (range.value = range.value && range.value[1] < domain[1] ? [domain[0], range.value[1]] : null)
+  if (v === '') return void (range.value = range.value && range.value[1] < hi ? [lo, range.value[1]] : null)
   const a = Number(v)
-  const b = range.value?.[1] ?? domain[1] + 1
+  const b = range.value?.[1] ?? hi
   range.value = [a, Math.max(b, a + 1)]
 }
 function setTo(v: string) {
-  if (v === '') return void (range.value = range.value && range.value[0] > domain[0] ? [range.value[0], domain[1] + 1] : null)
+  if (v === '') return void (range.value = range.value && range.value[0] > lo ? [range.value[0], hi] : null)
   const b = Number(v) + 1
-  const a = range.value?.[0] ?? domain[0]
+  const a = range.value?.[0] ?? lo
   range.value = [Math.min(a, b - 1), b]
 }
 // A range that excludes the open preview closes it; the selection is kept.
@@ -209,22 +191,15 @@ function open(id: string) {
   previewId.value = id
   view.value = 'preview'
   exploring.value = true
+  track.value?.reveal(id, { smooth: !reduced() })
   nav.announce(`${formatWhen(e.date, era)}: ${e.label}. ${msg.inSection(e.sourceAnchor.sectionTitle)}.`)
 }
-function openCluster(list: NavEvent[], extent: [number, number]) {
-  cluster.value = { events: list, extent }
-  view.value = 'cluster'
-  exploring.value = true
-}
-const clusterTitle = computed(() =>
-  cluster.value
-    ? msg.trClusterTitle(cluster.value.events.length, yearLabel(Math.floor(cluster.value.extent[0]), era), yearLabel(Math.ceil(cluster.value.extent[1]) - 1, era))
-    : '',
-)
 function stepBy(dir: 1 | -1) {
   const list = matching.value
   if (!list.length) return
-  const curId = previewId.value ?? nav.selectedId.value ?? reading.value.id
+  // From the block that has keyboard focus, else the preview, the selection, then the passage being read.
+  const onBlock = (document.activeElement as HTMLElement | null)?.closest?.<HTMLElement>('.et__block')
+  const curId = onBlock?.dataset.event ?? previewId.value ?? nav.selectedId.value ?? reading.value.id
   const cur = curId ? events.find((e) => e.id === curId) : null
   let next: NavEvent | undefined
   const i = cur ? list.indexOf(cur) : -1
@@ -234,17 +209,9 @@ function stepBy(dir: 1 | -1) {
     next = dir > 0 ? list.find((e) => midpoint(e.date) > t) : [...list].reverse().find((e) => midpoint(e.date) < t)
   } else next = dir > 0 ? list[0] : list[list.length - 1]
   if (!next) return
-  const onMark = (document.activeElement as HTMLElement | null)?.closest?.('.rs__mark, .rs__range')
   open(next.id)
-  if (onMark) nextTick(() => focusMark(next!.id))
+  if (onBlock) nextTick(() => root.value?.querySelector<HTMLElement>(`.et__block[data-event="${CSS.escape(next!.id)}"]`)?.focus({ preventScroll: true }))
 }
-function focusMark(id: string) {
-  const sel = `.rs__mark[data-event="${CSS.escape(id)}"], .rs__range[data-event="${CSS.escape(id)}"], .rs__cluster[data-events~="${CSS.escape(id)}"]`
-  const els = [...(root.value?.querySelectorAll<HTMLElement>(sel) ?? [])].filter((el) => el.tabIndex >= 0)
-  els[els.length - 1]?.focus({ preventScroll: true })
-}
-const canPrev = computed(() => matching.value.length > 0)
-const canNext = computed(() => matching.value.length > 0)
 
 // ── Explore, resume, read, return ────────────────────────────────────────
 const modeBtn = ref<InstanceType<typeof CdxButton> | null>(null)
@@ -255,14 +222,11 @@ watch(
   (p) => {
     const a = document.activeElement as HTMLElement | null
     if (!a || !root.value?.contains(a)) return
-    const hidden = (p === 'compact' && !topEl.value?.contains(a)) || (p !== 'explore' && !!a.closest('.tr__region, .tr__local'))
+    const hidden = (p === 'compact' && !a.closest('.tr__keep')) || (p !== 'explore' && !!a.closest('.tr__region'))
     if (hidden) nextTick(focusModeButton)
   },
   { flush: 'pre' },
 )
-
-const localCenter = ref<number | null>(null)
-const panned = ref(false)
 function explore() {
   view.value = previewId.value ? 'preview' : 'results'
   exploring.value = true
@@ -270,7 +234,6 @@ function explore() {
 function resume() {
   exploring.value = false
   previewId.value = null
-  cluster.value = null
   view.value = 'results'
 }
 const modeAction = computed(() =>
@@ -278,6 +241,13 @@ const modeAction = computed(() =>
     ? { label: dock.stuck.value ? msg.trResume : msg.trClose, icon: cdxIconCollapse, run: resume }
     : { label: msg.trExplore, icon: cdxIconExpand, run: explore },
 )
+function toggleHelp() {
+  if (view.value === 'help' && exploring.value) view.value = previewId.value ? 'preview' : 'results'
+  else {
+    view.value = 'help'
+    exploring.value = true
+  }
+}
 
 let jumpTarget: string | null = null
 /** Read this passage: resolve first, settle the compact geometry, then place the passage below it. */
@@ -313,7 +283,6 @@ function onKeydown(ev: KeyboardEvent) {
       ev.preventDefault()
       const id = previewId.value
       previewId.value = null
-      cluster.value = null
       view.value = 'results'
       if (t.closest('.tr__region'))
         nextTick(() => root.value?.querySelector<HTMLElement>(`.rr__row[data-event="${CSS.escape(id ?? '')}"], .rr__row`)?.focus({ preventScroll: true }))
@@ -331,42 +300,23 @@ function onKeydown(ev: KeyboardEvent) {
   }
 }
 
-// ── Phone: a close-up period above the full ruler ─────────────────────────
-const SPANS = [10, 20, 25, 50, 100, 200, 250, 500, 1000]
-const localSpan = SPANS.find((s) => s >= (domain[1] - domain[0]) / 5) ?? 1000
-const clampCenter = (c: number) => Math.min(domain[1] - localSpan / 2, Math.max(domain[0] + localSpan / 2, c))
-watch(exploring, (on) => {
-  if (!on || !narrow.value || panned.value) return
-  const r = reading.value.id ? events.find((e) => e.id === reading.value.id) : null
-  localCenter.value = clampCenter(r ? midpoint(r.date) : (domain[0] + domain[1]) / 2)
-})
-const localDomain = computed<[number, number]>(() => {
-  const c = localCenter.value ?? clampCenter((domain[0] + domain[1]) / 2)
-  return [c - localSpan / 2, c + localSpan / 2]
-})
-const localEvents = computed(() => events.filter((e) => overlaps(interval(e.date), localDomain.value)))
-const localLabels = computed(() =>
-  width.value
-    ? placeLabels(
-        localEvents.value.map((e) => ({ e, x: xAt(midpoint(e.date), localDomain.value, width.value), text: `${formatWhen(e.date, era)} ${e.label}` })),
-        width.value,
-        localRows.value,
-        labelFont(),
-        140,
-      )
-    : [],
+// ── The timeline's sideways window ───────────────────────────────────────
+const win = ref<[number, number] | null>(null)
+const onTrackScroll = () => (win.value = track.value?.windowIndexes() ?? null)
+function onTrackTap() {
+  if (compact.value) explore()
+}
+function onMiniGo(i: number) {
+  if (compact.value) explore()
+  nextTick(() => track.value?.scrollToIndex(i, !reduced()))
+}
+// While reading (not exploring), the timeline keeps the passage being read in view.
+watch(
+  () => reading.value.id,
+  (id) => {
+    if (id && !exploring.value) track.value?.reveal(id, { smooth: !reduced() })
+  },
 )
-function pan(dir: 1 | -1) {
-  panned.value = true
-  localCenter.value = clampCenter((localCenter.value ?? 0) + (dir * localSpan) / 2)
-}
-function onFullTap(year: number) {
-  if (compact.value) return explore()
-  if (presentation.value === 'explore' && narrow.value) {
-    panned.value = true
-    localCenter.value = clampCenter(year)
-  }
-}
 
 // ── Scroll: docking and the reading anchor (genuine scrolling only) ──────
 const readingLine = () => {
@@ -403,15 +353,15 @@ const onResize = () => dock.check()
 onMounted(() => {
   window.addEventListener('scroll', onScroll, { passive: true })
   window.addEventListener('resize', onResize)
-  nextTick(() => {
+  const first = () => {
     dock.check()
     updateReading(readingLine())
-  })
+    if (reading.value.id) track.value?.reveal(reading.value.id, { center: true })
+    onTrackScroll()
+  }
+  nextTick(first)
   // The mount is placed after the skin settles.
-  setTimeout(() => {
-    dock.check()
-    updateReading(readingLine())
-  }, 200)
+  setTimeout(first, 200)
 })
 onBeforeUnmount(() => {
   window.removeEventListener('scroll', onScroll)
@@ -427,6 +377,7 @@ const readingText = computed(() => {
   if (e && r.state === 'after') return msg.trReadingAfter(formatWhen(e.date, era), r.section)
   return r.section
 })
+const spanLabel = `${yearLabel(events[0]?.date.start.y ?? lo, era)}–${yearLabel((events[events.length - 1]?.date.end ?? events[events.length - 1]?.date.start)?.y ?? hi, era)}`
 const resultsTitle = computed(() => (range.value ? msg.trEventsIn(matching.value.length, rangeLabel.value) : msg.trAllEvents(events.length)))
 const px = (n: number) => `${Math.round(n)}px`
 </script>
@@ -451,13 +402,13 @@ const px = (n: number) => `${Math.round(n)}px`
         {{ msg.trRulerLabel }}
       </h2>
 
-      <!-- The passage label and the one mode button: present in every presentation. -->
+      <!-- Header: the passage being read, quiet secondary tools, and the one mode button. -->
       <div
         ref="topEl"
         class="tr__top"
       >
         <p
-          class="tr__reading"
+          class="tr__reading tr__keep"
           :aria-label="msg.trReadingAria(readingText)"
         >
           <svg
@@ -471,10 +422,72 @@ const px = (n: number) => `${Math.round(n)}px`
           <span class="tr__reading-word">{{ msg.trReading }}</span>
           <span class="tr__reading-text">{{ readingText }}</span>
         </p>
+        <div
+          v-show="!compact"
+          class="tr__tools"
+        >
+          <span class="tr__span">{{ spanLabel }}</span>
+          <CdxButton
+            size="small"
+            weight="quiet"
+            :aria-label="msg.trPrev"
+            :title="msg.trPrev"
+            :disabled="!matching.length"
+            @click="stepBy(-1)"
+          >
+            <CdxIcon
+              :icon="cdxIconPrevious"
+              size="small"
+            />
+          </CdxButton>
+          <CdxButton
+            size="small"
+            weight="quiet"
+            :aria-label="msg.trNext"
+            :title="msg.trNext"
+            :disabled="!matching.length"
+            @click="stepBy(1)"
+          >
+            <CdxIcon
+              :icon="cdxIconNext"
+              size="small"
+            />
+          </CdxButton>
+          <CdxButton
+            size="small"
+            weight="quiet"
+            class="tr__filter-btn"
+            :aria-expanded="filterOpen ? 'true' : 'false'"
+            aria-controls="tr-filter"
+            :aria-label="range ? `${msg.trFilter}: ${rangeLabel}, ${msg.trRangeCount(matching.length, events.length)}` : msg.trFilter"
+            @click="filterOpen = !filterOpen"
+          >
+            <CdxIcon
+              :icon="cdxIconFunnel"
+              size="small"
+            /><span
+              v-if="range"
+              class="tr__filter-on"
+            >{{ rangeLabel }}</span>
+          </CdxButton>
+          <CdxButton
+            size="small"
+            weight="quiet"
+            :aria-label="msg.trHowToRead"
+            :title="msg.trHowToRead"
+            :aria-pressed="view === 'help' && exploring ? 'true' : 'false'"
+            @click="toggleHelp"
+          >
+            <CdxIcon
+              :icon="cdxIconInfo"
+              size="small"
+            />
+          </CdxButton>
+        </div>
         <template v-if="nav.origin.value">
           <CdxButton
             size="small"
-            class="tr__return"
+            class="tr__return tr__keep"
             :title="msg.returnFrom(nav.origin.value.section)"
             @click="back"
           >
@@ -487,6 +500,7 @@ const px = (n: number) => `${Math.round(n)}px`
           <CdxButton
             size="small"
             weight="quiet"
+            class="tr__keep"
             :aria-label="msg.keepReadingHere"
             :title="msg.keepReadingHereHint"
             @click="nav.endExploration()"
@@ -500,7 +514,7 @@ const px = (n: number) => `${Math.round(n)}px`
         <CdxButton
           ref="modeBtn"
           size="small"
-          class="tr__mode"
+          class="tr__mode tr__keep"
           :aria-expanded="presentation === 'explore' ? 'true' : 'false'"
           @click="modeAction.run"
         >
@@ -512,177 +526,95 @@ const px = (n: number) => `${Math.round(n)}px`
         </CdxButton>
       </div>
 
-      <!-- Phone: a close-up period with usable spacing, above the full ruler. -->
+      <!-- The date filter: a disclosure, by the events' own dates. -->
       <div
-        v-if="narrow"
-        class="tr__local"
-        :style="{ height: px(localH) }"
-        :inert="presentation !== 'explore' || undefined"
+        v-if="filterOpen && !compact"
+        id="tr-filter"
+        ref="filterEl"
+        class="tr__filter"
+        role="group"
+        :aria-label="msg.trFilter"
       >
-        <div class="tr__local-head">
-          <CdxButton
-            size="small"
-            weight="quiet"
-            :aria-label="msg.trEarlier"
-            @click="pan(-1)"
+        <label class="tr__field">
+          <span>{{ msg.trFrom }}</span>
+          <select
+            class="cdx-select tr__select"
+            :value="range ? String(range[0]) : ''"
+            @change="setFrom(($event.target as HTMLSelectElement).value)"
           >
-            <CdxIcon
-              :icon="cdxIconPrevious"
-              size="small"
-            />
-          </CdxButton>
-          <span class="tr__local-label">{{ msg.trLocal(yearLabel(Math.round(localDomain[0]), era), yearLabel(Math.round(localDomain[1]), era)) }}</span>
-          <CdxButton
-            size="small"
-            weight="quiet"
-            :aria-label="msg.trLater"
-            @click="pan(1)"
+            <option value="">{{ msg.trAny }}</option>
+            <option
+              v-for="y in fromOptions"
+              :key="y"
+              :value="String(y)"
+            >{{ yearLabel(y, era) }}</option>
+          </select>
+        </label>
+        <label class="tr__field">
+          <span>{{ msg.trTo }}</span>
+          <select
+            class="cdx-select tr__select"
+            :value="range ? String(range[1] - 1) : ''"
+            @change="setTo(($event.target as HTMLSelectElement).value)"
           >
-            <CdxIcon
-              :icon="cdxIconNext"
-              size="small"
-            />
-          </CdxButton>
-        </div>
-        <RulerScene
-          v-if="width"
-          class="tr__local-scene"
-          :events="localEvents"
-          :domain="localDomain"
-          :width="width"
-          :layout="localLayout"
-          :min-gap="32"
-          :era="era"
-          :labels="localLabels"
-          :selected-id="nav.selectedId.value"
-          :reading-id="reading.id"
-          :reading-state="reading.state"
-          :range="range"
-          draggable
-          @pick="open"
-          @cluster="openCluster"
-          @commit="(r) => (range = r)"
-        />
+            <option value="">{{ msg.trAny }}</option>
+            <option
+              v-for="y in toOptions"
+              :key="y"
+              :value="String(y)"
+            >{{ yearLabel(y, era) }}</option>
+          </select>
+        </label>
+        <CdxButton
+          v-if="range"
+          size="small"
+          weight="quiet"
+          @click="range = null"
+        >
+          {{ msg.trClearRange }}
+        </CdxButton>
+        <span
+          class="tr__count"
+          aria-live="polite"
+        >{{ msg.trRangeCount(matching.length, events.length) }}</span>
       </div>
 
-      <!-- The persistent full-domain ruler. -->
-      <RulerScene
-        v-if="width"
-        class="tr__scene"
+      <!-- The timeline: the one persistent object on desktop; the nearby-period view on phones. -->
+      <EvenTrack
+        ref="track"
+        class="tr__track"
         :events="events"
-        :domain="domain"
-        :width="width"
-        :layout="fullLayout"
-        :min-gap="narrow ? 28 : 24"
+        :slot-w="slot"
+        :mode="trackMode"
+        :geom="rich"
         :era="era"
-        :labels="fullLabels"
         :selected-id="nav.selectedId.value"
         :reading-id="reading.id"
         :reading-state="reading.state"
         :range="range"
-        :interactive="!fullLayout.compact"
-        :draggable="!fullLayout.compact"
-        :window-band="presentation === 'explore' && narrow ? localDomain : null"
+        :draggable="!narrow"
         @pick="open"
-        @cluster="openCluster"
         @commit="(r) => (range = r)"
-        @tap="onFullTap"
+        @tap="onTrackTap"
+        @scrolled="onTrackScroll"
       />
 
-      <!-- Exploration controls: filter counts live here, not in the reading label. -->
-      <div
-        ref="controlsEl"
-        class="tr__controls"
-        :inert="compact || undefined"
-      >
-        <div class="tr__group">
-          <CdxButton
-            size="small"
-            :disabled="!canPrev"
-            :aria-label="msg.trPrev"
-            @click="stepBy(-1)"
-          >
-            <CdxIcon
-              :icon="cdxIconPrevious"
-              size="small"
-            /><span class="tr__btn-text">{{ msg.trPrev }}</span>
-          </CdxButton>
-          <CdxButton
-            size="small"
-            :disabled="!canNext"
-            :aria-label="msg.trNext"
-            @click="stepBy(1)"
-          >
-            <span class="tr__btn-text">{{ msg.trNext }}</span><CdxIcon
-              :icon="cdxIconNext"
-              size="small"
-            />
-          </CdxButton>
-        </div>
-        <div
-          class="tr__group tr__range"
-          role="group"
-          :aria-label="msg.trLegendRange"
-        >
-          <label class="tr__field">
-            <span :class="{ 'tn-visually-hidden': narrow }">{{ msg.trFrom }}</span>
-            <select
-              class="cdx-select tr__select"
-              :value="range ? String(range[0]) : ''"
-              @change="setFrom(($event.target as HTMLSelectElement).value)"
-            >
-              <option value="">{{ msg.trAny }}</option>
-              <option
-                v-for="y in fromOptions"
-                :key="y"
-                :value="String(y)"
-              >{{ yearLabel(y, era) }}</option>
-            </select>
-          </label>
-          <label class="tr__field">
-            <span :class="{ 'tn-visually-hidden': narrow }">{{ msg.trTo }}</span>
-            <select
-              class="cdx-select tr__select"
-              :value="range ? String(range[1] - 1) : ''"
-              @change="setTo(($event.target as HTMLSelectElement).value)"
-            >
-              <option value="">{{ msg.trAny }}</option>
-              <option
-                v-for="y in toOptions"
-                :key="y"
-                :value="String(y)"
-              >{{ yearLabel(y, era) }}</option>
-            </select>
-          </label>
-          <CdxButton
-            v-if="range"
-            size="small"
-            weight="quiet"
-            @click="range = null"
-          >
-            {{ msg.trClearRange }}
-          </CdxButton>
-          <span
-            class="tr__count"
-            :class="{ 'tn-visually-hidden': narrow && !range }"
-            aria-live="polite"
-          >{{ msg.trRangeCount(matching.length, events.length) }}</span>
-        </div>
-        <CdxButton
-          size="small"
-          weight="quiet"
-          class="tr__help"
-          :aria-pressed="view === 'help' && exploring ? 'true' : 'false'"
-          @click="view === 'help' && exploring ? (view = 'results') : ((view = 'help'), (exploring = true))"
-        >
-          <CdxIcon
-            :icon="cdxIconInfo"
-            size="small"
-          /><span class="tr__btn-text">{{ msg.trHowToRead }}</span>
-        </CdxButton>
-      </div>
+      <!-- Phones: every event, always visible (the compact overview). -->
+      <EvenMini
+        v-if="narrow && width"
+        class="tr__mini tr__keep"
+        :events="events"
+        :width="width"
+        :era="era"
+        :selected-id="nav.selectedId.value"
+        :reading-id="reading.id"
+        :reading-state="reading.state"
+        :range="range"
+        :window="compact ? null : win"
+        @go="onMiniGo"
+      />
 
-      <!-- One bounded region: results, a cluster, help, or one preview. -->
+      <!-- One bounded region: results, help, or one preview. -->
       <div
         class="tr__region"
         :style="{ height: px(regionH) }"
@@ -692,8 +624,8 @@ const px = (n: number) => `${Math.round(n)}px`
           :view="view"
           :results="matching"
           :results-title="resultsTitle"
-          :cluster="cluster?.events ?? []"
-          :cluster-title="clusterTitle"
+          :cluster="[]"
+          cluster-title=""
           :preview="preview"
           :preview-outside="!!preview && !inRange(preview)"
           :preview-missing="previewMissing"
@@ -710,6 +642,7 @@ const px = (n: number) => `${Math.round(n)}px`
 </template>
 
 <style scoped>
+/* Thin top and bottom rules, the article's own surface and type (as in the earlier figure). */
 .tr {
   --tr-ease: var(--transition-timing-function-user, ease-out);
   position: relative;
@@ -718,7 +651,8 @@ const px = (n: number) => `${Math.round(n)}px`
   box-sizing: border-box;
   padding: 2px 0;
   overflow: hidden;
-  border-block: var(--border-width-base) solid var(--border-color-base);
+  border-block-start: var(--border-width-base) solid var(--border-color-base);
+  border-block-end: var(--border-width-base) solid var(--border-color-subtle);
   background: var(--background-color-base);
   font-family: var(--font-family-base);
   font-size: var(--font-size-medium);
@@ -727,17 +661,19 @@ const px = (n: number) => `${Math.round(n)}px`
     box-shadow var(--tr-motion) linear;
 }
 .tr--stuck {
+  border-block-end-color: var(--border-color-base);
   box-shadow: 0 6px 6px -6px rgba(0, 0, 0, 0.2);
 }
 .tr > * {
   flex: none;
 }
 
-/* Top row: Reading · passage, Return, the mode button. */
+/* Header */
 .tr__top {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--spacing-25) var(--spacing-50);
+  gap: 0 var(--spacing-50);
   min-height: 28px;
 }
 .mw-parser-output .tr__reading,
@@ -745,7 +681,7 @@ const px = (n: number) => `${Math.round(n)}px`
   display: flex;
   align-items: baseline;
   gap: var(--spacing-25);
-  flex: 1;
+  flex: 1 1 12em;
   min-width: 0;
   margin: 0;
   font-size: var(--font-size-small);
@@ -780,49 +716,43 @@ const px = (n: number) => `${Math.round(n)}px`
   font-weight: var(--font-weight-bold);
   font-variant-numeric: tabular-nums;
 }
+/* Secondary tools: quiet icons, a subdued date range. */
+.tr__tools {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  color: var(--color-subtle);
+}
+.tr__span {
+  margin-inline-end: var(--spacing-25);
+  color: var(--color-placeholder);
+  font-size: var(--font-size-small);
+  font-variant-numeric: tabular-nums;
+}
+.tr__filter-on {
+  margin-inline-start: var(--spacing-25);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-normal);
+}
+.tr__tools :deep(.cdx-button) {
+  color: var(--color-subtle);
+}
 .tr__mode,
 .tr__return {
   flex: none;
 }
-
-/* Controls and the region: they fade first when contracting (0–70 ms) and last when expanding. */
-.tr__controls,
-.tr__region,
-.tr__local {
-  transition: opacity 100ms linear 140ms;
-}
-.tr__region,
-.tr__local {
-  overflow: hidden;
-  transition:
-    opacity 100ms linear 140ms,
-    height var(--tr-motion) var(--tr-ease);
-}
-.tr--compact .tr__controls,
-.tr:not(.tr--explore) .tr__region,
-.tr:not(.tr--explore) .tr__local {
-  opacity: 0;
-  transition:
-    opacity 70ms linear,
-    height var(--tr-motion) var(--tr-ease);
-}
-.tr__controls {
+.tr__filter {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--spacing-25) var(--spacing-75);
   padding-block: var(--spacing-25);
 }
-.tr__group {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--spacing-25) var(--spacing-50);
-}
 .tr__field {
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-25);
+  color: var(--color-subtle);
   font-size: var(--font-size-small);
 }
 .tr__select {
@@ -832,42 +762,33 @@ const px = (n: number) => `${Math.round(n)}px`
   font-size: var(--font-size-small);
 }
 .tr__count {
-  color: var(--color-subtle);
+  color: var(--color-placeholder);
   font-size: var(--font-size-small);
   font-variant-numeric: tabular-nums;
 }
-.tr__help {
-  margin-inline-start: auto;
-}
+/* The region fades first when contracting (0–70 ms) and last when expanding. */
 .tr__region {
+  overflow: hidden;
   border-block-start: var(--border-width-base) solid var(--border-color-subtle);
+  transition:
+    opacity 100ms linear 140ms,
+    height var(--tr-motion) var(--tr-ease);
 }
-.tr__local-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 34px;
-  font-size: var(--font-size-small);
-}
-.tr__local-label {
-  font-weight: var(--font-weight-bold);
-  font-variant-numeric: tabular-nums;
+.tr:not(.tr--explore) .tr__region {
+  opacity: 0;
+  transition:
+    opacity 70ms linear,
+    height var(--tr-motion) var(--tr-ease);
 }
 
-/* Phones: icon-only stepping and help; the reading word gives way to the passage. */
+/* Phones: the reading word and button texts give way. */
 .tr--narrow .tr__btn-text,
-.tr--narrow .tr__reading-word {
+.tr--narrow .tr__reading-word,
+.tr--narrow .tr__span {
   display: none;
 }
-.tr--narrow .tr__controls {
-  gap: var(--spacing-25) var(--spacing-50);
-}
 .tr--narrow .tr__select {
-  width: 5.5em;
-  min-width: 0;
-}
-.tr--narrow .tr__field {
-  gap: 2px;
+  width: 6em;
 }
 
 @media (prefers-reduced-motion: reduce) {

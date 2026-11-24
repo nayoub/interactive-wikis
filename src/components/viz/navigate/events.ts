@@ -23,6 +23,8 @@ export interface NavEvent extends TimelineEvent {
   milestone: boolean
   /** Document order of the source passage (ties in chronology keep article order). */
   order: number
+  /** A concise label for compact event blocks (B's even timeline); falls back to `label`. */
+  short?: string
 }
 
 export interface Topic {
@@ -54,6 +56,8 @@ interface Pick {
   /** A snippet of the source sentence (disambiguates repeated dates). */
   sentence: string
   label: string
+  /** A concise label for the timeline's event blocks, in the sentence's own words (the full label stays for previews and lists). */
+  short?: string
   topic: string
   milestone?: boolean
   /** Text in the image's file name or caption; only when the sentence names the same subject. */
@@ -70,26 +74,26 @@ const GEHRY_TOPICS: Topic[] = [
   { id: 'design', label: 'Design beyond buildings', sections: ['Academia_and_design_career'] },
 ]
 const GEHRY: Pick[] = [
-  { date: 'February 28, 1929', sentence: 'Toronto General Hospital', label: 'Born at Toronto General Hospital', topic: 'life', milestone: true },
-  { date: '1937', sentence: 'Timmins', label: 'Family moved to Timmins, Ontario', topic: 'life' },
-  { date: '1947', sentence: 'immigrated to the United States', label: 'Family immigrated to the United States', topic: 'life' },
-  { date: '1954', sentence: 'changed his surname', label: 'Changed his surname from Goldberg to Gehry', topic: 'life' },
-  { date: '1954', sentence: 'graduate from the University of Southern California', label: 'Graduated from the USC School of Architecture', topic: 'life' },
-  { date: 'the fall of 1956', sentence: 'city planning at Harvard', label: 'Studied city planning at Harvard', topic: 'life' },
-  { date: '1957', sentence: 'first private residence', label: 'Designed his first private residence, the David Cabin', topic: 'buildings', milestone: true, image: 'David Cabin' },
-  { date: '1962', sentence: 'established a practice', label: 'Established a practice in Los Angeles', topic: 'buildings', milestone: true },
-  { date: '1965', sentence: 'Art Treasures of Japan', label: 'Exhibition display for “Art Treasures of Japan” at LACMA', topic: 'design' },
-  { date: 'from 1969 to 1973', sentence: 'Easy Edges', label: '“Easy Edges” cardboard furniture produced', topic: 'design' },
-  { date: 'the 1970s', sentence: 'rose to prominence', label: 'Rose to prominence', topic: 'buildings' },
-  { date: '1977', sentence: 'purchased by Gehry', label: 'Purchased his Santa Monica residence', topic: 'buildings', milestone: true, image: 'Gehry Residence' },
-  { date: 'between 1984 and 1986', sentence: 'Fish Lamps', label: 'First Fish Lamps fabricated', topic: 'design' },
-  { date: '1989', sentence: 'Pritzker Architecture Prize, where', label: 'Received the Pritzker Architecture Prize', topic: 'buildings', milestone: true },
-  { date: 'From 1994 to 1996', sentence: 'public housing project', label: 'Public housing buildings realized in Goldstein, Frankfurt', topic: 'buildings' },
-  { date: '1997', sentence: 'Guggenheim Museum Bilbao opened', label: 'Guggenheim Museum Bilbao opened', topic: 'buildings', milestone: true, image: 'Guggenheim Museum Bilbao' },
-  { date: '2002', sentence: 'Gehry Technologies that was established', label: 'Gehry Technologies established', topic: 'design' },
-  { date: '2002', sentence: 'restored Gehry\'s Canadian citizenship', label: 'Canadian citizenship restored', topic: 'life' },
-  { date: '2003', sentence: 'Walt Disney Concert Hall (2003)', label: 'Walt Disney Concert Hall, downtown Los Angeles', topic: 'buildings', image: 'Walt Disney Concert Hall' },
-  { date: 'December 5, 2025', sentence: 'died at the age of 96', label: 'Died at his home in Santa Monica', topic: 'life', milestone: true },
+  { date: 'February 28, 1929', sentence: 'Toronto General Hospital', label: 'Born at Toronto General Hospital', short: 'Born in Toronto', topic: 'life', milestone: true },
+  { date: '1937', sentence: 'Timmins', label: 'Family moved to Timmins, Ontario', short: 'Moved to Timmins, Ontario', topic: 'life' },
+  { date: '1947', sentence: 'immigrated to the United States', label: 'Family immigrated to the United States', short: 'Immigrated to the United States', topic: 'life' },
+  { date: '1954', sentence: 'changed his surname', label: 'Changed his surname from Goldberg to Gehry', short: 'Changed his surname to Gehry', topic: 'life' },
+  { date: '1954', sentence: 'graduate from the University of Southern California', label: 'Graduated from the USC School of Architecture', short: 'Graduated from USC', topic: 'life' },
+  { date: 'the fall of 1956', sentence: 'city planning at Harvard', label: 'Studied city planning at Harvard', short: 'City planning at Harvard', topic: 'life' },
+  { date: '1957', sentence: 'first private residence', label: 'Designed his first private residence, the David Cabin', short: 'David Cabin, his first residence', topic: 'buildings', milestone: true, image: 'David Cabin' },
+  { date: '1962', sentence: 'established a practice', label: 'Established a practice in Los Angeles', short: 'Practice in Los Angeles', topic: 'buildings', milestone: true },
+  { date: '1965', sentence: 'Art Treasures of Japan', label: 'Exhibition display for “Art Treasures of Japan” at LACMA', short: '“Art Treasures of Japan” display', topic: 'design' },
+  { date: 'from 1969 to 1973', sentence: 'Easy Edges', label: '“Easy Edges” cardboard furniture produced', short: '“Easy Edges” furniture', topic: 'design' },
+  { date: 'the 1970s', sentence: 'rose to prominence', label: 'Rose to prominence', short: 'Rose to prominence', topic: 'buildings' },
+  { date: '1977', sentence: 'purchased by Gehry', label: 'Purchased his Santa Monica residence', short: 'Santa Monica residence', topic: 'buildings', milestone: true, image: 'Gehry Residence' },
+  { date: 'between 1984 and 1986', sentence: 'Fish Lamps', label: 'First Fish Lamps fabricated', short: 'First Fish Lamps', topic: 'design' },
+  { date: '1989', sentence: 'Pritzker Architecture Prize, where', label: 'Received the Pritzker Architecture Prize', short: 'Pritzker Architecture Prize', topic: 'buildings', milestone: true },
+  { date: 'From 1994 to 1996', sentence: 'public housing project', label: 'Public housing buildings realized in Goldstein, Frankfurt', short: 'Public housing in Goldstein', topic: 'buildings' },
+  { date: '1997', sentence: 'Guggenheim Museum Bilbao opened', label: 'Guggenheim Museum Bilbao opened', short: 'Guggenheim Museum Bilbao opened', topic: 'buildings', milestone: true, image: 'Guggenheim Museum Bilbao' },
+  { date: '2002', sentence: 'Gehry Technologies that was established', label: 'Gehry Technologies established', short: 'Gehry Technologies', topic: 'design' },
+  { date: '2002', sentence: 'restored Gehry\'s Canadian citizenship', label: 'Canadian citizenship restored', short: 'Canadian citizenship restored', topic: 'life' },
+  { date: '2003', sentence: 'Walt Disney Concert Hall (2003)', label: 'Walt Disney Concert Hall, downtown Los Angeles', short: 'Walt Disney Concert Hall', topic: 'buildings', image: 'Walt Disney Concert Hall' },
+  { date: 'December 5, 2025', sentence: 'died at the age of 96', label: 'Died at his home in Santa Monica', short: 'Died in Santa Monica', topic: 'life', milestone: true },
 ]
 
 // ── Bilbao ─────────────────────────────────────────────────────────────────
@@ -102,25 +106,25 @@ const BILBAO_TOPICS: Topic[] = [
   { id: 'life', label: 'Geography, culture and transport', sections: ['Geography', 'Culture', 'Transport'] },
 ]
 const BILBAO: Pick[] = [
-  { date: '15 June 1300', sentence: 'municipal charter', label: 'Founded by municipal charter of Diego López V de Haro', topic: 'history', milestone: true, image: 'Don_Diego' },
-  { date: '1372', sentence: 'free port', label: 'Named a free port by John I of Castile', topic: 'history' },
-  { date: '21 June 1511', sentence: 'Consulate of the Sea', label: 'Consulate of the Sea of Bilbao created', topic: 'history', milestone: true },
-  { date: '1571', sentence: 'walls were demolished', label: 'City walls demolished', topic: 'city' },
-  { date: '1602', sentence: 'capital of Biscay', label: 'Made the capital of Biscay', topic: 'history' },
-  { date: 'Around 1631', sentence: 'taxation on salt', label: 'Revolts against the salt tax', topic: 'history' },
-  { date: '1857', sentence: 'Bank of Bilbao', label: 'Bank of Bilbao established', topic: 'city' },
-  { date: '1876', sentence: 'annexed', label: 'Annexed the neighbouring municipality of Abando', topic: 'city' },
-  { date: '1876', sentence: 'original tram network', label: 'Original tram network started operations', topic: 'life' },
-  { date: 'Between 1890 and 1893', sentence: 'Puente Colgante', label: 'Puente Colgante transporter bridge built', topic: 'city', milestone: true },
-  { date: '21 July 1890', sentence: 'stock exchange', label: 'Stock exchange market realized', topic: 'city' },
-  { date: '31 August 1936', sentence: 'first bombing', label: 'First bombing of the city', topic: 'history', milestone: true },
-  { date: 'June 1968', sentence: 'University of Bilbao', label: 'University of Bilbao established', topic: 'history' },
-  { date: '26 August 1983', sentence: 'Aste Nagusia, the estuary', label: 'Estuary flooded during Aste Nagusia', topic: 'history', milestone: true },
-  { date: '26 August 1983', sentence: 'maximum precipitation', label: 'Record rainfall in a day: 225.6 mm', topic: 'life' },
-  { date: 'the mid-1990s', sentence: 'deindustrialization', label: 'Deindustrialization and transition to services', topic: 'history' },
-  { date: '1995', sentence: 'The Bilbao Metro, established', label: 'Bilbao Metro established', topic: 'life', image: 'Bilbao_Metro_05_2012_2406' },
-  { date: '19 October 1997', sentence: 'was inaugurated', label: 'Guggenheim Museum Bilbao inaugurated', topic: 'life', milestone: true, image: 'Guggenheim_Museum__Bilbao__26311230864_' },
-  { date: '18 May 2010', sentence: 'Lee Kuan Yew', label: 'Awarded the Lee Kuan Yew World City Prize', topic: 'city' },
+  { date: '15 June 1300', sentence: 'municipal charter', label: 'Founded by municipal charter of Diego López V de Haro', short: 'Founded by municipal charter', topic: 'history', milestone: true, image: 'Don_Diego' },
+  { date: '1372', sentence: 'free port', label: 'Named a free port by John I of Castile', short: 'Named a free port', topic: 'history' },
+  { date: '21 June 1511', sentence: 'Consulate of the Sea', label: 'Consulate of the Sea of Bilbao created', short: 'Consulate of the Sea', topic: 'history', milestone: true },
+  { date: '1571', sentence: 'walls were demolished', label: 'City walls demolished', short: 'City walls demolished', topic: 'city' },
+  { date: '1602', sentence: 'capital of Biscay', label: 'Made the capital of Biscay', short: 'Capital of Biscay', topic: 'history' },
+  { date: 'Around 1631', sentence: 'taxation on salt', label: 'Revolts against the salt tax', short: 'Salt tax revolts', topic: 'history' },
+  { date: '1857', sentence: 'Bank of Bilbao', label: 'Bank of Bilbao established', short: 'Bank of Bilbao', topic: 'city' },
+  { date: '1876', sentence: 'annexed', label: 'Annexed the neighbouring municipality of Abando', short: 'Abando annexed', topic: 'city' },
+  { date: '1876', sentence: 'original tram network', label: 'Original tram network started operations', short: 'First tram network', topic: 'life' },
+  { date: 'Between 1890 and 1893', sentence: 'Puente Colgante', label: 'Puente Colgante transporter bridge built', short: 'Puente Colgante built', topic: 'city', milestone: true },
+  { date: '21 July 1890', sentence: 'stock exchange', label: 'Stock exchange market realized', short: 'Stock exchange', topic: 'city' },
+  { date: '31 August 1936', sentence: 'first bombing', label: 'First bombing of the city', short: 'First bombing', topic: 'history', milestone: true },
+  { date: 'June 1968', sentence: 'University of Bilbao', label: 'University of Bilbao established', short: 'University of Bilbao', topic: 'history' },
+  { date: '26 August 1983', sentence: 'Aste Nagusia, the estuary', label: 'Estuary flooded during Aste Nagusia', short: 'Estuary flood', topic: 'history', milestone: true },
+  { date: '26 August 1983', sentence: 'maximum precipitation', label: 'Record rainfall in a day: 225.6 mm', short: 'Record rainfall', topic: 'life' },
+  { date: 'the mid-1990s', sentence: 'deindustrialization', label: 'Deindustrialization and transition to services', short: 'Deindustrialization', topic: 'history' },
+  { date: '1995', sentence: 'The Bilbao Metro, established', label: 'Bilbao Metro established', short: 'Bilbao Metro', topic: 'life', image: 'Bilbao_Metro_05_2012_2406' },
+  { date: '19 October 1997', sentence: 'was inaugurated', label: 'Guggenheim Museum Bilbao inaugurated', short: 'Guggenheim Museum Bilbao', topic: 'life', milestone: true, image: 'Guggenheim_Museum__Bilbao__26311230864_' },
+  { date: '18 May 2010', sentence: 'Lee Kuan Yew', label: 'Awarded the Lee Kuan Yew World City Prize', short: 'World City Prize', topic: 'city' },
 ]
 
 export const ARTICLES: Record<Exclude<ArticleId, 'test-fixture'>, { source: ArticleSource; picks: Pick[]; topics: Topic[] }> = {
@@ -169,6 +173,7 @@ export function buildCollection(id: Exclude<ArticleId, 'test-fixture'>, article:
       topic: pick.topic,
       milestone: !!pick.milestone,
       order: order.get(m.id) ?? 0,
+      short: pick.short,
     }
     if (pick.image) nav.image = findImage(article, pick.image)
     return [nav]

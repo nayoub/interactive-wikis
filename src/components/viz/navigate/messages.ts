@@ -160,13 +160,16 @@ export const msg = {
   trMissing: 'This passage cannot be found in this revision of the article. Nothing has moved.',
   trBackToList: 'Event list',
   trHowToRead: 'How to read this timeline',
-  trLegendShapes: 'A filled dot is a dated event, an open dot an approximate date; a bar is a duration, a dotted bar an approximate period. A number is several events too close to separate: choose it for the list.',
+  trLegendShapes: 'A filled dot is a dated event and an open dot an approximate date; a short capsule is an event with a span of years, given in its date. Choose an event to see its sentence here.',
   trLegendReading: 'The outlined caret on the axis is the passage you are reading (dashed once you are past it). The filled, ringed mark is the event you selected. Selecting shows its details here and never moves the article; Read this passage does.',
-  trLegendRange: 'Drag along the ruler, or use From and To, to narrow the list. Marks outside the range are dimmed, not moved. Escape cancels a drag.',
+  trLegendRange: 'Drag along the timeline with a mouse, or use the filter (From and To are the events’ own dates), to narrow the list. Events outside the range are dimmed, not moved. Escape cancels a drag.',
   trLocal: (from: string, to: string) => `Close-up: ${from}–${to}`,
   trEarlier: 'Earlier',
   trLater: 'Later',
-  trRulerLabel: 'Time ruler for this article',
+  trRulerLabel: 'Timeline of this article',
+  trEvenNote: 'Events are evenly spaced in date order: distances along the line do not measure time. A dotted stretch marks a gap of 8 years or more, with its length.',
+  trFilter: 'Filter by date',
+  trMiniLabel: 'Every event, in date order; the bracket shows the part of the timeline in view',
 
 }
 

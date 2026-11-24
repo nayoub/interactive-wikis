@@ -84,10 +84,8 @@ defineExpose({ root })
         tabindex="-1"
       >
         <span class="rr__when">{{ formatWhen(preview.date, era) }}</span> · {{ preview.label }}
+        <span class="rr__section">{{ msg.inSection(section(preview)) }}</span>
       </h3>
-      <p class="rr__section">
-        {{ msg.inSection(section(preview)) }}
-      </p>
       <p
         v-if="excerpt"
         class="rr__quote"
@@ -108,7 +106,7 @@ defineExpose({ root })
       <div class="rr__actions">
         <CdxButton
           action="progressive"
-          weight="primary"
+          weight="normal"
           :disabled="previewMissing"
           @click="emit('read', preview)"
         >
@@ -131,7 +129,7 @@ defineExpose({ root })
         {{ msg.trHowToRead }}
       </h3>
       <ul>
-        <li>{{ msg.rulerNote }}</li>
+        <li>{{ msg.trEvenNote }}</li>
         <li>{{ msg.trLegendShapes }}</li>
         <li>{{ msg.trLegendReading }}</li>
         <li>{{ msg.trLegendRange }}</li>
@@ -227,11 +225,14 @@ defineExpose({ root })
   margin: 0;
 }
 .rr__section {
+  margin-inline-start: var(--spacing-50);
   color: var(--color-subtle);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-normal);
 }
 .mw-parser-output .rr .rr__quote,
 .rr__quote {
-  margin: var(--spacing-50) 0;
+  margin: var(--spacing-25) 0;
   padding: 0 0 0 var(--spacing-75);
   border-inline-start: var(--border-width-thick) solid var(--border-color-subtle);
   color: var(--color-base);
