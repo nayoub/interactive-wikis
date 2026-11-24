@@ -27,7 +27,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import type { NavEvent } from '../events'
 import { msg } from '../messages'
 import { formatWhen, interval, timeKind } from '../time'
-import { above, BLOCK_PAD, COMPACT, imgWidth, STEM, type RichLayout } from './layout'
+import { above, BLOCK_PAD, COMPACT, imgWidth, linesPerTitle, slotsOf, STEM, type RichLayout, type Slot } from './layout'
 
 const props = withDefaults(
   defineProps<{
@@ -49,7 +49,11 @@ const props = withDefaults(
 const emit = defineEmits<{ pick: [id: string]; tap: []; scrolled: [] }>()
 
 const rich = computed(() => props.mode === 'rich')
-const n = computed(() => props.events.length)
+/** One slot per date; a slot of several events stacks their titles under one date. */
+const slots = computed<Slot[]>(() => slotsOf(props.events, props.era))
+const n = computed(() => slots.value.length)
+const slotOf = (id: string) => slots.value.findIndex((s) => s.events.some((e) => e.id === id))
+const has = (s: Slot, id: string | null) => !!id && s.events.some((e) => e.id === id)
 /** Margin before the first point, so its block starts inside the track. */
 const lead = computed(() => props.blockW / 2 + BLOCK_PAD)
 const cx = (i: number) => lead.value + i * props.slotW
@@ -120,7 +124,7 @@ const rtl = () => !!scroller.value && getComputedStyle(scroller.value).direction
  */
 function reveal(id: string, how: { center?: boolean; smooth?: boolean; follow?: boolean } = {}) {
   const el = scroller.value
-  const i = props.events.findIndex((e) => e.id === id)
+  const i = slotOf(id)
   if (!el || i < 0 || el.scrollWidth <= el.clientWidth) return
   if (how.follow && performance.now() - userAt < 2500) return
   const x = cx(i)
@@ -133,28 +137,31 @@ function reveal(id: string, how: { center?: boolean; smooth?: boolean; follow?: 
 }
 /** Keyboard browsing: focus moves along the line; nothing is selected until Enter. */
 function focusBlock(id: string) {
-  const b = scroller.value?.querySelector<HTMLElement>(`.et__block[data-event="${CSS.escape(id)}"]`)
+  const b = scroller.value?.querySelector<HTMLElement>(`[data-event="${CSS.escape(id)}"]`)
   if (!b) return
   reveal(id, { smooth: false })
   b.focus({ preventScroll: true })
 }
 function onKeydown(e: KeyboardEvent) {
   if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight' && e.key !== 'Home' && e.key !== 'End') return
-  const id = (e.target as HTMLElement).closest<HTMLElement>('.et__block')?.dataset.event
+  const id = (e.target as HTMLElement).closest<HTMLElement>('[data-event]')?.dataset.event
   if (!id) return
   e.preventDefault()
   e.stopPropagation()
   markUser()
+  // Event by event, in date order (a slot's titles one after another).
+  const last = props.events.length - 1
   const i = props.events.findIndex((v) => v.id === id)
   const fwd = (e.key === 'ArrowRight') !== rtl()
-  const j = e.key === 'Home' ? 0 : e.key === 'End' ? n.value - 1 : Math.max(0, Math.min(n.value - 1, i + (fwd ? 1 : -1)))
+  const j = e.key === 'Home' ? 0 : e.key === 'End' ? last : Math.max(0, Math.min(last, i + (fwd ? 1 : -1)))
   focusBlock(props.events[j].id)
 }
 defineExpose({ reveal, focusBlock, el: scroller, sb })
 
 /** In the strip, a click between dates opens the timeline. */
 function onClick(e: MouseEvent) {
-  if (!rich.value && !(e.target as HTMLElement).closest('.et__block')) emit('tap')
+  // (A shared date in the strip opens it too: which of its events is the reader's choice.)
+  if (!rich.value && !(e.target as HTMLElement).closest('[data-event]')) emit('tap')
 }
 
 const px = (v: number) => `${Math.round(v * 10) / 10}px`
@@ -194,30 +201,30 @@ const px = (v: number) => `${Math.round(v * 10) / 10}px`
           :style="{ insetInlineStart: px(cx(0)), inlineSize: px(cx(n - 1) - cx(0)) }"
         />
         <template
-          v-for="(e, i) in events"
-          :key="'d' + e.id"
+          v-for="(s, i) in slots"
+          :key="'d' + s.events[0].id"
         >
           <span
             class="et__stem"
-            :class="{ 'et__stem--above': above(i), 'et__stem--on': selectedId === e.id }"
+            :class="{ 'et__stem--above': above(i), 'et__stem--on': has(s, selectedId) }"
             :style="{ insetInlineStart: px(cx(i)), height: px(stemNow) }"
           />
           <span
             class="et__dot"
             :class="{
-              'et__dot--approx': timeKind(e.date) === 'approximate',
-              'et__dot--on': selectedId === e.id || readingId === e.id,
+              'et__dot--approx': timeKind(s.events[0].date) === 'approximate',
+              'et__dot--on': has(s, selectedId) || has(s, readingId),
             }"
             :style="{ insetInlineStart: px(cx(i)) }"
           />
         </template>
       </div>
 
-      <!-- The events, in date order: date by the stem, then title, then photograph. -->
+      <!-- The events, in date order, one slot per date: date by the stem, then title(s), then photograph. -->
       <ol class="et__list">
         <li
-          v-for="(e, i) in events"
-          :key="e.id"
+          v-for="(s, i) in slots"
+          :key="s.events[0].id"
           class="et__item"
           :class="[above(i) ? 'et__item--above' : 'et__item--below']"
           :style="{
@@ -227,33 +234,79 @@ const px = (v: number) => `${Math.round(v * 10) / 10}px`
             transform: `translateY(${px(above(i) ? axisY - stemNow - aboveItemH : axisY + stemNow)})`,
           }"
         >
+          <!-- One event: the whole block is its button. -->
           <button
+            v-if="s.events.length === 1"
             type="button"
-            class="et__block"
-            :class="{ 'et__block--on': selectedId === e.id, 'et__block--reading': readingId === e.id }"
-            :data-event="e.id"
-            :aria-label="aria(e)"
-            :aria-pressed="selectedId === e.id ? 'true' : 'false'"
-            :title="e.label"
+            class="et__stack et__block"
+            :class="{ 'et__block--on': selectedId === s.events[0].id, 'et__block--reading': readingId === s.events[0].id }"
+            :data-event="s.events[0].id"
+            :aria-label="aria(s.events[0])"
+            :aria-pressed="selectedId === s.events[0].id ? 'true' : 'false'"
+            :title="s.events[0].label"
             :style="{ '--et-lines': geom.lines }"
-            @click="emit('pick', e.id)"
+            @click="emit('pick', s.events[0].id)"
           >
-            <span class="et__date">{{ formatWhen(e.date, era) }}</span>
+            <span class="et__date">{{ s.key }}</span>
             <span
-              v-if="age(e)"
+              v-if="age(s.events[0])"
               class="et__age"
-            >{{ age(e) }}</span>
-            <span class="et__label">{{ e.label }}</span>
+            >{{ age(s.events[0]) }}</span>
+            <span class="et__label">{{ s.events[0].label }}</span>
             <img
-              v-if="e.image && geom.imgH"
+              v-if="s.image && geom.imgH"
               class="et__img"
-              :src="e.image.src"
-              :alt="e.image.caption"
-              :title="credit(e)"
+              :src="s.image.src"
+              :alt="s.image.caption"
+              :title="credit(s.events[0])"
               :style="{ width: px(imgWidth(geom.imgH)), height: px(geom.imgH) }"
               loading="lazy"
             >
           </button>
+          <!-- Several events on one date: the date and age once, each title its own button. -->
+          <div
+            v-else
+            class="et__stack et__group"
+            :class="{ 'et__block--on': has(s, selectedId), 'et__block--reading': has(s, readingId) }"
+          >
+            <span class="et__date">{{ s.key }}</span>
+            <span
+              v-if="age(s.events[0])"
+              class="et__age"
+            >{{ age(s.events[0]) }}</span>
+            <ul
+              class="et__titles"
+              :aria-label="msg.trSameDate(s.key, s.events.length)"
+            >
+              <li
+                v-for="e in s.events"
+                :key="e.id"
+              >
+                <button
+                  type="button"
+                  class="et__pick"
+                  :class="{ 'et__pick--on': selectedId === e.id, 'et__pick--reading': readingId === e.id }"
+                  :data-event="e.id"
+                  :aria-label="aria(e)"
+                  :aria-pressed="selectedId === e.id ? 'true' : 'false'"
+                  :title="e.label"
+                  :style="{ '--et-lines': linesPerTitle(geom.lines, s.events.length) }"
+                  @click="emit('pick', e.id)"
+                >
+                  {{ e.label }}
+                </button>
+              </li>
+            </ul>
+            <img
+              v-if="s.image && geom.imgH"
+              class="et__img"
+              :src="s.image.src"
+              :alt="s.image.caption"
+              :title="credit(s.events.find((e) => e.image) ?? s.events[0])"
+              :style="{ width: px(imgWidth(geom.imgH)), height: px(geom.imgH) }"
+              loading="lazy"
+            >
+          </div>
         </li>
       </ol>
     </figure>
@@ -379,7 +432,7 @@ const px = (v: number) => `${Math.round(v * 10) / 10}px`
   margin: 0;
   transition: transform var(--et-motion) var(--et-ease);
 }
-.et__block {
+.et__stack {
   display: flex;
   align-items: center;
   justify-content: flex-start;
@@ -394,11 +447,69 @@ const px = (v: number) => `${Math.round(v * 10) / 10}px`
   cursor: pointer;
 }
 /* Above the line: the date at the bottom, next to its stem; below: at the top. */
-.et__item--above .et__block {
+.et__item--above .et__stack {
   flex-direction: column-reverse;
 }
-.et__item--below .et__block {
+.et__item--below .et__stack {
   flex-direction: column;
+}
+.et__group {
+  cursor: default;
+}
+/* Several titles under one date: a short stack, each its own target. */
+.mw-parser-output .et__titles,
+.et__titles {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.mw-parser-output .et__titles li,
+.et__titles li {
+  margin: 0;
+}
+.et__pick {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--et-lines, 1);
+  line-clamp: var(--et-lines, 1);
+  max-width: 100%;
+  padding: 0 var(--spacing-25);
+  border: 0;
+  border-radius: var(--border-radius-base);
+  background: none;
+  color: var(--color-subtle);
+  font: inherit;
+  font-size: var(--font-size-small, 14px);
+  line-height: 18px;
+  text-align: center;
+  overflow-wrap: break-word;
+  cursor: pointer;
+}
+.et__pick:hover {
+  color: var(--color-base);
+  text-decoration: underline;
+}
+.et__pick:focus-visible {
+  outline: var(--border-width-thick) solid var(--outline-color-progressive--focus);
+  outline-offset: 1px;
+}
+.et__pick--reading {
+  color: var(--color-base);
+}
+.et__pick--on {
+  color: var(--color-progressive);
+}
+.et--compact .et__titles {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 60ms linear;
+}
+.et__titles {
+  transition: opacity 100ms linear 140ms;
 }
 .et__date {
   flex: none;

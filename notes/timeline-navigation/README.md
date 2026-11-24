@@ -736,3 +736,29 @@ Desktop editing re-checked at 1440×900: Cancel puts the dock back at 0.
     accessible name.
 - **Checked** in headless Chrome at 1440×900, 1280×600 and 390×844: dates are blue in the
   overview and the docked strip, ages appear under the dates, and the strip spacing is even.
+
+## Follow-up: events on the same date
+
+- **One slot per date.** Events whose dates read the same (Gehry: 1954 ×2 and 2002 ×2;
+  Bilbao: 1876 ×2 and 26 August 1983 ×2) now share one slot (`ruler/layout.ts`, `slotsOf`):
+  one point, one date, one age, with their titles stacked under it in article order.
+  - Each title is still its own event and its own button. In reading it jumps to that event's
+    passage; in editing it selects that event alone. They are a small list ("2 events on
+    2002") inside the event list.
+  - Only identical displayed dates group: "1954" and "the fall of 1956" don't, and neither
+    would "1990" and "July 1990". Different precisions stay separate events in date order.
+- **Docked strip:** a shared date appears once. Tapping it opens the timeline so the reader
+  chooses which event; a single date still goes straight to its passage.
+- **Reading and selection:** a shared date turns blue when any of its events is being read or
+  edited; within the stack, the event being edited is blue.
+- **Photograph:** the slot shows the first of its events that has one.
+- **Layout:** the title area is sized for the tallest stack (each title up to two lines, at most
+  four in a slot). When space is short, each title in a stack gets one line.
+- **Keyboard:** arrows still go event by event, so both titles of a shared date in turn.
+- **Checked** at 1440×900 and 375×812:
+  - Gehry renders 20 events in 18 slots; 1954 and 2002 each show one date and age with two
+    titles.
+  - Clicking "Graduated from USC" jumps to its passage.
+  - Tapping the shared date in the strip opens the timeline without moving the article (0px).
+  - In editing, selecting "Gehry Technologies" selects only it (scroll 0).
+  - Arrow keys go surname → USC → fall 1956.

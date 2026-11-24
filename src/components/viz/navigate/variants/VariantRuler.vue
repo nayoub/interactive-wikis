@@ -33,7 +33,7 @@ import type { NavEvent } from '../events'
 import { msg } from '../messages'
 import AuthorBar from '../ruler/AuthorBar.vue'
 import EvenTrack from '../ruler/EvenTrack.vue'
-import { AGE_LINE, blockFor, COMPACT, linesNeeded, MOTION_MS, richLayout, slotFor } from '../ruler/layout'
+import { AGE_LINE, blockFor, COMPACT, MOTION_MS, richLayout, slotFor, slotsOf, stackLines } from '../ruler/layout'
 import RulerRegion from '../ruler/RulerRegion.vue'
 import { useDock } from '../ruler/useDock'
 import { useReading } from '../ruler/useReading'
@@ -112,16 +112,18 @@ const editCap = computed(() => (narrow.value ? Math.round(avail.value * 0.55) : 
 /** Ages: the subject's birth year from the infobox (biographies only; none for a city). */
 const birthYear = computed(() => ctx.article.subject.birth?.y ?? null)
 const ageLine = computed(() => (birthYear.value !== null ? AGE_LINE : 0))
-const maxLines = computed(() => Math.min(2, linesNeeded(events.value, blockW.value)))
+/** One slot per date (same-date events share a point, a date and an age). */
+const slots = computed(() => slotsOf(events.value, era))
+const maxLines = computed(() => stackLines(slots.value, blockW.value))
 /** In flow (not docked), the timeline may be as rich as the reference figure. */
 const richOverview = computed(() =>
-  richLayout(events.value, Math.max(cap.value, avail.value * 0.55) - 2 * PADY - HEAD - sb.value, maxLines.value, false, ageLine.value),
+  richLayout(slots.value, Math.max(cap.value, avail.value * 0.55) - 2 * PADY - HEAD - sb.value, maxLines.value, false, ageLine.value),
 )
 /** Docked and open (or editing): within the cap, the editing area included. */
 const richDocked = computed(() =>
   editing.value
-    ? richLayout(events.value, editCap.value - 2 * PADY - HEAD - sb.value - editH.value - barH.value, maxLines.value, true, ageLine.value)
-    : richLayout(events.value, cap.value - 2 * PADY - HEAD - sb.value, maxLines.value, false, ageLine.value),
+    ? richLayout(slots.value, editCap.value - 2 * PADY - HEAD - sb.value - editH.value - barH.value, maxLines.value, true, ageLine.value)
+    : richLayout(slots.value, cap.value - 2 * PADY - HEAD - sb.value, maxLines.value, false, ageLine.value),
 )
 const rich = computed(() => (editing.value || (presentation.value === 'explore' && dock.stuck.value) ? richDocked.value : richOverview.value))
 const trackMode = computed<'rich' | 'compact'>(() => (compact.value ? 'compact' : 'rich'))

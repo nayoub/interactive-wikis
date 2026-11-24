@@ -169,6 +169,7 @@ export const msg = {
   trRulerLabel: 'Timeline of this article',
   trTitle: 'Timeline',
   trTitleField: 'Title',
+  trSameDate: (date: string, n: number) => `${n} events on ${date}`,
   trChangeImageFor: (title: string) => `Change image for ${title}`,
   trViewSource: 'View source',
   trReadPassageOf: (when: string, title: string) => `Read the passage for ${when}: ${title}`,
