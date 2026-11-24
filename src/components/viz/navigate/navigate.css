@@ -1,0 +1,147 @@
+/*
+ * Timeline navigation: the few global rules the navigators share. Everything
+ * else is scoped in each variant. Colours are Codex tokens only, so the
+ * light and dark themes follow.
+ */
+
+.tn-visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Passage links in the navigators (outside or inside the article). */
+.tn-link,
+.mw-parser-output a.tn-link {
+  color: var(--color-progressive);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.tn-link:visited,
+.mw-parser-output a.tn-link:visited {
+  color: var(--color-visited, var(--color-progressive));
+}
+.tn-link:hover {
+  text-decoration: underline;
+}
+.tn-link:focus-visible {
+  outline: var(--border-width-thick, 2px) solid var(--outline-color-progressive--focus, #36c);
+  outline-offset: 1px;
+  border-radius: var(--border-radius-base);
+}
+
+/*
+ * The jump: the sentence gets a background wash only (text and link colours
+ * are untouched), held, then lighter, then gone. Reduced motion: held, then gone.
+ */
+::highlight(tn-flash) {
+  background-color: var(--background-color-progressive-subtle--active);
+}
+::highlight(tn-flash-fade) {
+  background-color: var(--background-color-progressive-subtle);
+}
+/* Return to reading: the paragraph you came back to, in a neutral wash. */
+::highlight(tn-origin) {
+  background-color: var(--background-color-interactive-subtle--hover, var(--background-color-neutral-subtle));
+}
+
+/*
+ * The selected passage keeps a bar in the margin beside its paragraph (a
+ * shape, not only a colour), without moving any text.
+ */
+.tn-passage--selected {
+  position: relative;
+}
+.tn-passage--selected::before {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: calc(-1 * var(--spacing-75, 12px));
+  width: 3px;
+  background: var(--color-progressive);
+  pointer-events: none;
+}
+.tn-passage--selected:focus {
+  outline: none;
+}
+.tn-passage--selected:focus-visible {
+  outline: var(--border-width-thick, 2px) solid var(--outline-color-progressive--focus, #36c);
+  outline-offset: 4px;
+}
+/* Blocks focused by "Return to reading" (tabindex -1): no ring unless focus-visible. */
+.tn-body [tabindex='-1']:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* The mount below the introduction: a block between the lead and the first section. */
+.tn-mount {
+  /* Below the lead's infobox, at the full reading width. */
+  clear: both;
+  margin-block: var(--spacing-100) var(--spacing-150);
+}
+.tn-mount:empty {
+  display: none;
+}
+
+/* `?motion=reduce` behaves like the reduced-motion setting. */
+html[data-tn-motion='reduce'] *,
+html[data-tn-motion='reduce'] *::before,
+html[data-tn-motion='reduce'] *::after {
+  transition: none !important;
+  animation: none !important;
+  scroll-behavior: auto !important;
+}
+
+/*
+ * The skin makes the desktop .mw-parser-output a horizontal scroll container,
+ * which would also stop sticky navigators from sticking to the viewport. Clip
+ * instead, and let wide tables scroll on their own (as the module prototypes do).
+ */
+.tn-page .article .mw-parser-output.mw-parser-output {
+  overflow-x: clip;
+  /* …but leave the margin visible, for the selected passage's bar. */
+  overflow-clip-margin: var(--spacing-100, 16px);
+}
+.tn-page .mw-parser-output table.wikitable {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+}
+.tn-page .mw-parser-output ul.gallery {
+  margin-inline: 0;
+  max-width: 100%;
+}
+
+/* A navigator that stays below the top of the screen while in use (B). */
+.tn-mount--sticky {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 10;
+}
+
+/*
+ * Dates are their own bidirectional runs: "1350–1450 CE" stays in order inside
+ * a right-to-left page (and a right-to-left label stays whole in a left-to-right one).
+ */
+.tn-row__date,
+.vr__date,
+.vp__date,
+.vm__date,
+.ra__label,
+.rt__label b,
+.vt-panel__date,
+.vt-bar__date,
+.vt-step__to b,
+.pc__custom,
+.tn-link {
+  unicode-bidi: plaintext;
+}
+.tn-link {
+  unicode-bidi: isolate;
+}

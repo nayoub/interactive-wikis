@@ -5,6 +5,11 @@
     "label": "Visual tool"
   },
   {
+    "id": "timeline-navigation",
+    "path": "/timeline-navigation",
+    "label": "Timeline navigation"
+  },
+  {
     "id": "timeline",
     "path": "/timeline",
     "label": "Timeline",

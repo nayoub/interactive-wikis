@@ -135,9 +135,11 @@ export function loadArticle(source: ArticleSource = GEHRY): Promise<LoadedArticl
       if (!r.ok) throw new Error(`Snapshot missing: ${url} (${r.status})`)
       return r.text()
     })
-  if (!cache.has(source.slug))
+  // The general tool processes the same snapshot differently (pickable images, table chips).
+  const key = `${source.slug}${source.general ? ':general' : ''}`
+  if (!cache.has(key))
     cache.set(
-      source.slug,
+      key,
       Promise.all([
         text(`${base}snapshots/${source.slug}.html`),
         // No lookup for this article: no places.
@@ -171,7 +173,7 @@ export function loadArticle(source: ArticleSource = GEHRY): Promise<LoadedArticl
         labelLanguages: labels?.languages ?? [],
       })),
     )
-  return cache.get(source.slug)!
+  return cache.get(key)!
 }
 
 /** <slug>.seating.json, when the article has a parliament diagram. */

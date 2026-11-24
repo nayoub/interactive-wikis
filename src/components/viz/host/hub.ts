@@ -7,6 +7,7 @@
  *   /timeline, /map, /election
  *   /timeline-module, /map-module, /election-module → redirects (links already shared)
  *   /visual      → the general visual tool (general/)
+ *   /timeline-navigation → five ways to navigate an article by time (navigate/)
  *
  * The route list is hub-routes.json, also read by vite.config.ts so every route
  * (and every old one) gets a real page on GitHub Pages.
@@ -16,7 +17,7 @@ import type { RouteRecordRaw } from 'vue-router'
 
 import routes from './hub-routes.json'
 
-export type HubId = 'timeline' | 'map' | 'election' | 'visual'
+export type HubId = 'timeline' | 'map' | 'election' | 'visual' | 'timeline-navigation'
 export interface HubEntry {
   id: HubId
   path: string
