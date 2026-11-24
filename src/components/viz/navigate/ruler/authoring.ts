@@ -9,7 +9,9 @@
  *   startNew()   Insert → Timeline: an empty draft (replaces the saved one on Done)
  *   startEdit()  Edit timeline: a draft of the saved list
  *   toggle(id)   a date in the article: added as an event, or removed
- *   setLabelSpan the label is a span of its sentence (trimmed in the text)
+ *   setTitle     the event's title, typed: an editorial label (`labelEdited`)
+ *                that never follows the source span again; the sentence,
+ *                anchor, citation and date stay as they were
  *   setImage     an article or Commons image, with its metadata; or none
  *   undo / done / cancel
  *
@@ -40,10 +42,9 @@ export function seedItems(article: LoadedArticle, collection: Collection): Item[
     const want = e.short ?? e.label
     const at = m.sentence.toLowerCase().indexOf(want.toLowerCase())
     if (at >= 0) setSpan(item, { start: at, end: at + want.length })
-    else {
-      item.label = want
-      item.labelEdited = true
-    }
+    else item.label = want
+    // A title from here on: rendering never regenerates it from the span.
+    item.labelEdited = true
     if (e.image) item.image = { ...e.image }
     return [item]
   })
@@ -145,7 +146,15 @@ export function useAuthoredTimeline(o: {
     }
     const m = a.mentions.find((x) => x.id === id)
     if (!m) return null
-    d.items.push(itemFromDate(m))
+    const item = itemFromDate(m)
+    // A starting title to edit: the curated short label for this occurrence, else the mention's own short label.
+    const curated = o.collection.value?.events.find((e) => e.sourceAnchor.mentionId === id)
+    const start = curated?.short ?? curated?.label ?? m.draftLabel
+    if (start && start !== item.label) {
+      item.label = start
+      item.labelEdited = true
+    }
+    d.items.push(item)
     currentId.value = id
     return 'added'
   }
@@ -155,6 +164,13 @@ export function useAuthoredTimeline(o: {
     if (!it) return
     it.labelEdited = false
     setSpan(it, span)
+  }
+  /** Typing a title: one undo step per field session (`begin` on focus), not per keystroke. */
+  function setTitle(id: string, title: string) {
+    const it = draft.value?.items.find((i) => i.id === id)
+    if (!it) return
+    it.label = title
+    it.labelEdited = true
   }
   function setImage(id: string, image: EventImage | undefined) {
     const it = draft.value?.items.find((i) => i.id === id)
@@ -221,6 +237,7 @@ export function useAuthoredTimeline(o: {
     startNew,
     toggle,
     setLabelSpan,
+    setTitle,
     setImage,
     remove,
     undo,

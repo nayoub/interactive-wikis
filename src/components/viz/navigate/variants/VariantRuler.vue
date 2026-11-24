@@ -4,42 +4,38 @@
  * read and edited in the same place.
  *
  * Reading. One persistent timeline in three presentations:
- *   overview   below the introduction, open: the even timeline (dates, short
- *              labels, occasional images on stems around one line)
- *   compact    docked under the wiki header: the same line and dots drawn up,
- *              the reading caret, "2003 · Walt Disney Concert Hall" and one
- *              chevron to open it again
- *   explore    the same object open where it is, plus one region: the
- *              selected event's sentence and Read passage
- * The timeline itself is the control: scroll it sideways (a native
- * scrollbar, arrow keys), select an event to see its sentence, Read passage
- * to go there, Return to reading after a jump. Docking, anchoring (the
- * article follows the panel's lower edge; ruler/useDock.ts), the reading
- * anchor, preview-before-navigation and return are unchanged.
+ *   overview   below the introduction, open: "Timeline", Edit timeline, and
+ *              the even timeline (dates, short titles, occasional photographs)
+ *   compact    docked under the wiki header: the same line and points with
+ *              every visible date beside its point; one quiet chevron opens it
+ *   explore    the same object opened where it is
+ * The timeline is the control: scroll it sideways (a native scrollbar, arrow
+ * keys); select an event to highlight it and reveal one quiet Read passage;
+ * Return to reading after a jump. The date being read is underlined; the
+ * selected one is in the progressive colour. Docking, anchoring (the article
+ * follows the panel's lower edge; ruler/useDock.ts), the reading anchor,
+ * preview-before-navigation and return are unchanged.
  *
- * Editing (Edit timeline, or the article editor's Insert → Timeline): the
- * dates in the article become chips; selecting one adds it to the live
- * timeline (in date order, whatever order they are picked in) or removes it.
- * Selecting an event shows only its own actions: trim its label in the text
- * (the underlined span), add, change or remove its image (article images or
- * Wikimedia Commons), remove it. Undo, Cancel and Done are in one bar; Done
- * saves to the prototype store and returns to reading.
+ * Editing (Edit timeline, or the article editor's Insert → Timeline): dates in
+ * the article become chips; selecting one adds its event to the live timeline
+ * in date order (focus stays in the article). Selecting an event shows its
+ * Title field, its image (Add image, or the thumbnail to change it), View
+ * source and Remove event. Undo, Cancel and Done are in one bar.
  */
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue'
 import { CdxButton, CdxIcon } from '@wikimedia/codex'
 import { cdxIconArrowPrevious, cdxIconClose, cdxIconCollapse, cdxIconExpand } from '@wikimedia/codex-icons'
 
 import ImagePicker from '../../curate/ImagePicker.vue'
-import { useSpanEditor } from '../../general/useSpanEditor'
+import type { EventImage } from '../../model/types'
 import { useSelectMode } from '../../pick/useSelectMode'
 import { NAV, type NavContext } from '../context'
 import type { NavEvent } from '../events'
 import { msg } from '../messages'
 import { formatWhen } from '../time'
 import AuthorBar from '../ruler/AuthorBar.vue'
-import EvenMini from '../ruler/EvenMini.vue'
 import EvenTrack from '../ruler/EvenTrack.vue'
-import { blockFor, COMPACT, linesNeeded, MINI_H, MOTION_MS, richLayout, slotFor } from '../ruler/layout'
+import { blockFor, COMPACT, linesNeeded, MOTION_MS, richLayout, slotFor } from '../ruler/layout'
 import RulerRegion from '../ruler/RulerRegion.vue'
 import { useDock } from '../ruler/useDock'
 import { useReading } from '../ruler/useReading'
@@ -87,49 +83,46 @@ const compact = computed(() => presentation.value === 'compact')
 
 // ── Measurements ─────────────────────────────────────────────────────────
 const root = ref<HTMLElement | null>(null)
-const topEl = ref<HTMLElement | null>(null)
+const ctrlEl = ref<HTMLElement | null>(null)
 const track = ref<InstanceType<typeof EvenTrack> | null>(null)
 const width = ref(0)
-const topH = ref(30)
+const ctrlW = ref(0)
 let ro: ResizeObserver | null = null
-watch([root, topEl], () => {
+watch([root, ctrlEl], () => {
   ro?.disconnect()
   ro = new ResizeObserver(() => {
     if (root.value) width.value = root.value.clientWidth
-    if (topEl.value) topH.value = topEl.value.offsetHeight
+    ctrlW.value = ctrlEl.value?.offsetWidth ?? 0
   })
-  for (const el of [root.value, topEl.value]) if (el) ro.observe(el)
+  for (const el of [root.value, ctrlEl.value]) if (el) ro.observe(el)
 })
 onBeforeUnmount(() => ro?.disconnect())
 
 // ── Geometry ─────────────────────────────────────────────────────────────
 const PADY = 2
-const minRegion = computed(() => (editing.value ? 120 : 84))
+const HEAD = 32
+const editH = computed(() => (narrow.value ? 128 : 84))
 const slot = computed(() => slotFor(width.value, narrow.value))
 const blockW = computed(() => blockFor(slot.value, narrow.value))
 const sb = computed(() => track.value?.sb ?? 0)
 const avail = computed(() => dock.viewH.value - dock.header.value)
 /** The cap: the whole open panel stays within about 44% of the visible height below the header. */
 const cap = computed(() => Math.round(avail.value * 0.44))
-const miniH = computed(() => (narrow.value ? MINI_H : 0))
-const head = computed(() => 2 * PADY + topH.value)
-/** The overview is in flow, not docked: it may be as rich as the reference figure. */
-const maxLines = computed(() => linesNeeded(events.value, blockW.value))
+const maxLines = computed(() => Math.min(2, linesNeeded(events.value, blockW.value)))
+/** In flow (not docked), the timeline may be as rich as the reference figure. */
 const richOverview = computed(() =>
-  richLayout(events.value, Math.max(cap.value, avail.value * 0.55) - head.value - miniH.value - sb.value, maxLines.value),
+  richLayout(events.value, Math.max(cap.value, avail.value * 0.55) - 2 * PADY - HEAD - sb.value, maxLines.value),
 )
-const richExplore = computed(() =>
-  richLayout(events.value, cap.value - head.value - miniH.value - sb.value - minRegion.value, maxLines.value),
+/** Docked and open (or editing): within the cap, the editing area included. */
+const richDocked = computed(() =>
+  richLayout(events.value, cap.value - 2 * PADY - HEAD - sb.value - (editing.value ? editH.value : 0), maxLines.value),
 )
-const rich = computed(() => (presentation.value === 'explore' ? richExplore.value : richOverview.value))
-const trackMode = computed<'rich' | 'compact' | 'hidden'>(() => (compact.value ? (narrow.value ? 'hidden' : 'compact') : 'rich'))
-const trackH = computed(() =>
-  trackMode.value === 'rich' ? rich.value.height + sb.value : trackMode.value === 'compact' ? COMPACT.height + sb.value : 0,
-)
-const compactH = computed(() => 2 * PADY + topH.value + (narrow.value ? MINI_H : COMPACT.height + sb.value))
-const baseH = computed(() => (compact.value ? compactH.value : head.value + trackH.value + miniH.value))
-const panelH = computed(() => (presentation.value === 'explore' ? Math.max(cap.value, baseH.value + 80) : baseH.value))
-const regionH = computed(() => (presentation.value === 'explore' ? panelH.value - baseH.value : 0))
+const rich = computed(() => (editing.value || (presentation.value === 'explore' && dock.stuck.value) ? richDocked.value : richOverview.value))
+const trackMode = computed<'rich' | 'compact'>(() => (compact.value ? 'compact' : 'rich'))
+const trackH = computed(() => (trackMode.value === 'rich' ? rich.value.height : COMPACT.height) + sb.value)
+const headH = computed(() => (compact.value ? 0 : HEAD))
+const regionH = computed(() => (editing.value ? editH.value : 0))
+const panelH = computed(() => 2 * PADY + headH.value + trackH.value + regionH.value)
 
 // Every presentation change is a panel transition: hold native anchoring off until it lands.
 const motion = ref<'expand' | 'collapse'>('expand')
@@ -139,27 +132,32 @@ watch(panelH, (h, old) => {
 })
 
 // ── Selecting an event: a reader preview, or the event being edited ──────
-const selectedId = computed(() => (editing.value ? authoring.currentId.value : nav.selectedId.value))
+const selectedId = computed(() => (editing.value ? authoring.currentId.value : previewId.value))
 const preview = computed(() => (previewId.value ? (events.value.find((e) => e.id === previewId.value) ?? null) : null))
 const editEvent = computed(() => (authoring.currentId.value ? (events.value.find((e) => e.id === authoring.currentId.value) ?? null) : null))
-const regionEvent = computed(() => (editing.value ? editEvent.value : preview.value))
-const previewMissing = computed(() => !editing.value && !!preview.value && !nav.resolve(preview.value))
+function closePreview() {
+  previewId.value = null
+  nav.selectedId.value = null
+}
 function pick(id: string) {
   const e = events.value.find((v) => v.id === id)
   if (!e) return
-  track.value?.reveal(id, { smooth: !reduced() })
   if (editing.value) {
     authoring.currentId.value = authoring.currentId.value === id ? null : id
+    track.value?.reveal(id, { smooth: !reduced() })
     return
   }
-  nav.selectedId.value = id
+  if (previewId.value === id) return closePreview()
   previewId.value = id
-  exploring.value = true
+  nav.selectedId.value = id
+  // Selecting from the strip opens the timeline where it is; elsewhere nothing moves.
+  if (compact.value) exploring.value = true
+  track.value?.reveal(id, { smooth: !reduced() })
   nav.announce(`${formatWhen(e.date, era)}: ${e.label}.`)
 }
 // An event that leaves the timeline (removed while editing) leaves the preview too.
 watch(events, (list) => {
-  if (previewId.value && !list.some((e) => e.id === previewId.value)) previewId.value = null
+  if (previewId.value && !list.some((e) => e.id === previewId.value)) closePreview()
 })
 
 // ── Open, close, read, return ────────────────────────────────────────────
@@ -171,8 +169,7 @@ watch(
   (p) => {
     const a = document.activeElement as HTMLElement | null
     if (!a || !root.value?.contains(a)) return
-    const hidden = (p === 'compact' && !a.closest('.tr__keep')) || (p !== 'explore' && !!a.closest('.tr__region'))
-    if (hidden) nextTick(focusModeButton)
+    if (p === 'compact' && a.closest('.tr__top')) nextTick(focusModeButton)
   },
   { flush: 'pre' },
 )
@@ -181,7 +178,7 @@ function explore() {
 }
 function resume() {
   exploring.value = false
-  previewId.value = null
+  closePreview()
 }
 /** The one chevron, once the timeline has docked (or is open beyond the overview). */
 const showToggle = computed(() => !editing.value && presentation.value !== 'overview')
@@ -197,6 +194,7 @@ async function read(e: NavEvent) {
   const el = nav.resolve(e)
   if (!el) {
     nav.unresolved.value = e.id
+    nav.announce(msg.trMissing)
     return
   }
   const below = el.getBoundingClientRect().top > dock.sentinel.getBoundingClientRect().top
@@ -230,7 +228,7 @@ function onKeydown(ev: KeyboardEvent) {
   if (previewId.value) {
     ev.preventDefault()
     const id = previewId.value
-    previewId.value = null
+    closePreview()
     nextTick(() => track.value?.focusBlock(id))
   } else if (exploring.value) {
     ev.preventDefault()
@@ -238,7 +236,7 @@ function onKeydown(ev: KeyboardEvent) {
   }
 }
 
-// ── Editing: dates in the article, the label span, images ────────────────
+// ── Editing: dates in the article, the title, the image ──────────────────
 const picked = computed(() => new Set(authoring.items.value.map((i) => i.id)))
 useSelectMode({
   root: bodyEl,
@@ -257,25 +255,22 @@ useSelectMode({
     return m ? { start: m.anchor.sentenceStart, end: m.anchor.sentenceEnd } : null
   },
 })
-useSpanEditor({
-  root: bodyEl,
-  item: authoring.current,
-  active: computed(() => editing.value && !!authoring.currentId.value),
-  begin: authoring.begin,
-  change: (span) => authoring.currentId.value && authoring.setLabelSpan(authoring.currentId.value, span),
-})
-function showInText() {
+function viewSource() {
   const e = editEvent.value
   const el = e ? nav.resolve(e) : null
   el?.scrollIntoView({ block: 'center', behavior: reduced() ? 'auto' : 'smooth' })
 }
-const pickerOpen = ref(false)
-function chooseImage(img: Parameters<typeof authoring.setImage>[1]) {
+function setTitle(text: string) {
   const id = authoring.currentId.value
-  if (id && img) authoring.setImage(id, img)
+  if (id) authoring.setTitle(id, text)
+}
+const pickerOpen = ref(false)
+function chooseImage(img: EventImage | undefined) {
+  const id = authoring.currentId.value
+  if (id) authoring.setImage(id, img)
 }
 function startEdit() {
-  previewId.value = null
+  closePreview()
   authoring.startEdit()
 }
 watch(editing, (on) => {
@@ -286,27 +281,18 @@ watch(editing, (on) => {
   }
 })
 
-// ── The timeline's sideways window ───────────────────────────────────────
-const win = ref<[number, number] | null>(null)
-const onTrackScroll = () => (win.value = track.value?.windowIndexes() ?? null)
-function onTrackTap() {
-  if (compact.value) explore()
-}
-function onMiniGo(i: number) {
-  if (compact.value) explore()
-  nextTick(() => track.value?.scrollToIndex(i, !reduced()))
-}
-// While reading (not exploring or editing), the timeline keeps the passage being read in view.
+// While reading (not exploring or editing), the timeline keeps the date being read in view,
+// unless the reader is scrolling it sideways themselves.
 watch(
   () => reading.value.id,
   (id) => {
-    if (id && !exploring.value && !editing.value) track.value?.reveal(id, { smooth: !reduced() })
+    if (id && !exploring.value && !editing.value) track.value?.reveal(id, { smooth: !reduced(), follow: true })
   },
 )
 
 // ── Scroll: docking and the reading anchor (genuine scrolling only) ──────
 const readingLine = () => {
-  const top = dock.header.value + compactH.value
+  const top = dock.header.value + 2 * PADY + COMPACT.height + sb.value
   const k = (dock.viewH.value - top) / 3
   // Docked, the line rides with the panel's lower edge, like the article does.
   if (dock.stuck.value && root.value) return root.value.getBoundingClientRect().bottom + k
@@ -336,7 +322,10 @@ watch(
   },
 )
 // The timeline changed (an edit): the reading anchor is recomputed against it.
-watch(events, () => nextTick(() => updateReading(readingLine())))
+watch(
+  () => events.value.map((e) => e.id).join(),
+  () => nextTick(() => updateReading(readingLine())),
+)
 const onResize = () => dock.check()
 onMounted(() => {
   bodyEl.value = body()
@@ -347,7 +336,6 @@ onMounted(() => {
     dock.check()
     updateReading(readingLine())
     if (reading.value.id) track.value?.reveal(reading.value.id, { center: true })
-    onTrackScroll()
   }
   nextTick(first)
   // The mount is placed after the skin settles.
@@ -358,18 +346,8 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', onResize)
 })
 
-// ── The header ───────────────────────────────────────────────────────────
-/** Docked, the header follows reading ("2003 · Walt Disney Concert Hall"); open, it is the title. */
-const headerText = computed(() => {
-  if (editing.value) return msg.trEditingTitle
-  if (!compact.value) return msg.trTitle
-  const r = reading.value
-  const e = r.id ? events.value.find((v) => v.id === r.id) : null
-  if (e && r.state === 'at') return msg.trReadingAt(formatWhen(e.date, era), e.label)
-  if (e && r.state === 'after') return msg.trReadingAfterShort(formatWhen(e.date, era))
-  return msg.trTitle
-})
 const shown = computed(() => events.value.length > 0 || editing.value)
+const commons = computed(() => (preview.value?.image?.source === 'commons' ? preview.value.image : null))
 const px = (n: number) => `${Math.round(n)}px`
 </script>
 
@@ -382,44 +360,64 @@ const px = (n: number) => `${Math.round(n)}px`
       ref="root"
       class="tr"
       :class="[`tr--${presentation}`, `tr--${motion}`, { 'tr--stuck': dock.stuck.value, 'tr--narrow': narrow, 'tr--editing': editing }]"
-      :style="{ height: px(panelH), '--tr-motion': `${MOTION_MS}ms` }"
+      :style="{ height: px(panelH), '--tr-motion': `${MOTION_MS}ms`, '--tr-ctrl': px(ctrlW) }"
       aria-labelledby="tr-title"
       @keydown="onKeydown"
     >
-      <!-- Header: the title (or, docked, the passage being read), Edit timeline, Return, the chevron. -->
+      <!-- Header (open only): the title, Edit timeline, and the selected event's one action. -->
       <div
-        ref="topEl"
         class="tr__top"
+        :style="{ height: px(headH) }"
+        :inert="compact || undefined"
       >
         <h2
           id="tr-title"
-          class="tr__title tr__keep"
-          :class="{ 'tr__title--reading': compact }"
+          class="tr__title"
         >
-          <svg
-            v-if="compact && reading.state !== 'before'"
-            class="tr__caret"
-            :class="{ 'tr__caret--after': reading.state === 'after' }"
-            width="12"
-            height="10"
-            viewBox="0 0 12 10"
-            aria-hidden="true"
-          ><path d="M6 1.2 L11 9 L1 9 Z" /></svg>
-          <span class="tr__title-text">{{ headerText }}</span>
+          {{ editing ? msg.trEditingTitle : msg.trTitle }}
         </h2>
         <button
-          v-if="!compact && !editing"
+          v-if="!editing"
           type="button"
-          class="tr__edit"
+          class="tr__link tr__edit"
           @click="startEdit"
         >
           {{ msg.trEditTimeline }}
         </button>
-        <span class="tr__spacer" />
+        <template v-if="preview && !editing">
+          <span
+            class="tr__sep"
+            aria-hidden="true"
+          />
+          <button
+            type="button"
+            class="tr__link tr__read"
+            :aria-label="msg.trReadPassageOf(formatWhen(preview.date, era), preview.label)"
+            @click="read(preview)"
+          >
+            {{ msg.trReadPassage }}
+          </button>
+          <a
+            v-if="commons"
+            class="tr__credit"
+            :href="commons.pageUrl"
+            target="_blank"
+            rel="noopener"
+            :title="[commons.artist, commons.license].filter(Boolean).join(' · ')"
+          >{{ msg.trPhotoCredit }}</a>
+        </template>
+      </div>
+
+      <!-- Controls: Return to reading (after a jump) and the chevron, in the header or at the strip's end. -->
+      <div
+        ref="ctrlEl"
+        class="tr__ctrl"
+      >
         <template v-if="nav.origin.value && !editing">
           <CdxButton
             size="small"
-            class="tr__return tr__keep"
+            class="tr__return"
+            :aria-label="msg.returnToReading"
             :title="msg.returnFrom(nav.origin.value.section)"
             @click="back"
           >
@@ -427,12 +425,14 @@ const px = (n: number) => `${Math.round(n)}px`
               :icon="cdxIconArrowPrevious"
               size="small"
             />
-            <span class="tr__btn-text">{{ msg.returnToReading }}</span>
+            <span
+              v-if="!compact && !narrow"
+              class="tr__btn-text"
+            >{{ msg.returnToReading }}</span>
           </CdxButton>
           <CdxButton
             size="small"
             weight="quiet"
-            class="tr__keep"
             :aria-label="msg.keepReadingHere"
             :title="msg.keepReadingHereHint"
             @click="nav.endExploration()"
@@ -448,7 +448,7 @@ const px = (n: number) => `${Math.round(n)}px`
           ref="modeBtn"
           size="small"
           weight="quiet"
-          class="tr__mode tr__keep"
+          class="tr__mode"
           :aria-label="toggle.label"
           :title="toggle.label"
           :aria-expanded="toggle.expanded ? 'true' : 'false'"
@@ -458,7 +458,7 @@ const px = (n: number) => `${Math.round(n)}px`
         </CdxButton>
       </div>
 
-      <!-- The timeline: the one persistent object on desktop; the nearby-period view on phones. -->
+      <!-- The timeline: one surface, dates always visible. -->
       <EvenTrack
         ref="track"
         class="tr__track"
@@ -470,43 +470,25 @@ const px = (n: number) => `${Math.round(n)}px`
         :era="era"
         :selected-id="selectedId"
         :reading-id="reading.id"
-        :reading-state="reading.state"
         :description="msg.trFigure"
         @pick="pick"
-        @tap="onTrackTap"
-        @scrolled="onTrackScroll"
+        @tap="explore"
       />
 
-      <!-- Phones: every event, always visible (the compact overview). -->
-      <EvenMini
-        v-if="narrow && width"
-        class="tr__mini tr__keep"
-        :events="events"
-        :width="width"
-        :era="era"
-        :selected-id="selectedId"
-        :reading-id="reading.id"
-        :reading-state="reading.state"
-        :window="compact ? null : win"
-        @go="onMiniGo"
-      />
-
-      <!-- One region: the selected event's sentence and Read passage (or, editing, its actions). -->
+      <!-- Editing: the selected event's title, image and quiet actions. -->
       <div
+        v-if="editing"
         class="tr__region"
         :style="{ height: px(regionH) }"
-        :inert="presentation !== 'explore' || undefined"
       >
         <RulerRegion
-          :mode="editing ? 'editing' : 'reading'"
-          :event="regionEvent"
-          :missing="previewMissing"
+          :event="editEvent"
           :era="era"
-          @read="read"
+          @title-start="authoring.begin()"
+          @title="setTitle"
           @image="pickerOpen = true"
-          @remove-image="authoring.currentId.value && authoring.setImage(authoring.currentId.value, undefined)"
+          @view-source="viewSource"
           @remove="authoring.currentId.value && authoring.remove(authoring.currentId.value)"
-          @show-in-text="showInText"
         />
       </div>
     </section>
@@ -530,6 +512,7 @@ const px = (n: number) => `${Math.round(n)}px`
     :images="ctx.article.images"
     :event="editEvent"
     :subject="ctx.article.subject.name"
+    removable
     @choose="chooseImage"
   />
 </template>
@@ -564,19 +547,28 @@ const px = (n: number) => `${Math.round(n)}px`
   flex: none;
 }
 
-/* Header */
+/* Header: open only; it folds away (height and opacity) when the strip docks. */
 .tr__top {
   display: flex;
   align-items: center;
-  gap: var(--spacing-25) var(--spacing-75);
-  min-height: 30px;
+  gap: var(--spacing-50) var(--spacing-75);
+  box-sizing: border-box;
+  padding-inline-end: calc(var(--tr-ctrl) + var(--spacing-50));
+  overflow: hidden;
+  white-space: nowrap;
+  transition:
+    height var(--tr-motion) var(--tr-ease),
+    opacity 100ms linear 140ms;
+}
+.tr--compact .tr__top {
+  opacity: 0;
+  transition:
+    height var(--tr-motion) var(--tr-ease),
+    opacity 60ms linear;
 }
 .mw-parser-output .tr__title,
 .tr__title {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-25);
-  min-width: 0;
+  flex: none;
   margin: 0;
   padding: 0;
   border: 0;
@@ -585,31 +577,8 @@ const px = (n: number) => `${Math.round(n)}px`
   line-height: var(--line-height-medium);
   font-weight: var(--font-weight-bold);
 }
-.tr__title-text {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
-.tr__title--reading {
-  font-size: var(--font-size-small);
-}
-.tr__caret {
-  flex: none;
-  overflow: visible;
-}
-.tr__caret path {
-  fill: var(--background-color-base);
-  stroke: var(--color-base);
-  stroke-width: 1.6;
-  stroke-linejoin: round;
-}
-.tr__caret--after path {
-  stroke-dasharray: 2 1.6;
-}
-/* Edit timeline: a plain text link beside the title. */
-.tr__edit {
+/* Quiet text actions, as links. */
+.tr__link {
   flex: none;
   padding: 0;
   border: 0;
@@ -619,38 +588,52 @@ const px = (n: number) => `${Math.round(n)}px`
   font-size: var(--font-size-small);
   cursor: pointer;
 }
-.tr__edit:hover {
+.tr__link:hover,
+.tr__credit:hover {
   text-decoration: underline;
 }
-.tr__edit:focus-visible {
+.tr__link:focus-visible,
+.tr__credit:focus-visible {
   outline: var(--border-width-thick) solid var(--outline-color-progressive--focus);
   outline-offset: 1px;
 }
-.tr__spacer {
-  flex: 1;
-}
-.tr__mode,
-.tr__return {
+.tr__sep {
   flex: none;
+  width: 1px;
+  height: 16px;
+  background: var(--border-color-subtle);
 }
-/* The region fades first when contracting (0–70 ms) and last when expanding. */
+.tr__credit {
+  flex: none;
+  color: var(--color-subtle);
+  font-size: var(--font-size-small);
+  text-decoration: none;
+}
+/* Controls: at the header's end when open, at the strip's end when docked. */
+.tr__ctrl {
+  position: absolute;
+  inset-block-start: 4px;
+  inset-inline-end: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-25);
+  background: var(--background-color-base);
+}
+.tr--compact .tr__ctrl {
+  inset-block-start: 50%;
+  transform: translateY(-60%);
+}
+.tr__track {
+  transition: margin var(--tr-motion) var(--tr-ease);
+}
+/* Docked: the dates end before the controls, so none is hidden under them. */
+.tr--compact .tr__track {
+  margin-inline-end: calc(var(--tr-ctrl) + var(--spacing-25));
+}
 .tr__region {
   overflow: hidden;
   border-block-start: var(--border-width-base) solid var(--border-color-subtle);
-  transition:
-    opacity 100ms linear 140ms,
-    height var(--tr-motion) var(--tr-ease);
-}
-.tr:not(.tr--explore) .tr__region {
-  opacity: 0;
-  transition:
-    opacity 70ms linear,
-    height var(--tr-motion) var(--tr-ease);
-}
-
-/* Phones: button texts give way. */
-.tr--narrow .tr__btn-text {
-  display: none;
 }
 
 @media (prefers-reduced-motion: reduce) {

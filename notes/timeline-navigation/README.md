@@ -560,3 +560,102 @@ Reader, with the seeded timeline in headless Chrome at reduced motion, at 1440×
 - **Chip contrast:** a picked chip under the sentence hover highlight shows white text on grey.
 - **Not yet tried:** touch dragging of the span handles on a real phone, a screen reader,
   Firefox and Safari.
+
+---
+
+# B, Time ruler: visible dates, typed titles, live images
+
+Same URL: `/timeline-navigation?variant=ruler`. Captures: `screenshots/ruler-dates/navigation-dates.mp4`
+and `editing-title-image.mp4`; stills for every step at three sizes in the same folder.
+Builder's checks, not user research.
+
+## What changed
+
+- **Dates stay visible.** Each event's date now sits next to its stem, then the title, then the
+  photograph furthest from the line.
+  - On docking, titles and photographs fade first and the stems shorten. The dates settle into
+    two tight alternating rows around the same line, each beside its own point.
+  - The date shrinks from 18px to 15px; nothing else changes size. Horizontal positions, order
+    and scroll offset are those of the one scroller.
+  - The docked strip is 52px plus the scrollbar (62px with a classic scrollbar).
+  - Dates stay clickable, and the strip scrolls sideways.
+  - The phone's dotless all-events overview (`EvenMini.vue`) is gone. Phones use the same dated
+    strip, with about two and a half events in view.
+- **No triangle.** The date being read has a subtle neutral underline. The selected event has a
+  progressive date and a larger filled progressive point. Both can show on the same date, and
+  each has its own accessible description.
+- **Header:** the docked strip has no status sentence; the open header is "Timeline" and
+  Edit timeline. Selecting an event adds one quiet "Read passage" link there (with an
+  accessible name such as "Read the passage for 1989: Pritzker Prize"). A Commons photo also
+  gets a quiet "Photo credit" link. The copied paragraph, its heading and the icon button are
+  gone.
+- **Selecting and closing:** selecting doesn't move the article. Select the event again, press
+  Escape, or use the chevron to close. Return to reading appears only after a real jump.
+
+## Titles
+
+- **Titles are typed.** The title is the item's existing `label`, marked `labelEdited`, so
+  rendering never regenerates it. The source sentence, anchor, citation, date and linked
+  subjects are untouched.
+- **Starting titles:**
+  - Seeded events keep their concise labels ("Pritzker Architecture Prize").
+  - A newly picked date starts from the curated short label for that occurrence, else the
+    mention's own `draftLabel` (for 2003: "Walt Disney Concert Hall").
+  - Focus stays in the article, so several dates can be picked in a row.
+- **The Title field:** selecting an event while editing shows a **Title** field, its image, and
+  quiet View source and Remove event links.
+  - Typing updates the live timeline; Enter finishes.
+  - Escape puts back the title from before that edit, and the timeline stays as it is.
+  - An emptied field keeps the old title.
+  - Each field session is one Undo step.
+- **No span handles.** The label-span handles and "underlined words" instruction are gone from
+  naming. `useSpanEditor` is no longer used by B.
+
+## Images
+
+- **The thumbnail is the control.** "Add image" when there's none; otherwise the thumbnail opens
+  the picker, with an accessible name such as "Change image for Guggenheim Bilbao opens".
+- **Removing an image** happens in the picker. `curate/ImagePicker.vue` has a new opt-in
+  `removable` prop that shows the current image with its full attribution (author, licence
+  link, file page) and a Remove image button.
+- **Live preview:** a chosen photograph appears on the timeline at once, from the same draft
+  the reader renders.
+
+## Checks run
+
+- **Reader** (headless Chrome, reduced motion; 1440×900, 1280×600 and 390×844):
+  1. Reading 1997, then 2003 in the docked strip: dates visible (seven at 1440px, three on the
+     phone) and no triangle.
+  2. Panning the strip by 300px kept the dates attached. Opening it kept the scroll offset,
+     with events at the same x (0px).
+  3. Previewing 1989: Reading stayed on 2003, 1989 was selected, the Read passage link
+     appeared, there was no copied paragraph, and the article moved 0px.
+  4. Closing: dy 0. Read passage for 1989, then Return: dy 0.
+  5. Dark theme: Reading 2003, selected 1989.
+- **Keyboard** (in-app browser): arrows move along events; Enter selects and reveals Read
+  passage; Escape clears the selection and keeps focus on the event; the page doesn't move.
+- **Editing** (in-app browser, 1440×900):
+  - Typing "Guggenheim Bilbao opens" into Title updated the timeline. Escape after typing
+    restored the previous title.
+  - Two renames then two Undos went back step by step.
+  - A Commons search seeded with "Guggenheim Museum Bilbao". The chosen file showed on the
+    timeline before Done, and the horizontal offset was kept.
+  - Renaming again kept the image. After Done and reload, the title and image persisted with
+    the full metadata, the sentence and anchor d32.
+  - Image removal and Undo, event removal and Undo, and Cancel all worked.
+  - A new timeline from 1997, 1989, 2003 came out in date order, with titles "Pritzker
+    Architecture Prize", "Guggenheim Museum Bilbao opened" and "Walt Disney Concert Hall".
+- **Build:** type-check and build are clean. ESLint reports warnings only, none new apart from
+  ImagePicker's existing formatting style.
+
+## Not verified / limitations
+
+- **Focus treatment:** I checked focus styles from the CSS, not visually. This pane doesn't
+  show keyboard-modality focus.
+- **Title field events:** its focus and blur events don't fire in the unfocused pane. I made it
+  robust: a session also starts on the first keystroke, and Enter and Escape end it explicitly.
+  I didn't test it with a real keyboard in a focused window.
+- **Not yet tried:** a screen reader, Firefox and Safari, and real touch.
+- **Phone:** in the docked strip, long dates like "December 5, 2025" fade at the edge where the
+  chevron sits.
+- **Short windows:** the docked, open timeline drops photographs to fit the cap.

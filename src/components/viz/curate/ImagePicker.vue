@@ -6,6 +6,7 @@
  */
 import { computed, ref, watch } from 'vue'
 import {
+  CdxButton,
   CdxDialog,
   CdxMessage,
   CdxProgressBar,
@@ -22,6 +23,8 @@ const props = defineProps<{
   /** The item being illustrated (an event, a place). */
   event: (BaseItem & { date?: TimelineDate; name?: string }) | null
   subject: string
+  /** Offer "Remove image" here, where the image is chosen (the event keeps the rest). */
+  removable?: boolean
 }>()
 const open = defineModel<boolean>('open', { default: false })
 const emit = defineEmits<{ choose: [image: EventImage | undefined] }>()
@@ -101,6 +104,21 @@ const isChosen = (img: EventImage) => props.event?.image?.src === img.src
 <template>
   <CdxDialog v-model:open="open" title="Image" :use-close-button="true" class="ip">
     <CdxToggleButtonGroup v-model="source" class="ip__source" :buttons="sources" />
+    <p v-if="removable && event?.image" class="ip__current">
+      <img :src="event.image.src" :alt="event.image.caption" />
+      <small
+        >{{ event.image.caption
+        }}<template v-if="event.image.source === 'commons'">
+          · {{ event.image.artist }} ·
+          <a v-if="event.image.licenseUrl" :href="event.image.licenseUrl" target="_blank" rel="noopener">{{
+            event.image.license
+          }}</a
+          ><template v-else>{{ event.image.license }}</template> ·
+          <a :href="event.image.pageUrl" target="_blank" rel="noopener">File page</a></template
+        ></small
+      >
+      <CdxButton weight="quiet" action="destructive" @click="choose(undefined)">Remove image</CdxButton>
+    </p>
 
     <template v-if="source === 'article'">
       <template v-if="ranked.suggested.length">
@@ -172,6 +190,22 @@ const isChosen = (img: EventImage) => props.event?.image?.src === img.src
 <style scoped>
 .ip__source {
   margin-bottom: var(--spacing-75);
+}
+.ip__current {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-50) var(--spacing-75);
+  margin: 0 0 var(--spacing-75);
+}
+.ip__current img {
+  width: 72px;
+  height: 48px;
+  object-fit: cover;
+}
+.ip__current small {
+  flex: 1 1 12em;
+  color: var(--color-subtle);
 }
 .ip__search {
   margin-bottom: var(--spacing-75);

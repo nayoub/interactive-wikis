@@ -9,8 +9,10 @@
  * time: there are no year ticks and no gap annotations.
  *
  * The same marks have two vertical geometries:
- *   rich     blocks (image, date, short label) on stems above and below the line
- *   compact  the line and dots only, drawn up under the header
+ *   rich     blocks on stems above and below the line: the date next to the
+ *            stem, then the title, then the photograph furthest out
+ *   compact  the line and its points with every date still beside its point,
+ *            in two tight alternating rows; titles and photographs withdraw
  * Horizontal positions depend only on the slot width, so they never move
  * between presentations, filters or selections.
  */
@@ -38,10 +40,8 @@ export const LABEL_LINE = 20
 export const IMG_GAP = 6
 export const BLOCK_PAD = 8
 
-/** Compact strip: the line near the top and the reading caret under it (no captions). */
-export const COMPACT = { axisY: 9, height: 22 }
-/** The phone's always-visible overview of every event. */
-export const MINI_H = 22
+/** Compact strip: a row of dates above the line, the line, a row below (15px dates on 18px lines). */
+export const COMPACT = { axisY: 24, height: 48, stem: 3, dateLine: 18 }
 
 export const above = (i: number) => i % 2 === 0
 
