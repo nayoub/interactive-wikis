@@ -677,3 +677,16 @@ Builder's checks, not user research.
     passage lands about 254px from the top, under the 62px strip;
   - there is no Return or Read passage control;
   - while editing, a click selects (scroll 0) and shows the Title field.
+
+## Follow-up: the editing bar sits under the timeline
+
+After Nico's review, the editing bar (count, Undo, Cancel, Done) moved from a fixed strip at
+the bottom of the window into the timeline panel, directly under the event editor. It docks
+with the panel and stays beside what is being edited.
+
+Checked in the in-app browser:
+- **1440×900, at the slot:** the panel runs from 124 to 510px, the editor ends at 462 and the
+  bar takes 462–510.
+- **1440×900, docked:** the panel runs from 0 to 386px with the bar at 338–386. Done saves and
+  removes it.
+- **390×844:** the bar sits under the editor in the docked panel.

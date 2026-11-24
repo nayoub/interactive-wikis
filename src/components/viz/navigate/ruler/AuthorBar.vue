@@ -1,8 +1,9 @@
 <script setup lang="ts">
 /**
- * While the timeline is being edited: one compact bar docked at the bottom
- * (the general tool's EditorBar pattern, without its form and scope
- * controls). What to do or how many events, Undo, Cancel, Done.
+ * While the timeline is being edited: one compact bar at the foot of the
+ * timeline panel, right under the event editor (the general tool's
+ * EditorBar pattern, without its form and scope controls). What to do or
+ * how many events, Undo, Cancel, Done.
  */
 import { CdxButton, CdxIcon } from '@wikimedia/codex'
 import { cdxIconUndo } from '@wikimedia/codex-icons'
@@ -18,7 +19,6 @@ const emit = defineEmits<{ undo: []; cancel: []; done: [] }>()
     class="ab"
     role="region"
     :aria-label="msg.trAuthorBar"
-    data-tn-obstruct="bottom"
   >
     <div class="ab__inner">
       <p
@@ -57,23 +57,16 @@ const emit = defineEmits<{ undo: []; cancel: []; done: [] }>()
 
 <style scoped>
 .ab {
-  position: fixed;
-  inset-inline: 0;
-  inset-block-end: 0;
-  z-index: 30;
   display: flex;
-  justify-content: center;
-  padding: var(--spacing-50);
-  background: var(--background-color-base);
-  border-block-start: var(--border-width-base) solid var(--border-color-base);
-  box-shadow: 0 -2px 6px -4px rgba(0, 0, 0, 0.25);
+  align-items: center;
+  box-sizing: border-box;
+  border-block-start: var(--border-width-base) solid var(--border-color-subtle);
 }
 .ab__inner {
   display: flex;
   align-items: center;
   gap: var(--spacing-50);
   width: 100%;
-  max-width: 1016px;
 }
 .ab__what {
   display: flex;

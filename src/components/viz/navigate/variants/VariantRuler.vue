@@ -99,6 +99,8 @@ onBeforeUnmount(() => ro?.disconnect())
 const PADY = 2
 const HEAD = 32
 const editH = computed(() => (narrow.value ? 128 : 84))
+/** The editing bar (Undo, Cancel, Done), inside the panel under the editor. */
+const barH = computed(() => (narrow.value ? 60 : 48))
 const slot = computed(() => slotFor(width.value, narrow.value))
 const blockW = computed(() => blockFor(slot.value, narrow.value))
 const sb = computed(() => track.value?.sb ?? 0)
@@ -112,14 +114,14 @@ const richOverview = computed(() =>
 )
 /** Docked and open (or editing): within the cap, the editing area included. */
 const richDocked = computed(() =>
-  richLayout(events.value, cap.value - 2 * PADY - HEAD - sb.value - (editing.value ? editH.value : 0), maxLines.value),
+  richLayout(events.value, cap.value - 2 * PADY - HEAD - sb.value - (editing.value ? editH.value + barH.value : 0), maxLines.value),
 )
 const rich = computed(() => (editing.value || (presentation.value === 'explore' && dock.stuck.value) ? richDocked.value : richOverview.value))
 const trackMode = computed<'rich' | 'compact'>(() => (compact.value ? 'compact' : 'rich'))
 const trackH = computed(() => (trackMode.value === 'rich' ? rich.value.height : COMPACT.height) + sb.value)
 const headH = computed(() => (compact.value ? 0 : HEAD))
 const regionH = computed(() => (editing.value ? editH.value : 0))
-const panelH = computed(() => 2 * PADY + headH.value + trackH.value + regionH.value)
+const panelH = computed(() => 2 * PADY + headH.value + trackH.value + regionH.value + (editing.value ? barH.value : 0))
 
 // Every presentation change is a panel transition: hold native anchoring off until it lands.
 const motion = ref<'expand' | 'collapse'>('expand')
@@ -406,21 +408,19 @@ const px = (n: number) => `${Math.round(n)}px`
           @remove="authoring.currentId.value && authoring.remove(authoring.currentId.value)"
         />
       </div>
+      <!-- Editing: Undo, Cancel and Done, right under what is being edited. -->
+      <AuthorBar
+        v-if="editing"
+        class="tr__bar"
+        :style="{ height: px(barH) }"
+        :count="authoring.items.value.length"
+        :is-new="!!authoring.draft.value?.isNew"
+        :can-undo="authoring.canUndo.value"
+        @undo="authoring.undo()"
+        @cancel="authoring.cancel()"
+        @done="authoring.done()"
+      />
     </section>
-  </Teleport>
-
-  <Teleport
-    v-if="editing"
-    to="body"
-  >
-    <AuthorBar
-      :count="authoring.items.value.length"
-      :is-new="!!authoring.draft.value?.isNew"
-      :can-undo="authoring.canUndo.value"
-      @undo="authoring.undo()"
-      @cancel="authoring.cancel()"
-      @done="authoring.done()"
-    />
   </Teleport>
   <ImagePicker
     v-model:open="pickerOpen"

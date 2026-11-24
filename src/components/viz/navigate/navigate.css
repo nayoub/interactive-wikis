@@ -282,10 +282,6 @@ a.tn-wl:focus-visible {
 ::highlight(tl-hover) {
   background-color: var(--background-color-interactive-subtle--hover, #eaecf0);
 }
-/* Room for the editing bar at the bottom. */
-.tn-page--authoring {
-  padding-block-end: 120px;
-}
 
 /* B, editing: the label is a span of its sentence, underlined, with an end to drag at each side (general/useSpanEditor.ts). */
 .gm-span {
