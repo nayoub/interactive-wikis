@@ -14,8 +14,9 @@
  * scroll offset belong to this one scroller. Dates stay legible throughout.
  *
  * State on the existing marks, no pointers or badges:
- *   reading   the date of the passage being read: a subtle neutral underline
- *   selected  a progressive date and a filled progressive point
+ *   reading   the date of the passage being read (the event last gone to):
+ *             a progressive date and a filled progressive point
+ *   selected  (editing) the event being edited, the same treatment
  *   focus     Codex focus outline around the date
  *
  * It owns no selection or navigation: activating an event emits `pick`.
@@ -25,7 +26,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 
 import type { NavEvent } from '../events'
 import { msg } from '../messages'
-import { formatWhen, timeKind } from '../time'
+import { formatWhen, interval, timeKind } from '../time'
 import { above, BLOCK_PAD, COMPACT, imgWidth, STEM, type RichLayout } from './layout'
 
 const props = withDefaults(
@@ -38,10 +39,12 @@ const props = withDefaults(
     era?: boolean
     selectedId?: string | null
     readingId?: string | null
+    /** The subject's birth year: each event shows the age at it (event year − birth year). */
+    birthYear?: number | null
     /** Accessible description of the figure (how to read it). */
     description?: string
   }>(),
-  { era: false, selectedId: null, readingId: null, description: '' },
+  { era: false, selectedId: null, readingId: null, birthYear: null, description: '' },
 )
 const emit = defineEmits<{ pick: [id: string]; tap: []; scrolled: [] }>()
 
@@ -57,8 +60,20 @@ const contentH = computed(() => (rich.value ? props.geom.height : COMPACT.height
 const aboveItemH = computed(() => props.geom.aboveH - STEM)
 const belowItemH = computed(() => props.geom.belowH - STEM)
 
+/** "aged 60", "aged 40–44" (a span), or nothing (no birth year, or at or before birth). */
+function age(e: NavEvent): string | null {
+  const b = props.birthYear
+  if (b === null || b === undefined) return null
+  const [a, z] = interval(e.date)
+  const from = Math.floor(a) - b
+  const to = Math.ceil(z) - 1 - b
+  if (to < 1) return null
+  return from === to || from < 1 ? `aged ${to}` : `aged ${from}–${to}`
+}
 function aria(e: NavEvent) {
   const bits = [`${formatWhen(e.date, props.era)}: ${e.label}`]
+  const a = age(e)
+  if (a) bits.push(a)
   if (props.selectedId === e.id) bits.push(msg.trSelected)
   if (props.readingId === e.id) bits.push(msg.trReadingHere)
   return bits.join(', ')
@@ -191,7 +206,7 @@ const px = (v: number) => `${Math.round(v * 10) / 10}px`
             class="et__dot"
             :class="{
               'et__dot--approx': timeKind(e.date) === 'approximate',
-              'et__dot--on': selectedId === e.id,
+              'et__dot--on': selectedId === e.id || readingId === e.id,
             }"
             :style="{ insetInlineStart: px(cx(i)) }"
           />
@@ -224,6 +239,10 @@ const px = (v: number) => `${Math.round(v * 10) / 10}px`
             @click="emit('pick', e.id)"
           >
             <span class="et__date">{{ formatWhen(e.date, era) }}</span>
+            <span
+              v-if="age(e)"
+              class="et__age"
+            >{{ age(e) }}</span>
             <span class="et__label">{{ e.label }}</span>
             <img
               v-if="e.image && geom.imgH"
@@ -401,17 +420,8 @@ const px = (v: number) => `${Math.round(v * 10) / 10}px`
   font-size: 15px;
   line-height: 18px;
 }
-/* Reading: the date of the passage being read, underlined in a neutral tone. */
-.et__block--reading .et__date {
-  text-decoration: underline;
-  text-decoration-color: var(--border-color-base);
-  text-decoration-thickness: 2px;
-  text-underline-offset: 4px;
-}
-.et--compact .et__block--reading .et__date {
-  text-underline-offset: 2px;
-}
-/* Selected: the progressive colour (combined with the underline when both apply). */
+/* Reading (and, editing, the event being edited): the progressive colour, with a filled point. */
+.et__block--reading .et__date,
 .et__block--on .et__date {
   color: var(--color-progressive);
 }
@@ -439,11 +449,20 @@ const px = (v: number) => `${Math.round(v * 10) / 10}px`
 .et__item--above .et__img {
   margin-block: 0 6px;
 }
-/* Titles and photographs recede first when contracting, and come back last. */
+.et__age {
+  flex: none;
+  color: var(--color-subtle);
+  font-size: var(--font-size-x-small, 12px);
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+}
+/* Titles, ages and photographs recede first when contracting, and come back last. */
+.et__age,
 .et__label,
 .et__img {
   transition: opacity 100ms linear 140ms;
 }
+.et--compact .et__age,
 .et--compact .et__label,
 .et--compact .et__img {
   opacity: 0;

@@ -718,3 +718,21 @@ Checked with real taps and typing at 375×812:
 5. Cancel restores the saved 20 events.
 
 Desktop editing re-checked at 1440×900: Cancel puts the dock back at 0.
+
+## Follow-up: blue current date, spacing, ages
+
+- **Current date in blue.** The date being read (the event last gone to) is now in the
+  progressive blue with a filled blue point, instead of a grey underline. While editing, only
+  the event being edited is blue.
+- **Spacing.**
+  - In the docked strip, dates sit 5px from the line on both sides (was 3px), so the larger
+    current point no longer crowds them. The strip is 50px plus the scrollbar.
+  - In the open timeline, stems are 10px.
+- **Ages.**
+  - Under each date: "aged 60", or "aged 40–44" for a span. The value is the event's year
+    minus the subject's birth year from the infobox (1929 for Gehry).
+  - There is none for the birth itself, and none for a subject with no birth date (Bilbao).
+  - Ages withdraw with the titles when the strip docks, and are part of each event's
+    accessible name.
+- **Checked** in headless Chrome at 1440×900, 1280×600 and 390×844: dates are blue in the
+  overview and the docked strip, ages appear under the dates, and the strip spacing is even.
