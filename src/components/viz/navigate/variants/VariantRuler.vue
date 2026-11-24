@@ -10,11 +10,10 @@
  *              every visible date beside its point; one quiet chevron opens it
  *   explore    the same object opened where it is
  * The timeline is the control: scroll it sideways (a native scrollbar, arrow
- * keys); select an event to highlight it and reveal one quiet Read passage;
- * Return to reading after a jump. The date being read is underlined; the
- * selected one is in the progressive colour. Docking, anchoring (the article
- * follows the panel's lower edge; ruler/useDock.ts), the reading anchor,
- * preview-before-navigation and return are unchanged.
+ * keys); select an event (click, tap or Enter) to go straight to its passage.
+ * The date being read is underlined. Docking and anchoring (the article
+ * follows the panel's lower edge; ruler/useDock.ts) and the reading anchor
+ * are unchanged.
  *
  * Editing (Edit timeline, or the article editor's Insert → Timeline): dates in
  * the article become chips; selecting one adds its event to the live timeline
@@ -24,7 +23,7 @@
  */
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue'
 import { CdxButton, CdxIcon } from '@wikimedia/codex'
-import { cdxIconArrowPrevious, cdxIconClose, cdxIconCollapse, cdxIconExpand } from '@wikimedia/codex-icons'
+import { cdxIconCollapse, cdxIconExpand } from '@wikimedia/codex-icons'
 
 import ImagePicker from '../../curate/ImagePicker.vue'
 import type { EventImage } from '../../model/types'
@@ -32,7 +31,6 @@ import { useSelectMode } from '../../pick/useSelectMode'
 import { NAV, type NavContext } from '../context'
 import type { NavEvent } from '../events'
 import { msg } from '../messages'
-import { formatWhen } from '../time'
 import AuthorBar from '../ruler/AuthorBar.vue'
 import EvenTrack from '../ruler/EvenTrack.vue'
 import { blockFor, COMPACT, linesNeeded, MOTION_MS, richLayout, slotFor } from '../ruler/layout'
@@ -75,7 +73,6 @@ const { reading, update: updateReading, set: setReading } = useReading({ body, e
 
 // ── Presentation (docking ≠ expansion; editing keeps it open) ────────────
 const exploring = ref(false)
-const previewId = ref<string | null>(null)
 const presentation = computed<'overview' | 'compact' | 'explore'>(() =>
   exploring.value || editing.value ? 'explore' : dock.contracted.value ? 'compact' : 'overview',
 )
@@ -131,14 +128,10 @@ watch(panelH, (h, old) => {
   dock.holdAnchoring(settledNow)
 })
 
-// ── Selecting an event: a reader preview, or the event being edited ──────
-const selectedId = computed(() => (editing.value ? authoring.currentId.value : previewId.value))
-const preview = computed(() => (previewId.value ? (events.value.find((e) => e.id === previewId.value) ?? null) : null))
+// ── Selecting an event: go to its passage, or (editing) edit it ──────────
+/** Only while editing is an event "selected"; reading, selecting an event goes to it. */
+const selectedId = computed(() => (editing.value ? authoring.currentId.value : null))
 const editEvent = computed(() => (authoring.currentId.value ? (events.value.find((e) => e.id === authoring.currentId.value) ?? null) : null))
-function closePreview() {
-  previewId.value = null
-  nav.selectedId.value = null
-}
 function pick(id: string) {
   const e = events.value.find((v) => v.id === id)
   if (!e) return
@@ -147,18 +140,9 @@ function pick(id: string) {
     track.value?.reveal(id, { smooth: !reduced() })
     return
   }
-  if (previewId.value === id) return closePreview()
-  previewId.value = id
-  nav.selectedId.value = id
-  // Selecting from the strip opens the timeline where it is; elsewhere nothing moves.
-  if (compact.value) exploring.value = true
-  track.value?.reveal(id, { smooth: !reduced() })
-  nav.announce(`${formatWhen(e.date, era)}: ${e.label}.`)
+  // Reading: straight to the passage.
+  void read(e)
 }
-// An event that leaves the timeline (removed while editing) leaves the preview too.
-watch(events, (list) => {
-  if (previewId.value && !list.some((e) => e.id === previewId.value)) closePreview()
-})
 
 // ── Open, close, read, return ────────────────────────────────────────────
 const modeBtn = ref<InstanceType<typeof CdxButton> | null>(null)
@@ -178,7 +162,6 @@ function explore() {
 }
 function resume() {
   exploring.value = false
-  closePreview()
 }
 /** The one chevron, once the timeline has docked (or is open beyond the overview). */
 const showToggle = computed(() => !editing.value && presentation.value !== 'overview')
@@ -206,14 +189,6 @@ async function read(e: NavEvent) {
   jumpTarget = e.id
   await nav.jump(e, { travel: 'nearby' })
 }
-async function back() {
-  const was = panelH.value
-  resume()
-  await nextTick()
-  if (panelH.value !== was) await settle()
-  jumpTarget = null
-  await nav.returnToOrigin({ travel: 'nearby' })
-}
 
 // ── Keyboard inside the ruler (no global handlers) ───────────────────────
 function onKeydown(ev: KeyboardEvent) {
@@ -225,12 +200,7 @@ function onKeydown(ev: KeyboardEvent) {
     }
     return
   }
-  if (previewId.value) {
-    ev.preventDefault()
-    const id = previewId.value
-    closePreview()
-    nextTick(() => track.value?.focusBlock(id))
-  } else if (exploring.value) {
+  if (exploring.value) {
     ev.preventDefault()
     resume()
   }
@@ -270,13 +240,11 @@ function chooseImage(img: EventImage | undefined) {
   if (id) authoring.setImage(id, img)
 }
 function startEdit() {
-  closePreview()
   authoring.startEdit()
 }
 watch(editing, (on) => {
   if (!on) {
     exploring.value = false
-    previewId.value = null
     pickerOpen.value = false
   }
 })
@@ -347,7 +315,6 @@ onBeforeUnmount(() => {
 })
 
 const shown = computed(() => events.value.length > 0 || editing.value)
-const commons = computed(() => (preview.value?.image?.source === 'commons' ? preview.value.image : null))
 const px = (n: number) => `${Math.round(n)}px`
 </script>
 
@@ -364,7 +331,7 @@ const px = (n: number) => `${Math.round(n)}px`
       aria-labelledby="tr-title"
       @keydown="onKeydown"
     >
-      <!-- Header (open only): the title, Edit timeline, and the selected event's one action. -->
+      <!-- Header (open only): the title and Edit timeline. -->
       <div
         class="tr__top"
         :style="{ height: px(headH) }"
@@ -384,65 +351,13 @@ const px = (n: number) => `${Math.round(n)}px`
         >
           {{ msg.trEditTimeline }}
         </button>
-        <template v-if="preview && !editing">
-          <span
-            class="tr__sep"
-            aria-hidden="true"
-          />
-          <button
-            type="button"
-            class="tr__link tr__read"
-            :aria-label="msg.trReadPassageOf(formatWhen(preview.date, era), preview.label)"
-            @click="read(preview)"
-          >
-            {{ msg.trReadPassage }}
-          </button>
-          <a
-            v-if="commons"
-            class="tr__credit"
-            :href="commons.pageUrl"
-            target="_blank"
-            rel="noopener"
-            :title="[commons.artist, commons.license].filter(Boolean).join(' · ')"
-          >{{ msg.trPhotoCredit }}</a>
-        </template>
       </div>
 
-      <!-- Controls: Return to reading (after a jump) and the chevron, in the header or at the strip's end. -->
+      <!-- The chevron: in the header when open, at the strip's end when docked. -->
       <div
         ref="ctrlEl"
         class="tr__ctrl"
       >
-        <template v-if="nav.origin.value && !editing">
-          <CdxButton
-            size="small"
-            class="tr__return"
-            :aria-label="msg.returnToReading"
-            :title="msg.returnFrom(nav.origin.value.section)"
-            @click="back"
-          >
-            <CdxIcon
-              :icon="cdxIconArrowPrevious"
-              size="small"
-            />
-            <span
-              v-if="!compact && !narrow"
-              class="tr__btn-text"
-            >{{ msg.returnToReading }}</span>
-          </CdxButton>
-          <CdxButton
-            size="small"
-            weight="quiet"
-            :aria-label="msg.keepReadingHere"
-            :title="msg.keepReadingHereHint"
-            @click="nav.endExploration()"
-          >
-            <CdxIcon
-              :icon="cdxIconClose"
-              size="small"
-            />
-          </CdxButton>
-        </template>
         <CdxButton
           v-if="showToggle"
           ref="modeBtn"
@@ -588,26 +503,12 @@ const px = (n: number) => `${Math.round(n)}px`
   font-size: var(--font-size-small);
   cursor: pointer;
 }
-.tr__link:hover,
-.tr__credit:hover {
+.tr__link:hover {
   text-decoration: underline;
 }
-.tr__link:focus-visible,
-.tr__credit:focus-visible {
+.tr__link:focus-visible {
   outline: var(--border-width-thick) solid var(--outline-color-progressive--focus);
   outline-offset: 1px;
-}
-.tr__sep {
-  flex: none;
-  width: 1px;
-  height: 16px;
-  background: var(--border-color-subtle);
-}
-.tr__credit {
-  flex: none;
-  color: var(--color-subtle);
-  font-size: var(--font-size-small);
-  text-decoration: none;
 }
 /* Controls: at the header's end when open, at the strip's end when docked. */
 .tr__ctrl {

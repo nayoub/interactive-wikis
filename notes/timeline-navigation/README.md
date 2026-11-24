@@ -659,3 +659,21 @@ Builder's checks, not user research.
 - **Phone:** in the docked strip, long dates like "December 5, 2025" fade at the edge where the
   chevron sits.
 - **Short windows:** the docked, open timeline drops photographs to fit the cap.
+
+## Follow-up: selecting an event goes there
+
+- **What changed** (after Nico's review): reading, a click, tap or Enter on an event goes
+  straight to its passage. It's the same deliberate jump as before:
+  - a collapsed section opens;
+  - the strip settles docked;
+  - the passage is placed below it, washed and focused;
+  - the underline moves to that date.
+- **Removed:** the "Read passage" link, the Photo credit link, Return to reading and its ×, and
+  the reader's preview/selection state. Commons credit stays in each photo's tooltip and, in
+  full, in the editor's image picker.
+- **Editing is unchanged:** a click selects the event for its Title field and image.
+- **Checked** in the in-app browser at 1440×900:
+  - from the open overview (1989), the docked strip (2003) and the opened timeline (1997), the
+    passage lands about 254px from the top, under the 62px strip;
+  - there is no Return or Read passage control;
+  - while editing, a click selects (scroll 0) and shows the Title field.
