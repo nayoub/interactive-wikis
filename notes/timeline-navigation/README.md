@@ -690,3 +690,31 @@ Checked in the in-app browser:
 - **1440×900, docked:** the panel runs from 0 to 386px with the bar at 338–386. Done saves and
   removes it.
 - **390×844:** the bar sits under the editor in the docked panel.
+
+## Follow-up: editing on phones
+
+Nico reported that editing on mobile didn't work. With real taps at 375×812 I found:
+
+- **The timeline was hidden under the editor toolbar.** The article editor's toolbar is fixed
+  at the top, and the docked timeline slid under it, hiding the "Editing timeline" header and
+  the row of dates above the line. The dock now treats `.ve-toolbar` as part of the header and
+  re-measures when editing starts or ends. The same was true on desktop once docked.
+- **A picked chip went blank on touch.** The grey sentence-hover highlight stayed after a tap
+  (touch has no mouse-out), painting over the filled chip's white text. The highlight is now
+  translucent, and off entirely on touch screens.
+- **The chosen photograph didn't show on the phone's timeline.** The docked editing panel was
+  too short for images.
+  - While editing on a phone, the panel may take 55% of the visible height (44% when reading).
+  - Editing prefers a one-line title with a small photo over a two-line title with none.
+  - Desktop editing now also shows 1-line titles with 32–40px photos.
+
+Checked with real taps and typing at 375×812:
+
+1. Edit timeline opens editing, and the timeline docks under the toolbar (top 49px).
+2. Tapping the 1961 date adds the event (21 events), centres it and opens its Title field.
+3. Typing "Moves to Paris" updates the timeline.
+4. Add image opens the picker above everything. A chosen photo shows on the timeline (32px)
+   and as the thumbnail.
+5. Cancel restores the saved 20 events.
+
+Desktop editing re-checked at 1440×900: Cancel puts the dock back at 0.

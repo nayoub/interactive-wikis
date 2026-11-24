@@ -59,6 +59,8 @@ const LADDER: Richness[] = [
   { lines: 2, imgH: 0 },
   { lines: 1, imgH: 0 },
 ]
+/** Editing: seeing the chosen photograph matters more than a second title line. */
+const LADDER_IMAGES: Richness[] = [...LADDER.slice(0, 5), { lines: 1, imgH: 40 }, { lines: 1, imgH: 32 }, ...LADDER.slice(5)]
 /** One small rectangular format (3:2), its height fitted to the panel. */
 export const imgWidth = (imgH: number) => Math.round(imgH * 1.5)
 
@@ -80,7 +82,8 @@ export function linesNeeded(events: NavEvent[], blockW: number): number {
   const perLine = Math.max(8, Math.floor((blockW - 8) / 7))
   return Math.min(3, Math.max(1, ...events.map((e) => Math.ceil(e.label.length / perLine))))
 }
-export function richLayout(events: NavEvent[], budget: number, maxLines = 3): RichLayout {
+export function richLayout(events: NavEvent[], budget: number, maxLines = 3, imagesFirst = false): RichLayout {
+  const ladder = imagesFirst ? LADDER_IMAGES : LADDER
   const imgAbove = events.some((e, i) => above(i) && e.image)
   const imgBelow = events.some((e, i) => !above(i) && e.image)
   const make = (rr: Richness): RichLayout => {
@@ -89,9 +92,9 @@ export function richLayout(events: NavEvent[], budget: number, maxLines = 3): Ri
     const belowH = sideH(r, imgBelow)
     return { ...r, aboveH, belowH, height: aboveH + belowH }
   }
-  for (const r of LADDER) {
+  for (const r of ladder) {
     const l = make(r)
     if (l.height <= budget) return l
   }
-  return make(LADDER[LADDER.length - 1])
+  return make(ladder[ladder.length - 1])
 }

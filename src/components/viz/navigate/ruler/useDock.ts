@@ -28,7 +28,8 @@ import { MOTION_MS } from './layout'
 function measureHeader(own: HTMLElement | null): number {
   let bottom = 0
   document
-    .querySelectorAll<HTMLElement>('header, .vector-sticky-header, .minerva-header, [data-sticky-header]')
+    // The wiki header, and the article editor's toolbar (fixed at the top on phones).
+    .querySelectorAll<HTMLElement>('header, .vector-sticky-header, .minerva-header, .ve-toolbar, [data-sticky-header]')
     .forEach((el) => {
       if (own && (own.contains(el) || el.contains(own))) return
       const cs = getComputedStyle(el)

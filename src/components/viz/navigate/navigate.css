@@ -279,8 +279,15 @@ a.tn-wl:focus-visible {
     box-shadow: 0 0 0 6px transparent;
   }
 }
+/* The sentence under the pointer: translucent, so a picked (filled) chip stays legible beneath it. */
 ::highlight(tl-hover) {
-  background-color: var(--background-color-interactive-subtle--hover, #eaecf0);
+  background-color: rgba(114, 119, 125, 0.16);
+}
+/* Touch has no hover, and nothing would clear it after a tap. */
+@media (hover: none) {
+  ::highlight(tl-hover) {
+    background-color: transparent;
+  }
 }
 
 /* B, editing: the label is a span of its sentence, underlined, with an end to drag at each side (general/useSpanEditor.ts). */

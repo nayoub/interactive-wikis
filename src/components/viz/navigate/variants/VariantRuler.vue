@@ -100,13 +100,15 @@ const PADY = 2
 const HEAD = 32
 const editH = computed(() => (narrow.value ? 128 : 84))
 /** The editing bar (Undo, Cancel, Done), inside the panel under the editor. */
-const barH = computed(() => (narrow.value ? 60 : 48))
+const barH = computed(() => 48)
 const slot = computed(() => slotFor(width.value, narrow.value))
 const blockW = computed(() => blockFor(slot.value, narrow.value))
 const sb = computed(() => track.value?.sb ?? 0)
 const avail = computed(() => dock.viewH.value - dock.header.value)
 /** The cap: the whole open panel stays within about 44% of the visible height below the header. */
 const cap = computed(() => Math.round(avail.value * 0.44))
+/** Editing on a phone is a deliberate mode: the panel may take a little more of the screen. */
+const editCap = computed(() => (narrow.value ? Math.round(avail.value * 0.55) : cap.value))
 const maxLines = computed(() => Math.min(2, linesNeeded(events.value, blockW.value)))
 /** In flow (not docked), the timeline may be as rich as the reference figure. */
 const richOverview = computed(() =>
@@ -114,7 +116,9 @@ const richOverview = computed(() =>
 )
 /** Docked and open (or editing): within the cap, the editing area included. */
 const richDocked = computed(() =>
-  richLayout(events.value, cap.value - 2 * PADY - HEAD - sb.value - (editing.value ? editH.value + barH.value : 0), maxLines.value),
+  editing.value
+    ? richLayout(events.value, editCap.value - 2 * PADY - HEAD - sb.value - editH.value - barH.value, maxLines.value, true)
+    : richLayout(events.value, cap.value - 2 * PADY - HEAD - sb.value, maxLines.value),
 )
 const rich = computed(() => (editing.value || (presentation.value === 'explore' && dock.stuck.value) ? richDocked.value : richOverview.value))
 const trackMode = computed<'rich' | 'compact'>(() => (compact.value ? 'compact' : 'rich'))
@@ -244,6 +248,11 @@ function chooseImage(img: EventImage | undefined) {
 function startEdit() {
   authoring.startEdit()
 }
+// The article editor's toolbar comes and goes with editing: dock below it (phones pin it to the top).
+watch(
+  () => authoring.ve.value,
+  () => nextTick(() => requestAnimationFrame(() => dock.check())),
+)
 watch(editing, (on) => {
   if (!on) {
     exploring.value = false
