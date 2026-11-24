@@ -197,3 +197,138 @@ says so on the page.
 - **3a / 3b:** they need the 1300px+ margin; below that, connections are only highlights and a
   list. Curated topics and relationships are editorial work for each article.
 - **4:** sorting statements into "planned" and "built" is editorial, and only Bilbao supports it.
+
+---
+
+# B, Time ruler: one continuous ruler
+
+`/timeline-navigation?variant=ruler` (Frank Gehry fixture; `&motion=reduce` for instant changes).
+Code: `navigate/variants/VariantRuler.vue` and `navigate/ruler/` (`RulerScene.vue`,
+`RulerRegion.vue`, `useDock.ts`, `useReading.ts`, `layout.ts`). Screenshots and a 14-second
+capture of the core sequence: `screenshots/ruler-continuity/` (`ruler-core-sequence.mp4`).
+Again: **builder's checks, not user research.**
+
+## What changed
+
+- **One object, three presentations.** The overview (about 236px below the introduction),
+  the compact strip (73px, docked under the wiki header) and exploration (the same panel
+  expanded where it is, at most 44% of the visible height) are the same mounted marks and
+  axis. Horizontal positions depend only on the width; only vertical geometry (height,
+  translate) and opacity animate. Milestone labels are placed once per width, so they
+  never rearrange on selection or filtering.
+- **Docking ≠ expansion.** A sentinel just above the sticky mount decides docking; the
+  panel's own geometry never moves it. Docking contracts the overview; the overview comes
+  back only when the slot is well back in view (a band of 30% of the screen), so scrolling up
+  a few pixels keeps the strip. Explore timeline stays open through scrolling until Resume
+  reading (Close when not docked), Escape, or Read this passage.
+- **Anchoring.** The sticky mount stays in flow, so while docked a change of panel height
+  moves everything after it by the same amount. The source line under the panel follows
+  its lower edge by layout alone. Native scroll anchoring is switched off on the document
+  scroller (`html.tn-anchor-off`) only until the panel's rendered height reaches its target,
+  so nothing else compensates. The same check decides when Read this passage may measure.
+  No saved scroll position is ever replayed, so scrolling mid-transition is never
+  overridden.
+- **Reading, selection, preview, filter and origin are separate.**
+  - **Reading** is the last dated passage, in article order, above a line a third of the
+    way down the area below the strip. It can move backwards in time. Past a passage it says
+    "After 1997 · Career". Before any passage it names the section and gives no date.
+  - **Reading is the strip's label**, with an outlined caret on the axis (dashed once past)
+    and a quiet tick in the gutter beside the line.
+  - **Selection** is a filled, ringed mark.
+  - **The preview** is the region's content.
+  - **The filter** dims marks and never refits the axis.
+  - **The origin** is saved only by Read this passage.
+- **Preview first.** Marks, list rows, Previous and Next, and arrow keys (with focus inside
+  the ruler) select and preview; they never move the article.
+- **Read this passage:**
+  - It resolves the passage first; a missing one shows a message and nothing moves.
+  - It contracts the panel and lets it settle, then places the passage below the strip.
+  - Nearby passages are reached with smooth travel, distant ones directly (more than 1.5
+    screens away).
+  - Return to reading and Stay here live in the strip; the bottom return bar is gone for
+    this variant.
+- **Range.**
+  - Drag across the ruler: the start, end and count show live. Release commits; Escape
+    cancels the drag before anything else.
+  - From and To selects do the same with taps or the keyboard.
+  - Durations count by overlap. A range that excludes the open preview closes it but keeps
+    the selection; reopening that event says "Outside the chosen range".
+- **Crowding.** Hit targets are 24px wide (28px on phones). Points closer than that become
+  one count; choosing it lists its events in the region, and nothing is spread away from its
+  date.
+- **Phones.** The full-domain ruler is the persistent object at every size. Exploring adds
+  a 25-year close-up above it, centred on the reading period until you pan it (Earlier/Later,
+  or tap the full ruler). The full ruler brackets the close-up.
+
+**Motion:** one value, 240ms (`MOTION_MS`), with Codex `--transition-timing-function-user`
+(ease-out: decelerates, no overshoot). The phases overlap:
+
+- **Contracting:** controls and region fade over 0–70ms; labels fade over 0–60ms; lanes draw
+  together over 40–180ms; the axis and caret settle over 100–240ms.
+- **Expanding:** the reverse. The axis moves first (0–180ms) and the controls appear last
+  (140–240ms).
+- **Interrupting** starts from the rendered state (a CSS transition retargets).
+- **Reduced motion** (or `&motion=reduce`) makes the same changes instantly.
+
+## Acceptance checks run in the browser
+
+Each was scripted in the in-app browser and repeated in a separate headless Chrome. The
+1440×900, 1280×600 and 390×844 runs all passed:
+
+1. **1997.** With the 1997 Bilbao sentence at the reading line, the strip reads
+   "1997 · Guggenheim Museum Bilbao opened". The overview contracted on docking.
+2. **2003.** Reading on, it reads "2003 · Walt Disney Concert Hall, downtown Los Angeles".
+   The caret moved; selection and filter were untouched.
+3. **Expand at 2003.** The panel grew from 73 to 396px (264 at 1280×600, 371 on the phone).
+   The Disney Hall line stayed 247.1px below the panel's lower edge in every sampled frame
+   of the animation, both ways.
+4. **Preview 1989.** The scroll position changed by 0. The preview heading is
+   "1989 · Received the Pritzker Architecture Prize", the 1989 mark is selected, and
+   Reading still says 2003.
+5. **Resume.** The preview closed, the strip contracted, and the 2003 line came back to the
+   same screen position (difference 0px). 1989 stays selected.
+6. **Read 1989, then Return.** The 1989 sentence landed below the strip, highlighted and
+   focused, and Reading said 1989. Return to reading put the 2003 line back where it was
+   (0px).
+
+Repeated with motion on in headless Chrome: dy was 0px at 1440×900, 0–1px at 1280×600 and
+1–2px on the phone (sub-pixel rounding).
+
+**Also checked:**
+
+- **Slow frames:** the in-app browser dropped to about 5 frames a second mid-session. The
+  first version waited on timers, so native anchoring caught the tail of a slow transition:
+  the line moved by the panel's change, and one return was 163px off. Anchoring and settling
+  now wait for the rendered height, and the same sequence at 5 fps gives dy 0 for Explore,
+  preview, Resume and Return.
+
+- **Rapid reversal:** Explore, then Resume after 110ms, contracts from the current height
+  with the line unchanged.
+- **Scrolling mid-transition:** the reader's 120px scroll was kept exactly. The panel stayed
+  open, and a later Resume stayed at the new passage.
+- **Hysteresis:** scrolling up 60px or 210px kept the strip; 510px brought the overview back.
+- **Filtering out the current passage:** a 1985–1995 filter at 2003 left the caret at 2003
+  and dimmed the 2003 marks, with 3 of 20 events. A 2000–2010 filter closed the 1989 preview
+  and kept the selection.
+- **Drag:** the live readout showed "1950 – 1961 · 4 events". Escape cancelled the drag only;
+  release committed it with a scroll change of 0.
+- **Keyboard:** arrows on a mark step the preview and move focus along. The first Escape
+  closes the preview; the second contracts and focuses Explore timeline without scrolling.
+- **Missing anchor** (test fixture): an honest message appears and Read this passage is
+  disabled; nothing moves.
+- **Dark theme:** the filter and preview state renders with Codex tokens.
+- **Build:** `npm run build`, `npm run type-check` and eslint on the changed files are clean.
+
+## Not verified / limitations
+
+- **No automated tests.** The repo has no test runner, so the three named risks (preview
+  must not navigate, reading must not erase selection, explicit expansion must survive
+  docking) were checked by script in the browser, not by unit tests.
+- **Not yet tried:** a real phone, touch dragging (only synthetic pointer events), real
+  browser zoom and enlarged text (the strip grows with its top row; the scene's pixel lanes
+  do not), a screen reader, Firefox and Safari, and landscape phones.
+- **Wiki header:** the ProtoWiki header is not sticky, so the measured header offset is 0.
+  The measuring code (`useDock.ts`) was not exercised against a sticky header.
+- **Phone close-up:** it has no labels, so marks are identified by tapping or through the
+  list. At 390px, 2002–2003 still form a count even in the 25-year close-up.
+- **Bilbao** (700 years) was not walked through for this pass.

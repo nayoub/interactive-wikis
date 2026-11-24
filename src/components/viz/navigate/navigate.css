@@ -126,6 +126,37 @@ html[data-tn-motion='reduce'] *::after {
 }
 
 /*
+ * B: native scroll anchoring is suspended on the document scroller for the
+ * length of a ruler transition only, so the article follows the panel's lower
+ * edge by layout alone (one owner of the compensation).
+ */
+html.tn-anchor-off,
+html.tn-anchor-off body {
+  overflow-anchor: none;
+}
+
+/* B: the docking sentinel sits directly above the mount (both clear the lead's infobox). */
+.tn-dock-sentinel {
+  clear: both;
+  height: 0;
+}
+
+/* B: the passage being read gets a quiet tick in the gutter, at the line of its date. */
+.tn-reading-tick {
+  position: relative;
+}
+.tn-reading-tick::after {
+  content: '';
+  position: absolute;
+  inset-block-start: var(--tn-tick-top, 0);
+  inset-inline-start: calc(-1 * var(--spacing-100, 16px));
+  width: 2px;
+  height: 1.4em;
+  background: var(--border-color-base);
+  pointer-events: none;
+}
+
+/*
  * Dates are their own bidirectional runs: "1350–1450 CE" stays in order inside
  * a right-to-left page (and a right-to-left label stays whole in a left-to-right one).
  */

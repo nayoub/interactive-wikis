@@ -31,6 +31,16 @@ const reducedMotion = () =>
   (window.matchMedia('(prefers-reduced-motion: reduce)').matches ||
     document.documentElement.dataset.tnMotion === 'reduce')
 const behavior = (): ScrollBehavior => (reducedMotion() ? 'auto' : 'smooth')
+/**
+ * `travel: 'nearby'`: smooth only for short trips; a passage more than about
+ * a screen and a half away is placed promptly instead of animating through
+ * several screens.
+ */
+export interface Travel {
+  travel?: 'smooth' | 'nearby'
+}
+const behaviorFor = (dy: number, how: Travel = {}): ScrollBehavior =>
+  how.travel === 'nearby' && Math.abs(dy) > window.innerHeight * 1.5 ? 'auto' : behavior()
 /** One layout pass (or a short wait where frames are throttled, as in a background tab). */
 const frame = () =>
   new Promise<void>((r) => {
@@ -143,14 +153,14 @@ export function createNavigator(opts: {
     )
   }
 
-  function scrollTargetTo(rect: DOMRect, at = 0.25) {
+  function scrollTargetTo(rect: DOMRect, at = 0.25, how: Travel = {}) {
     const { top, bottom } = obstructions()
     // Leave room for a bottom bar that may appear after this jump.
     const reserve = Math.max(bottom, 72)
     const free = window.innerHeight - top - reserve
     const lead = rect.height > free * 0.6 ? 16 : Math.max(24, free * at)
-    const y = window.scrollY + rect.top - top - lead
-    window.scrollTo({ top: Math.max(0, y), behavior: behavior() })
+    const y = Math.max(0, window.scrollY + rect.top - top - lead)
+    window.scrollTo({ top: y, behavior: behaviorFor(y - window.scrollY, how) })
   }
 
   function captureOrigin(): Origin {
@@ -194,7 +204,7 @@ export function createNavigator(opts: {
    */
   async function jump(
     e: NavEvent,
-    how: { keepOrigin?: boolean; /** Leave focus where it is (stepping controls). */ keepFocus?: boolean } = {},
+    how: { keepOrigin?: boolean; /** Leave focus where it is (stepping controls). */ keepFocus?: boolean } & Travel = {},
   ): Promise<boolean> {
     const el = resolve(e)
     if (!el) {
@@ -223,7 +233,7 @@ export function createNavigator(opts: {
     el: HTMLElement,
     range: () => Range | null,
     description: string,
-    how: { keepOrigin?: boolean; keepFocus?: boolean } = {},
+    how: { keepOrigin?: boolean; keepFocus?: boolean } & Travel = {},
   ): Promise<boolean> {
     if (!el.isConnected) {
       announce(`${description} could not be found in this revision of the article.`)
@@ -237,7 +247,7 @@ export function createNavigator(opts: {
     el: HTMLElement,
     range: () => Range | null,
     description: string,
-    how: { keepOrigin?: boolean; keepFocus?: boolean },
+    how: { keepOrigin?: boolean; keepFocus?: boolean } & Travel,
   ): Promise<boolean> {
     if (!origin.value && !how.keepOrigin) origin.value = captureOrigin()
     revealSection(el)
@@ -247,7 +257,7 @@ export function createNavigator(opts: {
     const r = range()
     const block = el.closest<HTMLElement>('p, li, td, th, dd') ?? el
     whileScrolling()
-    scrollTargetTo((r ?? block).getBoundingClientRect() as DOMRect)
+    scrollTargetTo((r ?? block).getBoundingClientRect() as DOMRect, 0.25, how)
     markBlock(block)
     flash(r)
     if (!how.keepFocus) {
@@ -260,7 +270,7 @@ export function createNavigator(opts: {
   }
 
   /** Back to where reading was before the first jump; ends the exploration. */
-  async function returnToOrigin() {
+  async function returnToOrigin(how: Travel = {}) {
     const o = origin.value
     if (!o) return
     origin.value = null
@@ -273,7 +283,7 @@ export function createNavigator(opts: {
       if (r.height) y = window.scrollY + r.top - top - o.offset
     }
     whileScrolling()
-    window.scrollTo({ top: Math.max(0, y), behavior: behavior() })
+    window.scrollTo({ top: Math.max(0, y), behavior: behaviorFor(y - window.scrollY, how) })
     if (o.el?.isConnected) {
       const r = document.createRange()
       r.selectNodeContents(o.el)
