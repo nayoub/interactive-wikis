@@ -172,7 +172,8 @@ const rich = computed(() => (editing.value || (presentation.value === 'explore' 
 const trackMode = computed<'rich' | 'compact'>(() => (compact.value ? 'compact' : 'rich'))
 const trackH = computed(() => (trackMode.value === 'rich' ? rich.value.height : COMPACT.height) + sb.value)
 const headH = computed(() => (compact.value ? 0 : HEAD))
-const regionH = computed(() => (editing.value ? editH.value : 0))
+/** The event editor appears only with an event selected (no empty state); the track keeps its size either way. */
+const regionH = computed(() => (editing.value && editEvent.value ? editH.value : 0))
 /** Vertical: as tall as the list, up to most of the screen in the article, or half of it when docked. */
 const vlistH = computed(() =>
   Math.max(120, Math.min(vlistNat.value || 9999, Math.round(avail.value * (dock.stuck.value ? 0.5 : 0.7)) - 2 * PADY - HEAD)),
@@ -540,7 +541,7 @@ const px = (n: number) => `${Math.round(n)}px`
 
       <!-- Editing: the selected event's title, image and quiet actions. -->
       <div
-        v-if="editing"
+        v-if="editing && editEvent"
         class="tr__region"
         :style="{ height: px(regionH) }"
       >

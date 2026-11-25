@@ -10,7 +10,7 @@
  *   View source   scrolls to the sentence (nothing to drag)
  *   Remove event  quiet; Undo brings it back
  *
- * Nothing selected: one line on how to add events.
+ * Shown only while an event is selected (nothing selected: no editor, no hint).
  */
 import { computed, ref, watch } from 'vue'
 
@@ -165,12 +165,6 @@ const credit = computed(() => {
         </button>
       </div>
     </div>
-    <p
-      v-else
-      class="rr__hint"
-    >
-      {{ msg.trEditHint }}
-    </p>
   </div>
 </template>
 
@@ -244,8 +238,5 @@ const credit = computed(() => {
 .mw-parser-output .rr p,
 .rr p {
   margin: 0;
-}
-.rr__hint {
-  color: var(--color-subtle);
 }
 </style>

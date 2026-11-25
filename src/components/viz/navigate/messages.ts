@@ -191,7 +191,6 @@ export const msg = {
   trChangeImage: 'Change image',
   trRemoveImage: 'Remove image',
   trRemoveEvent: 'Remove event',
-  trEditHint: 'Select dates in the article to add events. Select an event to rename it or add an image.',
   trPickPrompt: 'Select dates in the article to add events',
   trEventCount: (n: number) => (n === 1 ? 'Timeline · 1 event' : `Timeline · ${n} events`),
   trNewNote: 'New timeline: it replaces the current one when you select Done.',
