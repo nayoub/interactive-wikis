@@ -38,7 +38,7 @@ export const blockFor = (slot: number, narrow: boolean) => Math.min(2 * slot - 2
 export const STEM = 10
 export const DATE_LINE = 24
 export const LABEL_LINE = 20
-export const IMG_GAP = 6
+export const IMG_GAP = 8
 /** The subject's age at the event, under its date (biographies with a known birth year). */
 export const AGE_LINE = 16
 export const BLOCK_PAD = 8
@@ -88,10 +88,10 @@ export interface Richness {
   imgH: number
 }
 const LADDER: Richness[] = [
-  { lines: 4, imgH: 64 },
+  { lines: 4, imgH: 56 },
   { lines: 4, imgH: 48 },
-  { lines: 3, imgH: 64 },
-  { lines: 2, imgH: 56 },
+  { lines: 3, imgH: 56 },
+  { lines: 2, imgH: 52 },
   { lines: 2, imgH: 48 },
   { lines: 2, imgH: 40 },
   { lines: 2, imgH: 32 },

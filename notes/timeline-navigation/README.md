@@ -762,3 +762,15 @@ Desktop editing re-checked at 1440×900: Cancel puts the dock back at 0.
   - Tapping the shared date in the strip opens the timeline without moving the article (0px).
   - In editing, selecting "Gehry Technologies" selects only it (scroll 0).
   - Arrow keys go surname → USC → fall 1956.
+
+## Follow-up: visual polish (Time ruler B)
+
+A quieter, more refined pass on the same structure:
+
+- **Line and points.** Stems are gone; a hairline axis carries small dots, each with a halo in the page background colour so the line appears to pass behind them. The current point is a larger blue dot with a soft blue ring.
+- **Hierarchy.** Each event reads date (strong) → title (base) → age (small, placeholder grey). The current date turns blue; hover turns date and title blue without underlines.
+- **Photos.** Rounded corners with a 1px hairline instead of a border, spaced evenly from the text.
+- **Panel.** Hairline borders above and below. When docked, the strip is frosted (92% background + backdrop blur and saturation, with a solid fallback) and casts a soft shadow instead of a hard rule.
+- **Scrollbar.** Thin, with a transparent track.
+
+Screenshots: `screenshots/ruler-polish/`.

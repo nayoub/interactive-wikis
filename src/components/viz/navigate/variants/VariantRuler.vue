@@ -97,7 +97,7 @@ onBeforeUnmount(() => ro?.disconnect())
 
 // ── Geometry ─────────────────────────────────────────────────────────────
 const PADY = 2
-const HEAD = 32
+const HEAD = 40
 const editH = computed(() => (narrow.value ? 128 : 84))
 /** The editing bar (Undo, Cancel, Done), inside the panel under the editor. */
 const barH = computed(() => 48)
@@ -457,18 +457,31 @@ const px = (n: number) => `${Math.round(n)}px`
   box-sizing: border-box;
   padding: 2px 0;
   overflow: hidden;
-  border-block-start: var(--border-width-base) solid var(--border-color-base);
+  /* Hairlines, not rules: the figure belongs to the page. */
+  border-block-start: var(--border-width-base) solid var(--border-color-subtle);
   border-block-end: var(--border-width-base) solid var(--border-color-subtle);
   background: var(--background-color-base);
   font-family: var(--font-family-base);
   font-size: var(--font-size-medium);
   transition:
     height var(--tr-motion) var(--tr-ease),
-    box-shadow var(--tr-motion) linear;
+    box-shadow var(--tr-motion) linear,
+    background-color var(--tr-motion) linear;
 }
+/* Docked: a frosted surface the article passes under, with a soft shadow and a hairline. */
 .tr--stuck {
-  border-block-end-color: var(--border-color-base);
-  box-shadow: 0 6px 6px -6px rgba(0, 0, 0, 0.2);
+  border-block-start-color: transparent;
+  background: color-mix(in srgb, var(--background-color-base) 92%, transparent);
+  -webkit-backdrop-filter: saturate(180%) blur(16px);
+  backdrop-filter: saturate(180%) blur(16px);
+  box-shadow:
+    0 1px 0 var(--border-color-subtle),
+    0 8px 24px -16px rgba(0, 0, 0, 0.35);
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .tr--stuck {
+    background: var(--background-color-base);
+  }
 }
 .tr--editing {
   border-block-start: var(--border-width-thick) solid var(--border-color-progressive);
@@ -480,8 +493,9 @@ const px = (n: number) => `${Math.round(n)}px`
 /* Header: open only; it folds away (height and opacity) when the strip docks. */
 .tr__top {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: var(--spacing-50) var(--spacing-75);
+  padding-block-start: var(--spacing-50);
   box-sizing: border-box;
   padding-inline-end: calc(var(--tr-ctrl) + var(--spacing-50));
   overflow: hidden;
@@ -491,6 +505,7 @@ const px = (n: number) => `${Math.round(n)}px`
     opacity 100ms linear 140ms;
 }
 .tr--compact .tr__top {
+  padding-block-start: 0;
   opacity: 0;
   transition:
     height var(--tr-motion) var(--tr-ease),
@@ -528,13 +543,12 @@ const px = (n: number) => `${Math.round(n)}px`
 /* Controls: at the header's end when open, at the strip's end when docked. */
 .tr__ctrl {
   position: absolute;
-  inset-block-start: 4px;
+  inset-block-start: 8px;
   inset-inline-end: 0;
   z-index: 3;
   display: flex;
   align-items: center;
   gap: var(--spacing-25);
-  background: var(--background-color-base);
 }
 .tr--compact .tr__ctrl {
   inset-block-start: 50%;

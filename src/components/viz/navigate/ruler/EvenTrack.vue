@@ -205,11 +205,6 @@ const px = (v: number) => `${Math.round(v * 10) / 10}px`
           :key="'d' + s.events[0].id"
         >
           <span
-            class="et__stem"
-            :class="{ 'et__stem--above': above(i), 'et__stem--on': has(s, selectedId) }"
-            :style="{ insetInlineStart: px(cx(i)), height: px(stemNow) }"
-          />
-          <span
             class="et__dot"
             :class="{
               'et__dot--approx': timeKind(s.events[0].date) === 'approximate',
@@ -248,11 +243,11 @@ const px = (v: number) => `${Math.round(v * 10) / 10}px`
             @click="emit('pick', s.events[0].id)"
           >
             <span class="et__date">{{ s.key }}</span>
+            <span class="et__label">{{ s.events[0].label }}</span>
             <span
               v-if="age(s.events[0])"
               class="et__age"
             >{{ age(s.events[0]) }}</span>
-            <span class="et__label">{{ s.events[0].label }}</span>
             <img
               v-if="s.image && geom.imgH"
               class="et__img"
@@ -270,10 +265,6 @@ const px = (v: number) => `${Math.round(v * 10) / 10}px`
             :class="{ 'et__block--on': has(s, selectedId), 'et__block--reading': has(s, readingId) }"
           >
             <span class="et__date">{{ s.key }}</span>
-            <span
-              v-if="age(s.events[0])"
-              class="et__age"
-            >{{ age(s.events[0]) }}</span>
             <ul
               class="et__titles"
               :aria-label="msg.trSameDate(s.key, s.events.length)"
@@ -297,6 +288,10 @@ const px = (v: number) => `${Math.round(v * 10) / 10}px`
                 </button>
               </li>
             </ul>
+            <span
+              v-if="age(s.events[0])"
+              class="et__age"
+            >{{ age(s.events[0]) }}</span>
             <img
               v-if="s.image && geom.imgH"
               class="et__img"
@@ -325,18 +320,19 @@ const px = (v: number) => `${Math.round(v * 10) / 10}px`
 }
 /* A real, always-visible scrollbar (not a hidden overlay): the way to browse sideways. */
 .et::-webkit-scrollbar {
-  height: 10px;
+  height: 8px;
 }
 .et::-webkit-scrollbar-track {
-  background: var(--background-color-neutral-subtle);
+  background: transparent;
 }
 .et::-webkit-scrollbar-thumb {
   background: var(--border-color-base);
-  border-radius: 5px;
-  border: 2px solid var(--background-color-neutral-subtle);
+  border-radius: 4px;
+  border: 2px solid var(--background-color-base);
+  background-clip: padding-box;
 }
 .et::-webkit-scrollbar-thumb:hover {
-  background: var(--color-subtle);
+  background-color: var(--color-placeholder);
 }
 @supports not selector(::-webkit-scrollbar) {
   .et {
@@ -375,7 +371,7 @@ const px = (v: number) => `${Math.round(v * 10) / 10}px`
 .et__line {
   position: absolute;
   inset-block-start: 0;
-  border-block-start: var(--border-width-base) solid var(--color-base);
+  border-block-start: var(--border-width-base) solid var(--border-color-base);
 }
 .et__dot {
   position: absolute;
@@ -384,18 +380,21 @@ const px = (v: number) => `${Math.round(v * 10) / 10}px`
   height: 7px;
   margin-inline-start: -3.5px;
   border-radius: 50%;
+  box-sizing: border-box;
   background: var(--color-base);
   border: 1.5px solid var(--color-base);
-  box-sizing: border-box;
+  /* A thin halo of the page around each point, so it sits on the line rather than in it. */
+  box-shadow: 0 0 0 2px var(--background-color-base);
   transition:
     background-color var(--transition-duration-base, 100ms),
-    border-color var(--transition-duration-base, 100ms);
+    border-color var(--transition-duration-base, 100ms),
+    box-shadow var(--transition-duration-base, 100ms);
 }
 /* Approximate: open (its date text says how: "c.", "the 1970s"). */
 .et__dot--approx {
   background: var(--background-color-base);
 }
-/* Selected: a larger filled point in the progressive colour. */
+/* The current (or, editing, the selected) event: a larger progressive point with a soft halo. */
 .et__dot--on {
   inset-block-start: -5px;
   width: 10px;
@@ -403,19 +402,9 @@ const px = (v: number) => `${Math.round(v * 10) / 10}px`
   margin-inline-start: -5px;
   background: var(--color-progressive);
   border-color: var(--color-progressive);
-}
-.et__stem {
-  position: absolute;
-  inset-block-start: 0;
-  width: 0;
-  border-inline-start: var(--border-width-base) solid var(--border-color-base);
-  transition: height var(--et-motion) var(--et-ease);
-}
-.et__stem--above {
-  transform: translateY(-100%);
-}
-.et__stem--on {
-  border-color: var(--color-progressive);
+  box-shadow:
+    0 0 0 2px var(--background-color-base),
+    0 0 0 5px var(--background-color-progressive-subtle);
 }
 
 /* ── Events ───────────────────────────────────────────────────────────── */
@@ -481,7 +470,7 @@ const px = (v: number) => `${Math.round(v * 10) / 10}px`
   border: 0;
   border-radius: var(--border-radius-base);
   background: none;
-  color: var(--color-subtle);
+  color: var(--color-base);
   font: inherit;
   font-size: var(--font-size-small, 14px);
   line-height: 18px;
@@ -490,8 +479,7 @@ const px = (v: number) => `${Math.round(v * 10) / 10}px`
   cursor: pointer;
 }
 .et__pick:hover {
-  color: var(--color-base);
-  text-decoration: underline;
+  color: var(--color-progressive--hover, var(--color-progressive));
 }
 .et__pick:focus-visible {
   outline: var(--border-width-thick) solid var(--outline-color-progressive--focus);
@@ -519,6 +507,7 @@ const px = (v: number) => `${Math.round(v * 10) / 10}px`
   font-size: var(--font-size-large, 18px);
   font-weight: var(--font-weight-bold);
   line-height: 24px;
+  letter-spacing: -0.01em;
   font-variant-numeric: tabular-nums;
   unicode-bidi: plaintext;
   text-decoration: none;
@@ -543,7 +532,7 @@ const px = (v: number) => `${Math.round(v * 10) / 10}px`
   -webkit-line-clamp: var(--et-lines, 2);
   line-clamp: var(--et-lines, 2);
   padding-inline: var(--spacing-25);
-  color: var(--color-subtle);
+  color: var(--color-base);
   font-size: var(--font-size-small, 14px);
   line-height: 20px;
   overflow-wrap: break-word;
@@ -553,16 +542,19 @@ const px = (v: number) => `${Math.round(v * 10) / 10}px`
 }
 .et__img {
   flex: none;
-  margin-block: 6px 0;
+  margin-block: 8px 0;
   object-fit: cover;
+  border-radius: calc(3 * var(--border-radius-base, 2px));
   background: var(--background-color-neutral-subtle);
+  /* A hairline edge, so light photographs keep their shape on the page. */
+  box-shadow: 0 0 0 1px var(--border-color-muted, rgba(0, 0, 0, 0.08));
 }
 .et__item--above .et__img {
-  margin-block: 0 6px;
+  margin-block: 0 8px;
 }
 .et__age {
   flex: none;
-  color: var(--color-subtle);
+  color: var(--color-placeholder);
   font-size: var(--font-size-x-small, 12px);
   line-height: 16px;
   font-variant-numeric: tabular-nums;
@@ -579,9 +571,9 @@ const px = (v: number) => `${Math.round(v * 10) / 10}px`
   opacity: 0;
   transition: opacity 60ms linear;
 }
-.et__block:hover .et__label {
-  color: var(--color-base);
-  text-decoration: underline;
+.et__block:hover .et__label,
+.et__block:hover .et__date {
+  color: var(--color-progressive--hover, var(--color-progressive));
 }
 .et__block:focus {
   outline: none;
