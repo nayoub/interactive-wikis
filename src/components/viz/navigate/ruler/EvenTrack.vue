@@ -20,7 +20,8 @@
  *   focus     Codex focus outline around the date
  *
  * It owns no selection or navigation: activating an event emits `pick`.
- * Native horizontal scrolling (a visible scrollbar) and arrow keys browse.
+ * Native horizontal scrolling and arrow keys browse. The scrollbar shows while
+ * the timeline moves, under the pointer, or with focus inside; otherwise it fades.
  */
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 
@@ -99,10 +100,17 @@ onMounted(() => {
   ro.observe(el)
 })
 onBeforeUnmount(() => ro?.disconnect())
+/** Moving right now (any cause): the scrollbar shows, and fades a moment after it stops. */
+const moving = ref(false)
+let movingTimer: ReturnType<typeof setTimeout> | null = null
 function onScroll() {
   edges()
   emit('scrolled')
+  moving.value = true
+  if (movingTimer) clearTimeout(movingTimer)
+  movingTimer = setTimeout(() => (moving.value = false), 900)
 }
+onBeforeUnmount(() => movingTimer && clearTimeout(movingTimer))
 /** The reader's own horizontal gesture: following the reading position waits for it. */
 let userAt = 0
 const markUser = () => (userAt = performance.now())
@@ -180,7 +188,7 @@ const px = (v: number) => `${Math.round(v * 10) / 10}px`
   <div
     ref="scroller"
     class="et"
-    :class="[`et--${mode}`, { 'et--more-start': more.start, 'et--more-end': more.end }]"
+    :class="[`et--${mode}`, { 'et--more-start': more.start, 'et--more-end': more.end, 'et--moving': moving }]"
     :style="{ height: px(contentH + sb) }"
     @scroll.passive="onScroll"
     @click="onClick"
@@ -327,7 +335,11 @@ const px = (v: number) => `${Math.round(v * 10) / 10}px`
   overscroll-behavior-x: contain;
   transition: height var(--et-motion) var(--et-ease);
 }
-/* A real, always-visible scrollbar (not a hidden overlay): the way to browse sideways. */
+/*
+ * A real scrollbar (its room is always kept, so nothing shifts), shown only when it
+ * is useful: while the timeline moves, under a mouse pointer, or with keyboard focus
+ * inside. At rest it fades away, like the system's overlay scrollbars.
+ */
 .et::-webkit-scrollbar {
   height: 8px;
 }
@@ -335,10 +347,19 @@ const px = (v: number) => `${Math.round(v * 10) / 10}px`
   background: transparent;
 }
 .et::-webkit-scrollbar-thumb {
-  background: var(--border-color-base);
+  background: transparent;
   border-radius: 4px;
-  border: 2px solid var(--background-color-base);
+  border: 2px solid transparent;
   background-clip: padding-box;
+}
+.et--moving::-webkit-scrollbar-thumb,
+.et:has(:focus-visible)::-webkit-scrollbar-thumb {
+  background-color: var(--border-color-base);
+}
+@media (hover: hover) {
+  .et:hover::-webkit-scrollbar-thumb {
+    background-color: var(--border-color-base);
+  }
 }
 .et::-webkit-scrollbar-thumb:hover {
   background-color: var(--color-placeholder);
@@ -346,6 +367,16 @@ const px = (v: number) => `${Math.round(v * 10) / 10}px`
 @supports not selector(::-webkit-scrollbar) {
   .et {
     scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+  }
+  .et--moving,
+  .et:has(:focus-visible) {
+    scrollbar-color: var(--border-color-base) transparent;
+  }
+  @media (hover: hover) {
+    .et:hover {
+      scrollbar-color: var(--border-color-base) transparent;
+    }
   }
 }
 .et--more-start {
