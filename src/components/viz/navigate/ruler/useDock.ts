@@ -8,9 +8,10 @@
  * decided from the document, not from the panel.
  *
  *   stuck       the mount is pinned below the header right now
- *   contracted  the overview has given way to the compact strip; set when it
- *               docks, and cleared only when the slot comes well back into
- *               view (a hysteresis band: scrolling up a few pixels keeps it)
+ *   contracted  the overview has given way to the compact strip: exactly while
+ *               docked. In its place in the article the timeline is always open.
+ *               (No hysteresis is needed: docking is read from the sentinel,
+ *               which the panel's own height never moves.)
  *
  * Anchoring: while stuck, the mount is still in flow, so when the panel
  * changes height everything after it moves by the same amount: the source
@@ -41,7 +42,11 @@ function measureHeader(own: HTMLElement | null): number {
   return Math.round(bottom)
 }
 
-export function useDock(mount: Ref<HTMLElement | null>) {
+/**
+ * `keepContracted`: while true (a jump on its way to a passage below), the strip
+ * stays compact even before it docks, so the geometry the jump aimed with holds.
+ */
+export function useDock(mount: Ref<HTMLElement | null>, keepContracted: () => boolean = () => false) {
   const header = ref(0)
   /** The visible viewport height (follows mobile browser chrome). */
   const viewH = ref(window.visualViewport?.height ?? window.innerHeight)
@@ -85,9 +90,7 @@ export function useDock(mount: Ref<HTMLElement | null>) {
     const marginTop = parseFloat(getComputedStyle(m).marginTop) || 0
     const s = sentinel.getBoundingClientRect().top
     stuck.value = s + marginTop <= header.value + 0.5
-    const avail = viewH.value - header.value
-    if (!contracted.value && stuck.value) contracted.value = true
-    else if (contracted.value && s > header.value + Math.max(120, avail * 0.3)) contracted.value = false
+    contracted.value = stuck.value || (contracted.value && keepContracted())
   }
 
   let timer: ReturnType<typeof setTimeout> | null = null

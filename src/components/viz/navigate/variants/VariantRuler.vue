@@ -68,7 +68,7 @@ async function settle() {
 }
 
 // ── Docking and reading ──────────────────────────────────────────────────
-const dock = useDock(ctx.leadMount)
+const dock = useDock(ctx.leadMount, () => nav.jumping.value)
 const bodyEl = ref<HTMLElement | null>(null)
 const body = () => document.querySelector<HTMLElement>('.tn-body')
 const { reading, update: updateReading, set: setReading } = useReading({
