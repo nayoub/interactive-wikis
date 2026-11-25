@@ -432,6 +432,8 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', onResize)
 })
 
+/** Where the full-bleed surface lives: the page wrapper, outside the clipped text column (keeps theme tokens). */
+const bleedTo = computed<HTMLElement | null>(() => (root.value?.closest('.tn-page') as HTMLElement | null) ?? null)
 const shown = computed(() => events.value.length > 0 || editing.value)
 const px = (n: number) => `${Math.round(n)}px`
 </script>
@@ -578,6 +580,19 @@ const px = (n: number) => `${Math.round(n)}px`
       />
     </section>
   </Teleport>
+  <!-- Phones, docked: the strip's surface, full bleed (outside the clipped text column). -->
+  <Teleport
+    v-if="bleedTo"
+    :to="bleedTo"
+  >
+    <div
+      v-if="narrow && dock.stuck.value && !hidden"
+      class="tr-bleed"
+      :class="{ 'tr-bleed--editing': editing }"
+      aria-hidden="true"
+      :style="{ top: px(dock.header.value), height: px(panelH), '--tr-motion': `${MOTION_MS}ms` }"
+    />
+  </Teleport>
   <ImagePicker
     v-model:open="pickerOpen"
     :images="ctx.article.images"
@@ -626,8 +641,52 @@ const px = (n: number) => `${Math.round(n)}px`
     background: var(--background-color-base);
   }
 }
+/*
+ * Phones, docked: full bleed. The panel lives in the text column, which clips
+ * anything wider (.mw-parser-output), so its surface (frosted background, rule and
+ * shadow) is a separate layer the width of the screen, right behind it (.tr-bleed),
+ * and the panel itself is transparent.
+ */
+.tr--narrow.tr--stuck {
+  border-block-end-color: transparent;
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: none;
+}
+.tr-bleed {
+  position: fixed;
+  inset-inline: 0;
+  z-index: 9;
+  background: color-mix(in srgb, var(--background-color-base) 92%, transparent);
+  -webkit-backdrop-filter: saturate(180%) blur(16px);
+  backdrop-filter: saturate(180%) blur(16px);
+  box-shadow:
+    0 1px 0 var(--border-color-subtle),
+    0 8px 24px -16px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+  transition: height var(--tr-motion, 240ms) var(--transition-timing-function-user, ease-out);
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .tr-bleed {
+    background: var(--background-color-base);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tr-bleed {
+    transition: none;
+  }
+}
 .tr--editing {
   border-block-start: var(--border-width-thick) solid var(--border-color-progressive);
+}
+/* Phones, docked, editing: the blue rule runs edge to edge too (on the surface layer). */
+.tr--narrow.tr--stuck.tr--editing {
+  border-block-start-color: transparent;
+}
+.tr-bleed--editing {
+  border-block-start: var(--border-width-thick) solid var(--border-color-progressive);
+  box-sizing: border-box;
 }
 .tr > * {
   flex: none;
