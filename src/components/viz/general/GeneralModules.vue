@@ -1,10 +1,11 @@
 <script setup lang="ts">
 /**
- * The general visual tool's page: an article in a VE-style editor where
- * Insert → Visual (or a suggested visual) opens one pick mode, one curate
- * panel and one frame for every form. Any number of visuals can be placed.
- * Built from the shared kit: loadArticle, useSelectMode, passage, the
- * curation panel shell, ModuleBlock, the prototype menu.
+ * The general visual tool: the article is the interface. Insert → Visual (or
+ * a suggestion card) asks what to pick; that kind lights up in the section,
+ * the rest dims; an empty block appears beside its source and the visual
+ * grows in it with every pick. One slim bar at the bottom: count, miniature,
+ * Undo, More, Cancel, Done. Labels are spans of their sentences, adjusted in
+ * the text. No side panel, no list, no dropdown.
  */
 import {
   computed,
@@ -16,8 +17,21 @@ import {
   shallowRef,
   watch,
 } from 'vue'
-import { CdxButton, CdxIcon, CdxMessage, CdxProgressBar } from '@wikimedia/codex'
-import { cdxIconArrowUp, cdxIconChart, cdxIconLightbulb } from '@wikimedia/codex-icons'
+import {
+  CdxButton,
+  CdxDialog,
+  CdxIcon,
+  CdxMenuButton,
+  CdxMessage,
+  CdxProgressBar,
+} from '@wikimedia/codex'
+import {
+  cdxIconArrowUp,
+  cdxIconChart,
+  cdxIconDraggable,
+  cdxIconEllipsis,
+  cdxIconSettings,
+} from '@wikimedia/codex-icons'
 
 import ArticleRenderer from '@/components/article/ArticleRenderer.vue'
 import ArticleWrapper from '@/components/article/ArticleWrapper.vue'
@@ -26,29 +40,48 @@ import VeToolbar from '@/components/visual-editor/VeToolbar.vue'
 import VisualEditorPageLayout from '@/components/visual-editor/VisualEditorPageLayout.vue'
 import { globalSkin } from '@/theme'
 
+import ImagePicker from '../curate/ImagePicker.vue'
 import { hub, type HubId } from '../host/hub'
 import { loadArticle, type ArticleSource, type LoadedArticle } from '../host/loadArticle'
-import ModuleBlock from '../host/ModuleBlock.vue'
 import PrototypeMenu from '../host/PrototypeMenu.vue'
 import type { ModulesStore, PlacedModule } from '../host/store'
 import { setDayFirst } from '../model/dates'
-import type { ModuleKind, Placement } from '../model/types'
-import type { Item } from '../model/visual'
+import type { EventImage, ModuleKind, Placement } from '../model/types'
+import type { FormId, Item } from '../model/visual'
 import { scrollToEl, showPassage } from '../pick/passage'
 import { END_MATTER } from '../pick/textIndex'
 import { useSelectMode } from '../pick/useSelectMode'
+import { cards, chipSources, dismiss, dismissed, type InlineChip } from './cards'
+import ColumnsDialog from './ColumnsDialog.vue'
 import {
+  chooseValueColumn,
+  compareOptions,
+  draftFromSeries,
   emptyDraft,
   itemsOf,
   pickImage,
+  pickStateOf,
   pickTable,
+  refreshForm,
+  setCompare,
+  setRole,
+  setSpan,
+  tableOf,
   toggleMention,
   type PickFilter,
   type PlacedVisual,
+  type VisualDraft,
 } from './draft'
-import GeneralCurate from './GeneralCurate.vue'
-import { suggestions } from './suggest'
+import EditorBar from './EditorBar.vue'
+import { defaultsOf, FORMS } from './forms'
+import InlineChips from './InlineChips.vue'
+import KindChooser from './KindChooser.vue'
+import { formsFor } from './rules'
+import SuggestionLayer from './SuggestionLayer.vue'
+import { useSpanEditor } from './useSpanEditor'
 import VisualFrame from './VisualFrame.vue'
+
+type Kind = Exclude<PickFilter, 'all' | 'series'>
 
 const props = defineProps<{
   store: ModulesStore
@@ -61,15 +94,16 @@ const state = props.store.state
 const skin = computed(() => props.forceSkin ?? globalSkin.value)
 const isMobile = computed(() => skin.value === 'mobile')
 const editing = computed(() => state.mode === 'edit')
-const panelOpen = computed(() => editing.value && state.panelOpen && !!state.vdraft)
+const draft = computed(() => state.vdraft)
+const picking = computed(() => editing.value && state.panelOpen && !!state.vdraft)
+const reducedMotion =
+  typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
 const vw = ref(typeof window === 'undefined' ? 1280 : window.innerWidth)
 const onResize = () => (vw.value = window.innerWidth)
 onMounted(() => window.addEventListener('resize', onResize))
 onBeforeUnmount(() => window.removeEventListener('resize', onResize))
-const panelMode = computed<'side' | 'sheet'>(() =>
-  isMobile.value || vw.value < 1000 ? 'sheet' : 'side',
-)
+const narrow = computed(() => isMobile.value || vw.value < 640)
 
 // ── Article ────────────────────────────────────────────────────────────────
 const article = shallowRef<LoadedArticle | null>(null)
@@ -84,32 +118,33 @@ const sections = computed(() =>
   (article.value?.sections ?? []).filter((s) => !END_MATTER.has(s.id)),
 )
 const bodyEl = ref<HTMLElement | null>(null)
+const pageEl = ref<HTMLElement | null>(null)
 function setBodyEl(el: unknown) {
   const next = (el as HTMLElement | null) ?? null
   if (next !== bodyEl.value) bodyEl.value = next
 }
-const counts = computed(() => {
-  const a = article.value
-  return {
-    date: a?.mentions.length ?? 0,
-    place: a?.places.length ?? 0,
-    table: a?.tables.length ?? 0,
-    image: a?.images.filter((i) => i.source === 'article').length ?? 0,
+const topOf = (sectionId: string) =>
+  article.value?.topSection[sectionId] ?? { id: sectionId, title: sectionId }
+/** The top-level <section> element of an h2 id. */
+const sectionEl = (id: string | null | undefined) =>
+  id
+    ? (bodyEl.value?.querySelector(`#${CSS.escape(id)}`)?.closest('section') as HTMLElement | null)
+    : null
+/** The h2 section an element sits in. */
+function sectionIdOf(el: Element | null): string {
+  let s = el?.closest('section') ?? null
+  let id = 'Lead'
+  while (s) {
+    const h = s.querySelector<HTMLElement>(':scope > h2, :scope > .mw-heading > h2')
+    if (h?.id) id = h.id
+    s = s.parentElement?.closest('section') ?? null
   }
-})
-
-// ── Placement: a mount per placed visual; its frame teleports in ───────────
-const mountEls = reactive<Record<string, HTMLElement | null>>({})
-const DEFAULT_PLACEMENT: Placement = {
-  kind: 'sectionTop',
-  sectionId: props.source.defaultSection.id,
-  sectionTitle: props.source.defaultSection.title,
+  return id
 }
-function insertAt(body: HTMLElement, mount: HTMLElement, p: Placement, after: HTMLElement | null) {
-  if (after) {
-    if (after.nextElementSibling !== mount) after.after(mount)
-    return
-  }
+
+// ── Placed visuals: a mount per visual, placed without moving what you are reading ──
+const mountEls = reactive<Record<string, HTMLElement | null>>({})
+function insertAt(body: HTMLElement, mount: HTMLElement, p: Placement) {
   if (p.kind === 'after') {
     const anchor = body.querySelector(`#${CSS.escape(p.anchorId)}`)
     if (anchor?.parentElement)
@@ -126,7 +161,10 @@ function insertAt(body: HTMLElement, mount: HTMLElement, p: Placement, after: HT
 }
 function ensureMounts() {
   const body = bodyEl.value
-  const lastAt = new Map<string, HTMLElement>()
+  // Keep the text under the middle of the viewport where it is.
+  const ref0 = document.elementFromPoint(window.innerWidth / 2, window.innerHeight / 2)
+  const keep = ref0 && body?.contains(ref0) && !ref0.closest('.tl-mount') ? ref0 : null
+  const before = keep?.getBoundingClientRect().top ?? 0
   const live = new Set(state.visuals.map((v) => v.id))
   for (const id of Object.keys(mountEls)) {
     if (!live.has(id) || !body) {
@@ -143,176 +181,320 @@ function ensureMounts() {
       mount.dataset.visual = v.id
       mount.setAttribute('contenteditable', 'false')
     }
-    const key =
-      v.placement.kind === 'after'
-        ? `after:${v.placement.anchorId}`
-        : `top:${v.placement.sectionId}`
-    insertAt(body, mount, v.placement, lastAt.get(key) ?? null)
-    lastAt.set(key, mount)
+    insertAt(body, mount, v.placement)
     mountEls[v.id] = mount
   }
+  // An annotated image takes the place of its image (not while it is being made).
+  body.querySelectorAll('.gm-replaced').forEach((el) => el.classList.remove('gm-replaced'))
+  for (const v of state.visuals) {
+    const img = v.pick?.imageId
+    if (img && v.visual.form === 'annotated' && draft.value?.editingId !== v.id)
+      body.querySelector(`[data-tl-id="${img}"]`)?.classList.add('gm-replaced')
+  }
+  if (keep) {
+    const shift = keep.getBoundingClientRect().top - before
+    if (Math.abs(shift) > 1) window.scrollBy(0, shift)
+  }
 }
-watch([bodyEl, () => state.visuals, skin], () => nextTick(ensureMounts), {
-  deep: true,
-  flush: 'post',
-})
+watch(
+  [bodyEl, () => state.visuals, skin, () => draft.value?.editingId],
+  () => nextTick(ensureMounts),
+  {
+    deep: true,
+    flush: 'post',
+  },
+)
 watch(bodyEl, (el) => el && setTimeout(ensureMounts, 50))
 
-// ── Cursor (where Insert puts things) ──────────────────────────────────────
-const cursorPlacement = ref<Placement | null>(null)
-let blockIds = 0
+// The block grows with every pick: when it sits above what the editor is reading, keep the text still.
+let grow: ResizeObserver | null = null
+let lastHeight = 0
+let heldShift = 0
+watch(
+  () => (picking.value && draft.value?.editingId ? mountEls[draft.value.editingId] : null),
+  (mount) => {
+    grow?.disconnect()
+    grow = null
+    if (!mount) return
+    lastHeight = mount.getBoundingClientRect().height
+    grow = new ResizeObserver(() => {
+      const r = mount.getBoundingClientRect()
+      const delta = r.height - lastHeight
+      lastHeight = r.height
+      if (!delta || r.bottom >= window.innerHeight * 0.3) return
+      // While a label end is dragged the page holds still (the end stays under the pointer);
+      // the shift is applied once on release.
+      if (spans.dragging.value) heldShift += delta
+      else window.scrollBy(0, delta)
+    })
+    grow.observe(mount)
+  },
+  { flush: 'post' },
+)
+onBeforeUnmount(() => grow?.disconnect())
+
+// ── Which section the editor is in (caret, else the middle of the screen) ──
+const caretSection = ref<string | null>(null)
 function onSelectionChange() {
-  if (!editing.value || panelOpen.value) return
-  const body = bodyEl.value
+  if (!editing.value || picking.value) return
   const node = document.getSelection()?.anchorNode
-  if (!body || !node || !body.contains(node)) return
-  const el = (node.nodeType === 1 ? node : node.parentElement) as HTMLElement | null
-  if (!el || el.closest('.tl-mount')) return
-  const h = el
-    .closest('section')
-    ?.querySelector<HTMLElement>(':scope > h2, :scope > h3, :scope > .mw-heading > :is(h2, h3)')
-  const sectionId = h?.id || 'Lead'
-  const sectionTitle = h?.textContent?.trim() || 'Lead'
-  let block: HTMLElement | null = el
-  while (
-    block?.parentElement &&
-    !block.parentElement.matches('section, .protowiki-mobile-section-body')
-  )
-    block = block.parentElement
-  if (!block || block === body) return
-  if (!block.id) block.id = `tl-blk-${++blockIds}`
-  cursorPlacement.value = { kind: 'after', anchorId: block.id, sectionId, sectionTitle }
+  if (!node || !bodyEl.value?.contains(node)) return
+  caretSection.value = sectionIdOf((node.nodeType === 1 ? node : node.parentElement) as Element)
 }
 onMounted(() => document.addEventListener('selectionchange', onSelectionChange))
 onBeforeUnmount(() => document.removeEventListener('selectionchange', onSelectionChange))
+function currentSection(): string {
+  if (caretSection.value && caretSection.value !== 'Lead') return caretSection.value
+  const el = document.elementFromPoint(window.innerWidth / 2, window.innerHeight / 2)
+  const id = el && bodyEl.value?.contains(el) ? sectionIdOf(el) : null
+  return id && id !== 'Lead' ? id : props.source.defaultSection.id
+}
+function kindsIn(scope: string | null): Record<Kind, boolean> {
+  const a = article.value
+  const sec = sectionEl(scope)
+  const inScope = (id: string) => !scope || topOf(id).id === scope
+  return {
+    date: !!a?.mentions.some((m) => inScope(m.anchor.sectionId)),
+    place: !!a?.places.some((m) => m.value.kind !== 'region' && inScope(m.anchor.sectionId)),
+    table: !!a?.tables.some((t) => inScope(t.value.sectionId)),
+    image: !!(scope
+      ? sec?.querySelector('.tl-pick-image')
+      : bodyEl.value?.querySelector('.tl-pick-image')),
+  }
+}
 
-// ── Insert: Visual, or a suggestion ────────────────────────────────────────
-const suggested = computed(() => (article.value ? suggestions(article.value) : []))
-const insertItems = computed(() => [
-  ...suggested.value.map((s) => ({
-    value: `suggest:${s.id}`,
-    label: s.label,
-    icon: cdxIconLightbulb,
-    group: 'Suggested visuals',
-  })),
-  { value: 'visual', label: 'Visual', icon: cdxIconChart, group: 'Insert' },
-])
-const draftPlacement = ref<Placement>(DEFAULT_PLACEMENT)
-const sheetExpanded = ref(false)
+// ── Getting in: Insert → Visual asks what to pick ──────────────────────────
+const chooser = reactive({ open: false, anchor: null as HTMLElement | null, section: '' })
 function onInsert(value: string) {
-  draftPlacement.value = cursorPlacement.value ?? DEFAULT_PLACEMENT
-  const s = suggested.value.find((x) => `suggest:${x.id}` === value)
-  state.vdraft = s ? s.build() : emptyDraft()
-  // A suggestion opens ready to curate.
-  sheetExpanded.value = !!s && panelMode.value === 'sheet'
+  if (value !== 'visual') return
+  chooser.section = currentSection()
+  chooser.anchor = document.querySelector<HTMLElement>('.ve-toolbar__menu-trigger, .ve-toolbar')
+  chooser.open = true
+}
+const chooserTitle = computed(
+  () => sections.value.find((s) => s.id === chooser.section)?.title ?? chooser.section,
+)
+function onChoose(kind: Kind, whole: boolean) {
+  chooser.open = false
+  start(kind, whole ? null : chooser.section)
+}
+
+let ids = 0
+const undoStack = ref<string[]>([])
+const redoStack = ref<string[]>([])
+const snapshot = (d: VisualDraft) =>
+  JSON.stringify({
+    visual: d.visual,
+    tableId: d.tableId,
+    roles: d.roles,
+    imageId: d.imageId,
+    compareWith: d.compareWith,
+    question: d.question,
+    currentId: d.currentId,
+  })
+function record() {
+  if (!draft.value) return
+  undoStack.value.push(snapshot(draft.value))
+  redoStack.value = []
+}
+function restore(json: string) {
+  if (!draft.value) return
+  Object.assign(draft.value, JSON.parse(json))
+}
+function undo() {
+  const d = draft.value
+  const prev = undoStack.value.pop()
+  if (!d || !prev) return
+  redoStack.value.push(snapshot(d))
+  restore(prev)
+  announce('Undone')
+}
+function redo() {
+  const d = draft.value
+  const next = redoStack.value.pop()
+  if (!d || !next) return
+  undoStack.value.push(snapshot(d))
+  restore(next)
+}
+
+/** Enter the mode: an empty block beside the source, that kind lit in that section. */
+function start(kind: Kind, scope: string | null) {
+  const id = `v${Date.now().toString(36)}${++ids}`
+  const sec = scope ?? currentSection()
+  const placement: Placement = {
+    kind: 'sectionTop',
+    sectionId: sec,
+    sectionTitle: topOf(sec).title,
+  }
+  state.visuals = [...state.visuals, { id, visual: emptyDraft(kind).visual, placement }]
+  state.vdraft = {
+    ...emptyDraft(kind),
+    editingId: id,
+    isNew: true,
+    scope,
+    currentId: null,
+    question: null,
+  }
+  undoStack.value = []
+  redoStack.value = []
   state.panelOpen = true
   ;(document.activeElement as HTMLElement | null)?.blur?.()
   document.getSelection()?.removeAllRanges()
+  announce(`Making a visual. ${PROMPT[kind]}.`)
 }
-function openReEdit(id: string) {
+
+/** Clicking a placed visual in edit mode: the same mode, its section lit, its items picked. */
+function reEnter(id: string) {
   const v = state.visuals.find((x) => x.id === id)
-  if (!v) return
-  state.mode = 'edit'
+  if (!v || picking.value) return
+  const p = v.pick
   state.vdraft = {
-    ...emptyDraft('all'),
+    ...emptyDraft(p?.kind ?? 'all'),
     visual: JSON.parse(JSON.stringify(v.visual)),
+    tableId: p?.tableId ?? null,
+    roles: [...(p?.roles ?? [])],
+    imageId: p?.imageId ?? null,
+    compareWith: p?.compareWith ?? null,
     editingId: id,
+    isNew: false,
+    scope: p?.scope ?? null,
+    currentId: null,
+    question: null,
   }
-  sheetExpanded.value = panelMode.value === 'sheet'
+  undoStack.value = []
+  redoStack.value = []
   state.panelOpen = true
 }
-let ids = 0
-function commit() {
-  const d = state.vdraft
-  if (!d) return
-  const visual = JSON.parse(JSON.stringify(d.visual))
-  if (d.editingId) {
-    state.visuals = state.visuals.map((v) => (v.id === d.editingId ? { ...v, visual } : v))
-  } else {
-    const id = `v${Date.now().toString(36)}${++ids}`
-    state.visuals = [...state.visuals, { id, visual, placement: draftPlacement.value }]
-    scrollTo(id)
-  }
-  state.fromExample = false
-  state.vdraft = null
-  state.panelOpen = false
-}
-function discard() {
-  state.vdraft = null
-  state.panelOpen = false
-}
-function removeVisual(id: string) {
-  state.visuals = state.visuals.filter((v) => v.id !== id)
-  state.fromExample = false
-}
-function moveVisual(id: string, sectionId: string) {
-  const s = sections.value.find((x) => x.id === sectionId)
-  if (!s) return
-  state.visuals = state.visuals.map((v) =>
-    v.id === id
-      ? { ...v, placement: { kind: 'sectionTop', sectionId: s.id, sectionTitle: s.title } }
-      : v,
-  )
-  state.fromExample = false
-  scrollTo(id)
-}
-function scrollTo(id: string, offset = 72) {
-  nextTick(() =>
-    setTimeout(() => {
-      ensureMounts()
-      const m = mountEls[id]
-      if (m) scrollToEl(m, 'start', offset)
-    }, 80),
-  )
-}
-const editingId = computed(() => (panelOpen.value ? state.vdraft?.editingId : null))
-const shownVisual = (v: PlacedVisual) =>
-  editingId.value === v.id && state.vdraft ? state.vdraft.visual : v.visual
 
-// ── Pick mode: everything pickable lights up, narrowed by the filter ───────
-const KINDS: Record<PickFilter, string[]> = {
-  all: ['date', 'place', 'table', 'image'],
-  date: ['date'],
-  place: ['place'],
-  table: ['table'],
-  image: ['image'],
+function done() {
+  const d = draft.value
+  if (!d?.editingId) return
+  const id = d.editingId
+  state.visuals = state.visuals.map((v) =>
+    v.id === id ? { ...v, visual: JSON.parse(JSON.stringify(d.visual)), pick: pickStateOf(d) } : v,
+  )
+  state.fromExample = false
+  state.vdraft = null
+  state.panelOpen = false
+  selectedBlock.value = id
+  announce('Visual placed.')
 }
-const litKinds = computed(() =>
-  panelOpen.value && state.vdraft ? KINDS[state.vdraft.filter] : null,
+const confirmCancel = ref(false)
+function cancel(force = false) {
+  const d = draft.value
+  if (!d) return
+  if (!force && undoStack.value.length) {
+    confirmCancel.value = true
+    return
+  }
+  confirmCancel.value = false
+  if (d.isNew) state.visuals = state.visuals.filter((v) => v.id !== d.editingId)
+  state.vdraft = null
+  state.panelOpen = false
+  announce(d.isNew ? 'Visual discarded.' : 'Changes discarded.')
+}
+function onKeydown(e: KeyboardEvent) {
+  if (e.key !== 'Escape' || !picking.value || e.defaultPrevented) return
+  // Not while a popover, dialog or menu is open (Escape closes that first).
+  const open = document.querySelectorAll<HTMLElement>('.cdx-popover, .cdx-dialog, .cdx-menu')
+  if ([...open].some((el) => el.offsetParent !== null)) return
+  const t = e.target instanceof Element ? e.target : null
+  if (t?.closest('input, [contenteditable="true"], [contenteditable="plaintext-only"]')) return
+  cancel()
+}
+onMounted(() => window.addEventListener('keydown', onKeydown))
+onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
+
+// ── Spotlight: one kind, one section ───────────────────────────────────────
+const PROMPT: Record<Exclude<PickFilter, 'all'>, string> = {
+  series: 'A chart from one sentence',
+  date: 'Tap a date in the text',
+  place: 'Tap a place in the text',
+  table: 'Tap “Use this” on a table',
+  image: 'Tap “Use this” on an image',
+}
+const litKind = computed(() => (picking.value && draft.value ? draft.value.filter : null))
+const scopeId = computed(() => (picking.value ? (draft.value?.scope ?? null) : null))
+watch(
+  [scopeId, bodyEl, picking],
+  () => {
+    bodyEl.value?.querySelectorAll('.gm-scope').forEach((el) => el.classList.remove('gm-scope'))
+    sectionEl(scopeId.value)?.classList.add('gm-scope')
+  },
+  { flush: 'post' },
 )
 const pickedIds = computed(() => {
-  const d = state.vdraft
+  const d = draft.value
   if (!d) return new Set<string>()
   return new Set([...itemsOf(d).map((i) => i.id), d.tableId ?? '', d.imageId ?? ''].filter(Boolean))
 })
 function toggle(id: string) {
-  const d = state.vdraft
+  const d = draft.value
   const a = article.value
   if (!d || !a) return
-  if (a.tables.some((t) => t.id === id)) pickTable(d, a, id)
-  else if (/^img\d+$/.test(id)) pickImage(d, a, id)
-  else toggleMention(d, a, id)
+  const from = bodyEl.value?.querySelector<HTMLElement>(`[data-tl-id="${CSS.escape(id)}"]`) ?? null
+  const had = pickedIds.value.has(id)
+  record()
+  if (a.tables.some((t) => t.id === id)) {
+    pickTable(d, a, id)
+    const t = tableOf(a, d.tableId)
+    // Directly after its table.
+    if (t) placeAfter(d.editingId!, t.el.id, t.sectionId)
+  } else if (/^img\d+$/.test(id)) {
+    pickImage(d, a, id)
+    d.visual.form = 'annotated'
+    // In place of its image.
+    const fig = bodyEl.value?.querySelector<HTMLElement>(`[data-tl-id="${id}"]`)
+    if (fig?.id) placeAfter(d.editingId!, fig.id, sectionIdOf(fig))
+  } else {
+    toggleMention(d, a, id)
+    d.currentId = had ? null : id
+  }
+  if (!had && from) fly(from)
+  const n = itemsOf(d).length
+  const def = FORMS[d.visual.form]
+  announce(
+    had
+      ? `Removed. ${n} ${n === 1 ? def.noun[0] : def.noun[1]}.`
+      : `Added. ${n} ${n === 1 ? def.noun[0] : def.noun[1]}.`,
+  )
+}
+function placeAfter(id: string, anchorId: string, sectionId: string) {
+  state.visuals = state.visuals.map((v) =>
+    v.id === id
+      ? {
+          ...v,
+          placement: { kind: 'after', anchorId, sectionId, sectionTitle: topOf(sectionId).title },
+        }
+      : v,
+  )
 }
 useSelectMode({
   root: bodyEl,
-  active: panelOpen,
-  kind: litKinds,
+  active: picking,
+  kind: litKind,
   picked: pickedIds,
   toggle,
   describe: (id) =>
-    pickedIds.value.has(id) ? 'Picked, tap to remove' : 'Tap to add to the visual',
+    pickedIds.value.has(id) ? 'On the visual: tap to remove' : 'Tap to add to the visual',
   sentenceOf: (id) => {
     const m = [...(article.value?.mentions ?? []), ...(article.value?.places ?? [])].find(
       (x) => x.id === id,
     )
     return m ? { start: m.anchor.sentenceStart, end: m.anchor.sentenceEnd } : null
   },
+  within: (el) => {
+    const sec = sectionEl(scopeId.value)
+    return !sec || sec.contains(el)
+  },
+  scope: scopeId,
 })
-// A table is picked by tapping anywhere on it (big targets on phones).
 function onTableClick(e: MouseEvent) {
-  if (!panelOpen.value || !litKinds.value?.includes('table')) return
+  if (!picking.value || litKind.value !== 'table') return
   const t = (e.target as Element).closest<HTMLElement>('table[data-pick-table]')
   if (!t || (e.target as Element).closest('.tl-mention')) return
+  const sec = sectionEl(scopeId.value)
+  if (sec && !sec.contains(t)) return
   e.preventDefault()
   toggle(t.dataset.pickTable!)
 }
@@ -321,8 +503,192 @@ watch(bodyEl, (el, old) => {
   el?.addEventListener('click', onTableClick)
 })
 
-function showItemSource(item: Item) {
-  if (panelMode.value === 'sheet') sheetExpanded.value = false
+/** One short transition from the chip to the block (none with reduced motion). */
+function fly(from: HTMLElement) {
+  const to = draft.value?.editingId ? mountEls[draft.value.editingId] : null
+  if (reducedMotion || !to) return
+  const a = from.getBoundingClientRect()
+  const b = to.getBoundingClientRect()
+  const ghost = document.createElement('div')
+  ghost.className = 'gm-fly'
+  ghost.textContent = from.textContent?.slice(0, 40) ?? ''
+  Object.assign(ghost.style, { left: `${a.left}px`, top: `${a.top}px` })
+  document.body.appendChild(ghost)
+  const dy = Math.max(-window.innerHeight, Math.min(window.innerHeight, b.top + 24 - a.top))
+  ghost
+    .animate(
+      [
+        { transform: 'translate(0, 0)', opacity: 1 },
+        { transform: `translate(${b.left + 24 - a.left}px, ${dy}px) scale(0.6)`, opacity: 0 },
+      ],
+      { duration: 200, easing: 'ease-in' },
+    )
+    .finished.finally(() => ghost.remove())
+}
+
+// ── The bar ────────────────────────────────────────────────────────────────
+const items = computed(() => (draft.value ? itemsOf(draft.value) : []))
+const fits = computed<FormId[]>(() => formsFor(items.value))
+const currentItem = computed(() => items.value.find((i) => i.id === draft.value?.currentId) ?? null)
+const columnsOpen = ref(false)
+/** The bar's scope control: the whole article, or back to the section it started in. */
+function setWhole(on: boolean) {
+  const d = draft.value
+  if (!d) return
+  d.scope = on ? null : (startScope.value ?? currentSection())
+}
+const startScope = ref<string | null>(null)
+watch(
+  () => draft.value?.editingId,
+  () => (startScope.value = draft.value?.scope ?? null),
+)
+/** The visual's own settings, on its block while it is being made: form options, columns, form. */
+const settingsItems = computed(() => {
+  const d = draft.value
+  if (!d) return []
+  const def = FORMS[d.visual.form]
+  const out: { value: string; label: string }[] = []
+  for (const st of def.settings ?? []) {
+    const on = d.visual.options[st.key] !== undefined ? !!d.visual.options[st.key] : st.default
+    out.push({ value: `setting:${st.key}`, label: `${st.label}: ${on ? 'on' : 'off'}` })
+  }
+  if (def.ordered) out.push({ value: 'order', label: 'Order: drag the items on the visual' })
+  if (d.tableId) out.push({ value: 'columns', label: 'Adjust columns' })
+  for (const f of fits.value) if (f !== d.visual.form) out.push({ value: `form:${f}`, label: `Change form: ${FORMS[f].label}` })
+  return out
+})
+function onSetting(action: string | null) {
+  const d = draft.value
+  if (!d || !action) return
+  if (action === 'columns') columnsOpen.value = true
+  else if (action.startsWith('setting:')) {
+    const key = action.slice(8)
+    const st = FORMS[d.visual.form].settings?.find((x) => x.key === key)
+    record()
+    d.visual.options[key] = !(d.visual.options[key] !== undefined ? d.visual.options[key] : st?.default)
+  } else if (action.startsWith('form:')) chooseForm(action.slice(5) as FormId)
+}
+function chooseForm(f: FormId) {
+  const d = draft.value
+  if (!d) return
+  record()
+  d.visual.form = f
+  d.visual.options = { ...defaultsOf(f), ...d.visual.options }
+}
+function addAll() {
+  const d = draft.value
+  const a = article.value
+  if (!d || !a || (d.filter !== 'date' && d.filter !== 'place')) return
+  record()
+  const scope = d.scope
+  const list = d.filter === 'date' ? a.mentions : a.places.filter((p) => p.value.kind !== 'region')
+  const seen = new Set<string>()
+  for (const m of list) {
+    if (scope && topOf(m.anchor.sectionId).id !== scope) continue
+    if (pickedIds.value.has(m.id) || seen.has(m.sentence + m.text)) continue
+    seen.add(m.sentence + m.text)
+    toggleMention(d, a, m.id)
+  }
+  announce(`Added all. ${itemsOf(d).length} items.`)
+}
+function answer(col: number) {
+  const d = draft.value
+  if (!d || !article.value) return
+  record()
+  chooseValueColumn(d, article.value, col)
+}
+function onRole(col: number, role: Parameters<typeof setRole>[3]) {
+  const d = draft.value
+  if (!d || !article.value) return
+  record()
+  setRole(d, article.value, col, role)
+}
+function toBlock() {
+  const id = draft.value?.editingId
+  const m = id ? mountEls[id] : null
+  if (m) scrollToEl(m, 'start', 72)
+}
+
+// ── Labels: spans of the sentence, adjusted in the text ────────────────────
+const spans = useSpanEditor({
+  root: bodyEl,
+  item: currentItem,
+  active: picking,
+  begin: record,
+  change: (span) => currentItem.value && setSpan(currentItem.value, span),
+})
+
+watch(
+  () => spans.dragging.value,
+  (d) => {
+    if (!d && heldShift) {
+      window.scrollBy(0, heldShift)
+      heldShift = 0
+    }
+  },
+)
+
+// ── Edit on the visual ─────────────────────────────────────────────────────
+const findItem = (id: string) => items.value.find((i) => i.id === id)
+function onRename(id: string, label: string) {
+  const it = findItem(id)
+  if (!it) return
+  record()
+  it.label = label
+  it.labelEdited = true
+}
+function onRemove(id: string) {
+  const d = draft.value
+  if (!d) return
+  record()
+  d.visual.sets[0].items = itemsOf(d).filter((i) => i.id !== id)
+  if (d.currentId === id) d.currentId = null
+  refreshForm(d)
+  announce('Removed.')
+}
+function onMove(id: string, delta: number) {
+  const list = items.value
+  const i = list.findIndex((x) => x.id === id)
+  const j = i + delta
+  if (i < 0 || j < 0 || j >= list.length) return
+  record()
+  list.splice(j, 0, list.splice(i, 1)[0])
+}
+function onReorder(order: string[]) {
+  const d = draft.value
+  if (!d) return
+  const by = new Map(itemsOf(d).map((i) => [i.id, i]))
+  d.visual.sets[0].items = order.map((id) => by.get(id)!).filter(Boolean)
+}
+function onSelectItem(id: string | null) {
+  const d = draft.value
+  if (d && id && findItem(id)?.source.span) d.currentId = id
+}
+const imageFor = ref<string | null>(null)
+const imageOpen = computed({
+  get: () => !!imageFor.value,
+  set: (v: boolean) => !v && (imageFor.value = null),
+})
+const imageItem = computed(() => {
+  const it = imageFor.value ? findItem(imageFor.value) : null
+  return it
+    ? {
+        id: it.id,
+        label: it.label,
+        sourceText: it.source.text,
+        sourceDateText: '',
+        image: it.image,
+        date: it.components.time,
+      }
+    : null
+})
+function onImage(img: EventImage | undefined) {
+  const it = imageFor.value ? findItem(imageFor.value) : null
+  if (!it) return
+  record()
+  it.image = img
+}
+function showSource(item: Item) {
   if (bodyEl.value && item.source.anchor)
     showPassage(
       bodyEl.value,
@@ -330,12 +696,209 @@ function showItemSource(item: Item) {
       item.source.kind === 'sentence' ? item.source.text : undefined,
     )
 }
-function showTable() {
-  const id = state.vdraft?.tableId
-  const el = id ? bodyEl.value?.querySelector<HTMLElement>(`[data-pick-table="${id}"]`) : null
-  if (!el) return
-  if (panelMode.value === 'sheet') sheetExpanded.value = false
-  scrollToEl(el, 'start', 96)
+
+// ── Blocks: select, drag to place, move on a phone ─────────────────────────
+const selectedBlock = ref<string | null>(null)
+const shownVisual = (v: PlacedVisual) =>
+  draft.value?.editingId === v.id ? draft.value.visual : v.visual
+function onBlockClick(v: PlacedVisual, e: MouseEvent) {
+  if (!editing.value || picking.value) return
+  if ((e.target as Element).closest('.gm-block__tools')) return
+  reEnter(v.id)
+}
+/** Gaps between the article's blocks: where a visual can go. */
+function gaps() {
+  const body = bodyEl.value
+  if (!body) return []
+  const blocks = Array.from(
+    body.querySelectorAll<HTMLElement>(
+      'section > :is(p, ul, ol, figure, table, div, blockquote, dl)',
+    ),
+  ).filter(
+    (el) =>
+      !el.closest('.tl-mount') &&
+      !el.matches('.tl-mount, .tl-table-pick, .mw-heading') &&
+      el.offsetParent,
+  )
+  return blocks
+}
+let blockSeq = 0
+const ensureId = (el: HTMLElement) => (el.id ||= `gm-blk-${++blockSeq}`)
+const drop = reactive({ on: false, y: 0, left: 0, width: 0, target: null as HTMLElement | null })
+function onHandleDown(v: PlacedVisual, e: PointerEvent) {
+  if (e.button !== 0) return
+  e.preventDefault()
+  const handle = e.currentTarget as HTMLElement
+  handle.setPointerCapture(e.pointerId)
+  const list = gaps()
+  const move = (ev: PointerEvent) => {
+    let best: HTMLElement | null = null
+    let d = Infinity
+    for (const el of list) {
+      const r = el.getBoundingClientRect()
+      const dd = Math.abs(r.bottom - ev.clientY)
+      if (dd < d) {
+        d = dd
+        best = el
+      }
+    }
+    if (!best) return
+    const r = best.getBoundingClientRect()
+    Object.assign(drop, { on: true, y: r.bottom + 4, left: r.left, width: r.width, target: best })
+  }
+  const up = () => {
+    handle.removeEventListener('pointermove', move)
+    handle.removeEventListener('pointerup', up)
+    handle.removeEventListener('pointercancel', up)
+    if (drop.target) placeAfter(v.id, ensureId(drop.target), sectionIdOf(drop.target))
+    drop.on = false
+    drop.target = null
+    state.fromExample = false
+  }
+  handle.addEventListener('pointermove', move)
+  handle.addEventListener('pointerup', up)
+  handle.addEventListener('pointercancel', up)
+}
+function moveBlock(v: PlacedVisual, delta: number) {
+  const mount = mountEls[v.id]
+  const list = gaps()
+  if (!mount) return
+  // The block just before the mount, then one further up or down.
+  const before = list.filter(
+    (el) => el.compareDocumentPosition(mount) & Node.DOCUMENT_POSITION_FOLLOWING,
+  )
+  const i = before.length - 1
+  const target = list[Math.max(0, Math.min(list.length - 1, i + delta))]
+  if (target) placeAfter(v.id, ensureId(target), sectionIdOf(target))
+  state.fromExample = false
+  nextTick(() => setTimeout(() => mountEls[v.id] && scrollToEl(mountEls[v.id]!, 'center'), 60))
+}
+function blockMenu(v: PlacedVisual) {
+  const out = [{ value: 'edit', label: 'Edit' }]
+  if (canCompare(v)) out.push({ value: 'compare', label: 'Compare with…' })
+  if (v.visual.sets.length > 1) out.push({ value: 'uncompare', label: 'Remove comparison' })
+  out.push(
+    { value: 'up', label: 'Move up' },
+    { value: 'down', label: 'Move down' },
+    { value: 'remove', label: 'Remove' },
+  )
+  return out
+}
+function onBlockMenu(v: PlacedVisual, action: string | null) {
+  if (action === 'edit') reEnter(v.id)
+  else if (action === 'compare') compareFor.value = v.id
+  else if (action === 'uncompare') applyCompare(v.id, null)
+  else if (action === 'up') moveBlock(v, -1)
+  else if (action === 'down') moveBlock(v, 1)
+  else if (action === 'remove') {
+    state.visuals = state.visuals.filter((x) => x.id !== v.id)
+    state.fromExample = false
+  }
+}
+
+// ── Compare: a second set from another snapshotted article ─────────────────
+/** Forms that draw a second set (line, columns, bars, rows of small columns), from a table another article also has. */
+function canCompare(v: PlacedVisual) {
+  return (
+    !!FORMS[v.visual.form].compare &&
+    !!article.value &&
+    compareOptions(article.value, v.pick?.tableId ?? null).length > 0
+  )
+}
+const compareFor = ref<string | null>(null)
+const compareChoices = computed(() => {
+  const v = state.visuals.find((x) => x.id === compareFor.value)
+  return v && article.value ? compareOptions(article.value, v.pick?.tableId ?? null) : []
+})
+function applyCompare(id: string, title: string | null) {
+  const v = state.visuals.find((x) => x.id === id)
+  const a = article.value
+  compareFor.value = null
+  if (!v || !a || !v.pick) return
+  const d: VisualDraft = {
+    ...emptyDraft(v.pick.kind),
+    visual: JSON.parse(JSON.stringify(v.visual)),
+    tableId: v.pick.tableId,
+    roles: [...v.pick.roles],
+  }
+  setCompare(d, a, title)
+  state.visuals = state.visuals.map((x) =>
+    x.id === id ? { ...x, visual: d.visual, pick: { ...x.pick!, compareWith: title } } : x,
+  )
+  state.fromExample = false
+  announce(title ? `Compared with ${title}.` : 'Comparison removed.')
+}
+
+// ── Chips on their source: a table, a sentence of numbers over time ─────────
+const shownChips = computed<InlineChip[]>(() => {
+  const a = article.value
+  const body = bodyEl.value
+  if (!editing.value || picking.value || !hub.suggestions || !a || !body) return []
+  const out: InlineChip[] = []
+  for (const c of chipSources(a, state.visuals, gone.value)) {
+    const anchor =
+      c.kind === 'table'
+        ? body.querySelector<HTMLElement>(`[data-pick-table="${c.ref}"]`)
+        : body.querySelector<HTMLElement>(`[data-tl-id="${c.ref}-y0"]`)?.closest<HTMLElement>('p, li')
+    if (anchor?.offsetParent) out.push({ id: c.id, label: c.label, anchor })
+  }
+  return out
+})
+function useChip(id: string) {
+  const a = article.value
+  if (!a) return
+  if (id.startsWith('table:')) {
+    // The same as "Use this" on the table: the figure right after it.
+    const t = a.tables.find((x) => x.id === id.slice(6))
+    if (!t) return
+    start('table', topOf(t.anchor.sectionId).id)
+    toggle(t.id)
+    undoStack.value = []
+    return
+  }
+  const sid = id.slice(7)
+  const d = draftFromSeries(a, sid)
+  const p = bodyEl.value
+    ?.querySelector<HTMLElement>(`[data-tl-id="${sid}-y0"]`)
+    ?.closest<HTMLElement>('p, li')
+  if (!d || !p) return
+  const vid = `v${Date.now().toString(36)}${++ids}`
+  const sec = sectionIdOf(p)
+  state.visuals = [
+    ...state.visuals,
+    {
+      id: vid,
+      visual: d.visual,
+      placement: { kind: 'after', anchorId: ensureId(p), sectionId: sec, sectionTitle: topOf(sec).title },
+    },
+  ]
+  state.vdraft = { ...d, editingId: vid, isNew: true, scope: null, currentId: null, question: null }
+  undoStack.value = []
+  redoStack.value = []
+  state.panelOpen = true
+  announce(`Line chart from one sentence: ${d.visual.sets[0].items.length} points.`)
+}
+function onChipDismiss(id: string, reason: string) {
+  dismiss(id, reason)
+  gone.value = dismissed()
+  announce('Suggestion dismissed.')
+}
+
+// ── Suggestion cards ───────────────────────────────────────────────────────
+const gone = ref(dismissed())
+watch(
+  () => hub.suggestionsReset,
+  () => (gone.value = dismissed()),
+)
+const shownCards = computed(() =>
+  editing.value && !picking.value && hub.suggestions && article.value
+    ? cards(article.value, state.visuals, gone.value)
+    : [],
+)
+function onDismiss(c: { id: string }, reason: string) {
+  dismiss(c.id, reason)
+  gone.value = dismissed()
+  announce('Suggestion dismissed.')
 }
 
 // ── Reader: jump to source and back ────────────────────────────────────────
@@ -373,13 +936,37 @@ watch(
   () => {
     backTo.value = null
     if (state.signal.kind === 'top') window.scrollTo({ top: 0 })
-    else if (state.visuals[0]) scrollTo(state.visuals[0].id, 56)
+    else if (state.visuals[0])
+      nextTick(() =>
+        setTimeout(
+          () =>
+            mountEls[state.visuals[0].id] &&
+            scrollToEl(mountEls[state.visuals[0].id]!, 'start', 56),
+          80,
+        ),
+      )
   },
 )
+watch(editing, (on) => {
+  if (!on) {
+    selectedBlock.value = null
+    if (picking.value) cancel(true)
+  }
+})
+
+const live = ref('')
+function announce(t: string) {
+  live.value = ''
+  requestAnimationFrame(() => (live.value = t))
+}
 const languages = computed(() =>
   article.value?.labelLanguages.length
     ? [{ value: 'en', label: 'English' }, ...article.value.labelLanguages]
     : [],
+)
+const insertItems = [{ value: 'visual', label: 'Visual', icon: cdxIconChart }]
+const prompt = computed(() =>
+  draft.value && draft.value.filter !== 'all' ? PROMPT[draft.value.filter] : '',
 )
 </script>
 
@@ -399,20 +986,21 @@ const languages = computed(() =>
         :example="example"
         :skin="isMobile ? 'mobile' : 'desktop'"
         :languages="languages"
+        suggestion-controls
       />
     </template>
 
     <VisualEditorPageLayout :sidebar-open="false" :editing="editing" :skin="skin">
       <div
+        ref="pageEl"
         class="tl-page gm"
         :class="{
           'tl-page--editing': editing,
-          'tl-page--selecting': panelOpen,
-          'tl-page--tables': panelOpen && litKinds?.includes('table'),
-          'gm--images': panelOpen && litKinds?.includes('image'),
-          'tl-page--sheet': panelOpen && panelMode === 'sheet',
-          'tl-page--side': panelOpen && panelMode === 'side',
-          'tl-page--make-way': panelOpen && panelMode === 'side' && vw < 1400,
+          'tl-page--selecting': picking,
+          'gm--picking': picking,
+          'gm--scoped': picking && !!scopeId,
+          'tl-page--tables': picking && litKind === 'table',
+          'gm--images': picking && litKind === 'image',
         }"
         :data-skin="skin"
       >
@@ -425,19 +1013,34 @@ const languages = computed(() =>
             @edit-click="state.mode = 'edit'"
           >
             <VeToolbar
-              v-if="editing"
+              v-if="editing && !picking"
               :skin="skin"
               :suggestions-on="false"
               :count="0"
               :show-suggestions-toggle="false"
               :can-undo="false"
               :can-redo="false"
-              :can-publish="state.visuals.length > 0 && !panelOpen"
+              :can-publish="state.visuals.length > 0"
               :review="false"
               :insert-items="insertItems"
               @insert="onInsert"
               @close="state.mode = 'read'"
               @publish="state.mode = 'read'"
+            />
+            <VeToolbar
+              v-else-if="picking && !narrow"
+              :skin="skin"
+              :suggestions-on="false"
+              :count="0"
+              :show-suggestions-toggle="false"
+              :can-undo="undoStack.length > 0"
+              :can-redo="redoStack.length > 0"
+              :can-publish="false"
+              :review="false"
+              :insert-items="[]"
+              @undo="undo"
+              @redo="redo"
+              @close="cancel()"
             />
             <CdxProgressBar v-if="!article && !loadError" inline aria-label="Loading article" />
             <CdxMessage v-if="loadError" type="error"
@@ -448,67 +1051,180 @@ const languages = computed(() =>
               <div
                 :ref="setBodyEl"
                 class="tl-body"
-                :contenteditable="editing && !panelOpen ? 'true' : 'false'"
+                :contenteditable="editing && !picking ? 'true' : 'false'"
                 spellcheck="false"
                 v-html="article.html"
               />
             </ArticleRenderer>
           </ArticleWrapper>
         </div>
-
-        <GeneralCurate
-          v-if="panelOpen && article && state.vdraft"
-          v-model:draft="state.vdraft"
-          v-model:placement="draftPlacement"
-          v-model:expanded="sheetExpanded"
-          :article="article"
-          :mode="panelMode"
-          :sections="sections"
-          :cursor-placement="cursorPlacement"
-          :counts="counts"
-          :lang="hub.lang"
-          @close="state.panelOpen = false"
-          @discard="discard"
-          @commit="commit"
-          @show-source="showItemSource"
-          @show-table="showTable"
+        <SuggestionLayer
+          v-if="shownCards.length"
+          :cards="shownCards"
+          :root="bodyEl"
+          :page="pageEl"
+          :skin="narrow ? 'mobile' : 'desktop'"
+          @start="(c) => start(c.kind, c.section.id)"
+          @dismiss="onDismiss"
         />
+        <InlineChips v-if="shownChips.length" :chips="shownChips" :page="pageEl" @use="useChip" @dismiss="onChipDismiss" />
       </div>
     </VisualEditorPageLayout>
 
     <template v-for="v in state.visuals" :key="v.id">
       <Teleport v-if="mountEls[v.id]" :to="mountEls[v.id]!">
-        <ModuleBlock
-          title="Visual"
-          :editing="editing"
-          :active="editingId === v.id"
-          :sections="sections"
-          @edit="openReEdit(v.id)"
-          @remove="removeVisual(v.id)"
-          @move="moveVisual(v.id, $event)"
+        <!-- eslint-disable-next-line vuejs-accessibility/click-events-have-key-events, vuejs-accessibility/no-static-element-interactions -->
+        <div
+          class="gm-block"
+          :class="{
+            'gm-block--editing': editing,
+            'gm-block--active': draft?.editingId === v.id,
+            'gm-block--selected': selectedBlock === v.id && !picking,
+            'gm-block--other': picking && draft?.editingId !== v.id,
+          }"
+          @click="onBlockClick(v, $event)"
         >
+          <!-- While it is being made: the visual's own settings, on the block. -->
+          <div v-if="picking && draft?.editingId === v.id && settingsItems.length" class="gm-block__tools">
+            <CdxMenuButton
+              :selected="null"
+              :menu-items="settingsItems"
+              weight="quiet"
+              size="small"
+              aria-label="Settings for this visual"
+              @update:selected="onSetting"
+            >
+              <CdxIcon :icon="cdxIconSettings" size="small" />
+            </CdxMenuButton>
+          </div>
+          <div v-if="editing && !picking" class="gm-block__tools">
+            <button
+              v-if="!narrow"
+              type="button"
+              class="gm-block__handle"
+              aria-label="Drag to move this visual"
+              @pointerdown="onHandleDown(v, $event)"
+            >
+              <CdxIcon :icon="cdxIconDraggable" size="small" />
+            </button>
+            <CdxMenuButton
+              :selected="null"
+              :menu-items="blockMenu(v)"
+              weight="quiet"
+              size="small"
+              aria-label="Visual options"
+              @update:selected="(a: string | null) => onBlockMenu(v, a)"
+            >
+              <CdxIcon :icon="cdxIconEllipsis" size="small" />
+            </CdxMenuButton>
+          </div>
           <VisualFrame
             :visual="shownVisual(v)"
             :fallback="hub.fallback"
             :lang="hub.lang"
             :skin="skin"
             :spacing="state.spacing"
-            @show="jumpToSource(v.id, $event)"
+            :editing="draft?.editingId === v.id && picking"
+            :prompt="prompt"
+            :focus-id="draft?.editingId === v.id ? draft?.currentId : null"
+            :can-show-source="!picking"
+            @show="(item: Item) => (picking ? showSource(item) : jumpToSource(v.id, item))"
+            @select="onSelectItem"
+            @rename="onRename"
+            @remove="onRemove"
+            @image="(id: string) => (imageFor = id)"
+            @move="onMove"
+            @reorder="onReorder"
           />
-        </ModuleBlock>
+        </div>
       </Teleport>
     </template>
 
+    <EditorBar
+      v-if="picking && draft"
+      :visual="draft.visual"
+      :items="items"
+      :fits="fits"
+      :question="draft.question ?? null"
+      :can-undo="undoStack.length > 0"
+      :prompt="prompt"
+      :scoped="!!draft.scope"
+      :can-add-all="draft.filter === 'date' || draft.filter === 'place'"
+      :narrow="narrow"
+      @undo="undo"
+      @cancel="cancel()"
+      @done="done"
+      @to-block="toBlock"
+      @answer="answer"
+      @form="chooseForm"
+      @whole="setWhole"
+      @add-all="addAll"
+    />
+
+    <KindChooser
+      v-if="article"
+      v-model:open="chooser.open"
+      :anchor="chooser.anchor"
+      :section="chooserTitle"
+      :kinds="kindsIn(chooser.section)"
+      :anywhere="kindsIn(null)"
+      @choose="onChoose"
+    />
+    <ColumnsDialog
+      v-if="draft && article"
+      v-model:open="columnsOpen"
+      :table="tableOf(article, draft.tableId)"
+      :roles="draft.roles"
+      @role="onRole"
+    />
+    <ImagePicker
+      v-if="article"
+      v-model:open="imageOpen"
+      :images="article.images"
+      :event="imageItem"
+      :subject="article.source.title"
+      @choose="onImage"
+    />
+    <CdxDialog
+      :open="!!compareFor"
+      title="Compare with…"
+      :use-close-button="true"
+      @update:open="(o: boolean) => !o && (compareFor = null)"
+    >
+      <p>The same table in another article, as a second set.</p>
+      <div class="gm-compare">
+        <CdxButton v-for="t in compareChoices" :key="t" @click="applyCompare(compareFor!, t)">{{ t }}</CdxButton>
+      </div>
+    </CdxDialog>
+    <CdxDialog
+      v-model:open="confirmCancel"
+      title="Discard this visual?"
+      :use-close-button="true"
+      :primary-action="{ label: 'Discard', actionType: 'destructive' }"
+      :default-action="{ label: 'Keep making it' }"
+      @primary="cancel(true)"
+      @default="confirmCancel = false"
+    >
+      Your picks since you started will be lost.
+    </CdxDialog>
+
+    <div
+      v-if="drop.on"
+      class="gm-drop"
+      :style="{ top: `${drop.y}px`, left: `${drop.left}px`, width: `${drop.width}px` }"
+    />
     <div v-if="backTo && !editing" class="gm__back" :class="{ 'gm__back--mobile': isMobile }">
       <CdxButton action="progressive" @click="backToVisual"
         ><CdxIcon :icon="cdxIconArrowUp" /> Back to visual</CdxButton
       >
     </div>
+    <span class="gm__sr" aria-live="polite">{{ live }}</span>
   </ChromeWrapper>
 </template>
 
 <style scoped>
 .tl-page {
+  position: relative;
   display: flex;
   align-items: flex-start;
 }
@@ -519,8 +1235,9 @@ const languages = computed(() =>
 .tl-page[data-skin='mobile'] {
   overflow-x: clip;
 }
-.tl-page--sheet {
-  padding-bottom: 96px;
+/* The bar never covers the last line. */
+.gm--picking {
+  padding-bottom: 140px;
 }
 .gm__back {
   position: fixed;
@@ -535,11 +1252,52 @@ const languages = computed(() =>
 .gm__back :deep(.cdx-button) {
   background-color: var(--background-color-base);
 }
+.gm__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+.gm-compare {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-50);
+}
+.gm-drop {
+  position: fixed;
+  z-index: 130;
+  height: 0;
+  border-top: var(--border-width-thick, 2px) solid var(--border-color-progressive);
+  pointer-events: none;
+}
 </style>
 
-<!-- Images as pick targets (the body is v-html, so unscoped). Chips, tables and passage marks: ArticleModules' global styles. -->
+<!-- The article while a visual is being made (v-html body, so unscoped). -->
 <style>
+/* Spotlight: the section in use stays; the rest of the article recedes further. */
+.gm.gm--picking .mw-parser-output > section,
+.gm.gm--picking .mw-parser-output > p,
+.gm.gm--picking .mw-parser-output > figure,
+.gm.gm--picking .mw-parser-output > table {
+  transition: opacity 200ms;
+}
+.gm.gm--scoped
+  .mw-parser-output
+  section:not(.gm-scope):not(.gm-scope section):not(:has(.gm-scope)) {
+  opacity: 0.25;
+}
+.gm.gm--picking .tl-mount {
+  opacity: 1 !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .gm.gm--picking .mw-parser-output > section {
+    transition: none;
+  }
+}
+/* An image in use: outline and one "Use this". */
 .gm.gm--images .mw-parser-output .tl-pick-image.tl-mention--candidate {
+  position: relative;
   opacity: 1;
   margin: 0;
   padding: 0;
@@ -551,10 +1309,138 @@ const languages = computed(() =>
 .gm.gm--images .mw-parser-output .tl-pick-image.tl-mention--candidate img {
   opacity: 1;
 }
+.gm.gm--images .mw-parser-output .tl-pick-image.tl-mention--candidate::after {
+  content: 'Use this';
+  position: absolute;
+  top: var(--spacing-50);
+  left: var(--spacing-50);
+  padding: var(--spacing-25) var(--spacing-75);
+  border-radius: var(--border-radius-base, 2px);
+  background: var(--background-color-progressive-subtle);
+  color: var(--color-progressive);
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+}
 .gm.gm--images .mw-parser-output .tl-pick-image.tl-mention--picked {
   outline-width: var(--border-width-thick, 2px);
 }
+.gm.gm--images .mw-parser-output .tl-pick-image.tl-mention--picked::after {
+  content: 'In use';
+  background: var(--background-color-progressive);
+  color: var(--color-inverted-fixed, #fff);
+}
 .gm.tl-page--selecting:not(.gm--images) .mw-parser-output .tl-pick-image {
   opacity: 0.35;
+}
+.gm .mw-parser-output .gm-replaced {
+  display: none;
+}
+
+/* The block: hover tools in edit mode; the block being made; a placed one just finished. */
+.gm-block {
+  position: relative;
+  transition: opacity 200ms;
+}
+.gm-block--editing:not(.gm-block--active) {
+  cursor: pointer;
+}
+.gm-block--editing:not(.gm-block--active):hover,
+.gm-block--selected {
+  outline: var(--border-width-base, 1px) solid var(--border-color-progressive);
+  outline-offset: 4px;
+}
+.gm-block--active {
+  outline: var(--border-width-thick, 2px) solid var(--border-color-progressive);
+  outline-offset: 6px;
+}
+.gm-block--other {
+  opacity: 0.25;
+}
+.gm-block__tools {
+  position: absolute;
+  top: var(--spacing-50);
+  right: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--background-color-base);
+}
+.gm-block__handle {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-subtle);
+  cursor: grab;
+  touch-action: none;
+}
+.gm-block__handle:active {
+  cursor: grabbing;
+}
+
+/* The label span: underlined in its sentence (not a chip), with an end to drag at each side. */
+.gm-span {
+  position: absolute;
+  inset: 0 auto auto 0;
+  pointer-events: none;
+  z-index: 6;
+}
+.gm-span__line {
+  position: absolute;
+  height: 0;
+  border-top: var(--border-width-thick, 2px) solid var(--border-color-progressive);
+  transform: translateY(1px);
+}
+/* Each end: a 44×44 target around a thin bar and a dot (the look is unchanged). */
+.gm-span__handle {
+  position: absolute;
+  width: 44px;
+  height: 44px;
+  margin: -34px 0 0 -22px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: ew-resize;
+  pointer-events: auto;
+  touch-action: none;
+}
+.gm-span__handle::before {
+  content: '';
+  position: absolute;
+  left: 21px;
+  top: 12px;
+  width: 2px;
+  height: 22px;
+  background: var(--background-color-progressive);
+}
+.gm-span__handle::after {
+  content: '';
+  position: absolute;
+  left: 17px;
+  top: 32px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--background-color-progressive);
+}
+.gm-span__handle:focus-visible {
+  outline: var(--border-width-thick, 2px) solid var(--outline-color-progressive--focus, #36c);
+}
+.gm-fly {
+  position: fixed;
+  z-index: 140;
+  padding: 1px 6px;
+  border-radius: var(--border-radius-base, 2px);
+  background: var(--background-color-progressive);
+  color: var(--color-inverted-fixed, #fff);
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-small);
+  pointer-events: none;
+  white-space: nowrap;
 }
 </style>

@@ -1,11 +1,13 @@
 <script setup lang="ts">
 /**
- * Choose an image for an item: one already in the article (suggested by
- * caption overlap), or a file from Wikimedia Commons, searched from the entity
- * the source sentence links to. Commons files carry author and licence.
+ * Choose an image for an item: one from the pages its sentence links to
+ * (an album's cover from the album's article), one already in the article
+ * (suggested by caption overlap), or a file from Wikimedia Commons, searched
+ * from the entity the source sentence links to. Files carry author and licence.
  */
 import { computed, ref, watch } from 'vue'
 import {
+  CdxButton,
   CdxDialog,
   CdxMessage,
   CdxProgressBar,
@@ -16,12 +18,19 @@ import {
 import { overlap } from '../pick/duplicates'
 import type { BaseItem, EventImage, TimelineDate } from '../model/types'
 import { searchCommons, suggestQuery } from './commons'
+import { linkedPageImages, type LinkedPageImages } from './linkedImages'
 
 const props = defineProps<{
   images: EventImage[]
   /** The item being illustrated (an event, a place). */
   event: (BaseItem & { date?: TimelineDate; name?: string }) | null
   subject: string
+  /** Offer "Remove image" here, where the image is chosen (the event keeps the rest). */
+  removable?: boolean
+  /** Articles the item's sentence links to (blue links): their pictures are offered first. */
+  linkedPages?: string[]
+  /** The wiki those articles are on. */
+  host?: string
 }>()
 const open = defineModel<boolean>('open', { default: false })
 const emit = defineEmits<{ choose: [image: EventImage | undefined] }>()
@@ -49,6 +58,27 @@ const ranked = computed(() => {
     .map((s) => s.img)
   return { suggested, rest: props.images.filter((i) => !suggested.includes(i)) }
 })
+
+// ── From the linked articles ──────────────────────────────────────────────
+const linked = ref<LinkedPageImages[]>([])
+const linkedLoading = ref(false)
+let linkedController: AbortController | null = null
+async function loadLinked() {
+  linkedController?.abort()
+  linked.value = []
+  const titles = props.linkedPages ?? []
+  if (!titles.length) return
+  const c = (linkedController = new AbortController())
+  linkedLoading.value = true
+  try {
+    const found = await linkedPageImages(titles, props.host ?? 'en.wikipedia.org', c.signal)
+    if (!c.signal.aborted) linked.value = found
+  } catch {
+    /* Nothing to offer from links: the article's own images and Commons remain. */
+  } finally {
+    if (!c.signal.aborted) linkedLoading.value = false
+  }
+}
 
 // ── Commons ────────────────────────────────────────────────────────────────
 const query = ref('')
@@ -81,7 +111,9 @@ function onInput(q: string) {
 // Fresh state per event; prefill Commons with the entity the sentence names.
 watch(open, (isOpen) => {
   if (!isOpen || !props.event) return
-  source.value = props.event.image?.source === 'commons' ? 'commons' : 'article'
+  // A file from a linked article opens where it was found (with the article's own).
+  source.value = props.event.image?.source === 'commons' && !props.event.image.id.startsWith('wiki:') ? 'commons' : 'article'
+  void loadLinked()
   query.value =
     props.event.name ?? suggestQuery(props.event.sourceLinks, props.event.label, props.subject)
   results.value = []
@@ -101,8 +133,43 @@ const isChosen = (img: EventImage) => props.event?.image?.src === img.src
 <template>
   <CdxDialog v-model:open="open" title="Image" :use-close-button="true" class="ip">
     <CdxToggleButtonGroup v-model="source" class="ip__source" :buttons="sources" />
+    <p v-if="removable && event?.image" class="ip__current">
+      <img :src="event.image.src" :alt="event.image.caption" />
+      <small
+        >{{ event.image.caption
+        }}<template v-if="event.image.source === 'commons'">
+          · {{ event.image.artist }} ·
+          <a v-if="event.image.licenseUrl" :href="event.image.licenseUrl" target="_blank" rel="noopener">{{
+            event.image.license
+          }}</a
+          ><template v-else>{{ event.image.license }}</template> ·
+          <a :href="event.image.pageUrl" target="_blank" rel="noopener">File page</a></template
+        ></small
+      >
+      <CdxButton weight="quiet" action="destructive" @click="choose(undefined)">Remove image</CdxButton>
+    </p>
 
     <template v-if="source === 'article'">
+      <CdxProgressBar v-if="linkedLoading" inline aria-label="Looking for images in linked articles" />
+      <template v-for="page in linked" :key="page.title">
+        <h4 class="ip__heading">From “{{ page.title }}”</h4>
+        <ul class="ip__grid">
+          <li v-for="img in page.images" :key="img.id">
+            <button
+              type="button"
+              class="ip__item"
+              :class="{ 'ip__item--on': isChosen(img) }"
+              :title="img.fileTitle"
+              @click="choose(img)"
+            >
+              <img :src="img.src" alt="" loading="lazy" />
+              <small>{{ img.caption }}</small>
+              <small class="ip__credit">{{ img.artist }} · {{ img.license }}</small>
+            </button>
+          </li>
+        </ul>
+      </template>
+      <h4 v-if="linked.length" class="ip__heading">In this article</h4>
       <template v-if="ranked.suggested.length">
         <h4 class="ip__heading">Suggested</h4>
         <ul class="ip__grid">
@@ -172,6 +239,22 @@ const isChosen = (img: EventImage) => props.event?.image?.src === img.src
 <style scoped>
 .ip__source {
   margin-bottom: var(--spacing-75);
+}
+.ip__current {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-50) var(--spacing-75);
+  margin: 0 0 var(--spacing-75);
+}
+.ip__current img {
+  width: 72px;
+  height: 48px;
+  object-fit: cover;
+}
+.ip__current small {
+  flex: 1 1 12em;
+  color: var(--color-subtle);
 }
 .ip__search {
   margin-bottom: var(--spacing-75);

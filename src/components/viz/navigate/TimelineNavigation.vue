@@ -1,0 +1,416 @@
+<script setup lang="ts">
+/**
+ * Timeline navigation: one article, one shared event collection, five ways
+ * to navigate it by time. The article is the reading surface and stays
+ * complete and in its own order; a variant only adds a navigator (beside
+ * it, below the introduction, or as a bar) and uses the shared navigation
+ * contract (useNavigator.ts) to move to a passage.
+ *
+ * URL: ?variant=contents|ruler|trail|parallel|milestones
+ *              |field|field-margin|link-columns|link-chronology|connect-brackets|connect-paths|paired
+ *      &article=frank-gehry|bilbao|test-fixture  &event=<id>  &dir=rtl  &motion=reduce
+ *      &title=<any Wikipedia article>   read live, as on ProtoWiki's article template
+ * Links in the article and the header search open other articles here (`?title=`),
+ * so a timeline can be made on any of them.
+ * Changing the variant keeps the selected event.
+ */
+import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, shallowRef, watch } from 'vue'
+import { useRoute, useRouter, type LocationQuery } from 'vue-router'
+import { CdxMessage, CdxProgressBar } from '@wikimedia/codex'
+import { cdxIconCalendar } from '@wikimedia/codex-icons'
+
+import ArticleRenderer from '@/components/article/ArticleRenderer.vue'
+import ArticleWrapper from '@/components/article/ArticleWrapper.vue'
+import ChromeWrapper from '@/components/chrome/ChromeWrapper.vue'
+import VeToolbar from '@/components/visual-editor/VeToolbar.vue'
+import { provideChromeSearchHandlers } from '@/composables/useChromeSearch'
+import { PROTOWIKI_ARTICLE_WIKI_HOST, PROTOWIKI_IN_ARTICLE_WIKI_LINK } from '@/composables/useInArticleWikiLinks'
+import { parseWikiPageTitleQuery } from '@/composables/useWikiPageTitleQuery'
+import { globalSkin } from '@/theme'
+
+import '../tokens.css'
+import { loadArticle, type LoadedArticle } from '../host/loadArticle'
+import { rememberPath } from '../host/hub'
+import { setDayFirst } from '../model/dates'
+import { NAV, type NavContext } from './context'
+import { ARTICLES, buildCollection, emptyCollection, isLive, type ArticleId, type Collection } from './events'
+import { buildFixture, FIXTURE_SOURCE } from './fixture'
+import { OCCURRENCE_VARIANTS, VARIANTS, type VariantId } from './messages'
+import { buildOccurrences, type Occurrences } from './occurrences'
+import NavMenu from './NavMenu.vue'
+import { createNavigator } from './useNavigator'
+import { useAuthoredTimeline } from './ruler/authoring'
+import VariantContents from './variants/VariantContents.vue'
+import VariantMilestones from './variants/VariantMilestones.vue'
+import VariantParallel from './variants/VariantParallel.vue'
+import VariantRuler from './variants/VariantRuler.vue'
+import VariantTrail from './variants/VariantTrail.vue'
+import VariantConnections from './variants/VariantConnections.vue'
+import VariantField from './variants/VariantField.vue'
+import VariantLinks from './variants/VariantLinks.vue'
+import VariantPaired from './variants/VariantPaired.vue'
+
+/**
+ * `standalone`: one variant on its own page (for sharing), without the menu that
+ * switches variants and prototypes; the header keeps ProtoWiki's own user menu.
+ */
+const props = defineProps<{ standalone?: VariantId }>()
+
+const route = useRoute()
+const router = useRouter()
+const one = (q: LocationQuery, k: string) => {
+  const v = q[k]
+  return ((Array.isArray(v) ? v[0] : v) ?? null) as string | null
+}
+
+const variant = computed<VariantId>(() => {
+  if (props.standalone) return props.standalone
+  const v = one(route.query, 'variant')
+  return (VARIANTS.find((x) => x.id === v)?.id ?? 'contents') as VariantId
+})
+/** The wiki every live article is read from (ProtoWiki's default). */
+const WIKI_HOST = 'en.wikipedia.org'
+const norm = (t: string) => t.replace(/_/g, ' ').trim().toLowerCase()
+/** `?title=` names any article (the curated demos keep their own snapshots); else `?article=`. */
+const articleId = computed<ArticleId>(() => {
+  const title = parseWikiPageTitleQuery(route.query)
+  if (title) {
+    const curated = (Object.keys(ARTICLES) as (keyof typeof ARTICLES)[]).find((k) => norm(ARTICLES[k].source.title) === norm(title))
+    return curated ?? `live:${WIKI_HOST}:${title.replace(/_/g, ' ').trim()}`
+  }
+  const a = one(route.query, 'article')
+  return a === 'bilbao' || a === 'test-fixture' ? a : 'frank-gehry'
+})
+const liveTitle = (id: ArticleId) => id.split(':').slice(2).join(':')
+
+// ── Other articles: links and search open them here, as on the wiki ────────
+function locationFor(title: string) {
+  const q: LocationQuery = { ...route.query, title }
+  delete q.article
+  delete q.event
+  return { path: route.path, query: q }
+}
+function openArticle(title: string | null | undefined) {
+  const t = title?.trim()
+  if (!t) return
+  void router.push(locationFor(t)).then(() => window.scrollTo({ top: 0 }))
+}
+provide(PROTOWIKI_ARTICLE_WIKI_HOST, computed(() => WIKI_HOST))
+provide(PROTOWIKI_IN_ARTICLE_WIKI_LINK, {
+  navigate: openArticle,
+  resolveUrl: (title) => (title?.trim() ? router.resolve(locationFor(title.trim())).href : null),
+})
+provideChromeSearchHandlers({ onSelect: openArticle, onSubmit: ({ title }) => openArticle(title) })
+const dir = computed(() => (one(route.query, 'dir') === 'rtl' ? 'rtl' : 'ltr'))
+/** `?motion=reduce`: behave as with the reduced-motion setting (no smooth scrolling or fades). */
+watch(
+  () => one(route.query, 'motion'),
+  (m) => {
+    if (m === 'reduce') document.documentElement.dataset.tnMotion = 'reduce'
+    else delete document.documentElement.dataset.tnMotion
+  },
+  { immediate: true },
+)
+onBeforeUnmount(() => delete document.documentElement.dataset.tnMotion)
+
+const VARIANT_COMPONENTS = {
+  contents: VariantContents,
+  ruler: VariantRuler,
+  trail: VariantTrail,
+  parallel: VariantParallel,
+  milestones: VariantMilestones,
+  field: VariantField,
+  'field-margin': VariantField,
+  'link-columns': VariantLinks,
+  'link-chronology': VariantLinks,
+  'connect-brackets': VariantConnections,
+  'connect-paths': VariantConnections,
+  paired: VariantPaired,
+}
+
+// ── Layout ─────────────────────────────────────────────────────────────────
+const vw = ref(typeof window === 'undefined' ? 1440 : window.innerWidth)
+const onResize = () => (vw.value = window.innerWidth)
+onMounted(() => window.addEventListener('resize', onResize))
+onBeforeUnmount(() => window.removeEventListener('resize', onResize))
+/** The desktop article column is 1016px; a margin column needs 248px more beside it. */
+const width = computed<'narrow' | 'medium' | 'wide'>(() =>
+  vw.value < 640 ? 'narrow' : vw.value < 1300 ? 'medium' : 'wide',
+)
+const skin = computed(() => globalSkin.value)
+/** Which margin column the variant uses when wide. */
+const margin = computed<'start' | 'end' | null>(() => {
+  if (width.value !== 'wide') return null
+  if (variant.value === 'contents' || variant.value === 'field-margin') return 'start'
+  if (variant.value === 'trail' || variant.value.startsWith('connect-')) return 'end'
+  return null
+})
+
+// ── Article and collection ────────────────────────────────────────────────
+const article = shallowRef<LoadedArticle | null>(null)
+const collection = shallowRef<Collection | null>(null)
+const occurrences = shallowRef<Occurrences | null>(null)
+const loadError = ref<string | null>(null)
+async function load(id: ArticleId) {
+  article.value = null
+  collection.value = null
+  occurrences.value = null
+  loadError.value = null
+  try {
+    const source = isLive(id)
+      ? { slug: id, title: liveTitle(id), defaultSection: { id: 'Lead', title: 'Lead' }, live: { host: WIKI_HOST } }
+      : id === 'test-fixture'
+        ? FIXTURE_SOURCE
+        : ARTICLES[id].source
+    const a = await loadArticle(source)
+    if (articleId.value !== id) return
+    setDayFirst(a.dayFirst)
+    collection.value = isLive(id) ? emptyCollection(id, a) : id === 'test-fixture' ? buildFixture(a) : buildCollection(id, a)
+    occurrences.value = buildOccurrences(id, a, collection.value)
+    article.value = a
+  } catch (e) {
+    loadError.value = String((e as Error)?.message ?? e)
+  }
+}
+watch(articleId, load, { immediate: true })
+
+const bodyEl = ref<HTMLElement | null>(null)
+/** B's timeline is authored: one saved item list per article, edited in place (ruler/authoring.ts). */
+const authoring = useAuthoredTimeline({ articleId, article, collection })
+/** What the navigator indexes: the shared collection, the richer occurrence records (pass 2), or B's authored timeline. */
+const events = computed(() =>
+  variant.value === 'ruler'
+    ? authoring.events.value
+    : OCCURRENCE_VARIANTS.has(variant.value)
+      ? (occurrences.value?.items ?? [])
+      : (collection.value?.events ?? []),
+)
+// The article editor belongs to B only; leaving B or the article ends any edit.
+watch([variant, articleId], () => authoring.cancel())
+const insertItems = [{ value: 'timeline', label: 'Timeline', icon: cdxIconCalendar }]
+function onEditTab() {
+  if (variant.value === 'ruler') authoring.ve.value = true
+}
+const nav = createNavigator({ body: bodyEl, events })
+
+// ── Mount below the introduction (before the first section heading) ───────
+const leadMount = ref<HTMLElement | null>(null)
+function placeLeadMount() {
+  const body = bodyEl.value
+  if (!body) return
+  let mount = leadMount.value
+  if (!mount || !body.contains(mount)) {
+    mount = document.createElement('div')
+    mount.className = 'tn-mount'
+  }
+  const lead = body.querySelector(':scope > section[data-mw-section-id="0"]')
+  if (lead) {
+    if (lead.nextElementSibling !== mount) lead.after(mount)
+  } else if (body.firstElementChild !== mount) body.prepend(mount)
+  leadMount.value = mount
+}
+watch(bodyEl, (el) => {
+  leadMount.value = null
+  if (!el) return
+  // After the skin has restructured headings.
+  nextTick(() => setTimeout(placeLeadMount, 60))
+})
+
+// ── URL ⇄ selected event (replace: never adds history) ─────────────────────
+watch(
+  () => nav.selectedId.value,
+  (id) => {
+    if ((one(route.query, 'event') ?? null) === id) return
+    const q = { ...route.query }
+    if (id) q.event = id
+    else delete q.event
+    void router.replace({ query: q, hash: route.hash })
+  },
+)
+watch(
+  [events, () => one(route.query, 'event')],
+  ([list, id]) => {
+    if (!list.length) return
+    nav.selectedId.value = id && list.some((e) => e.id === id) ? id : null
+  },
+  { immediate: true },
+)
+watch(articleId, () => {
+  nav.origin.value = null
+  nav.unresolved.value = null
+  nav.range.value = null
+})
+onMounted(() => props.standalone || rememberPath('/timeline-navigation'))
+/**
+ * While the article editor is open, links are text to edit, not ways out (as in
+ * VisualEditor): a click on one does not open it. Captured on the document so
+ * it runs before ProtoWiki's in-article link handler, which skips a prevented click.
+ */
+function holdLinks(e: MouseEvent) {
+  if (!authoring.ve.value) return
+  const a = (e.target as Element | null)?.closest?.('a[href]')
+  if (a && bodyEl.value?.contains(a)) e.preventDefault()
+}
+onMounted(() => document.addEventListener('click', holdLinks, true))
+onBeforeUnmount(() => document.removeEventListener('click', holdLinks, true))
+
+const ctx = computed<NavContext | null>(() =>
+  collection.value && article.value
+    ? {
+        collection: collection.value,
+        article: article.value,
+        nav,
+        era: !!collection.value.era,
+        occurrences: occurrences.value?.items ?? [],
+        articleId: articleId.value,
+        variant: variant.value,
+        width,
+        skin,
+        authoring,
+      }
+    : null,
+)
+// Variants inject a stable object; its fields are refreshed when the article changes.
+const provided = {} as NavContext & { leadMount: typeof leadMount; margin: typeof margin }
+watch(
+  ctx,
+  (c) => {
+    if (c) Object.assign(provided, c, { leadMount, margin })
+  },
+  { immediate: true },
+)
+provide(NAV, provided)
+</script>
+
+<template>
+  <ChromeWrapper :dir="dir">
+    <template
+      v-if="!standalone"
+      #user-menu
+    >
+      <NavMenu
+        :variant="variant"
+        :article="articleId"
+        :dir="dir"
+      />
+    </template>
+
+    <div
+      class="tn-page"
+      :class="[`tn-page--${variant}`, margin && `tn-page--margin-${margin}`, { 'tn-page--authoring': authoring.editing.value }]"
+      :data-variant="variant"
+    >
+      <aside
+        v-if="margin === 'start'"
+        id="tn-margin-start"
+        class="tn-page__margin"
+      />
+      <div class="tn-page__main">
+        <ArticleWrapper
+          :title="collection?.title ?? ''"
+          :dir="dir"
+          :active-view="authoring.ve.value ? 'edit' : 'read'"
+          @edit-click="onEditTab"
+          @read-click="authoring.cancel()"
+        >
+          <!-- B: the article editor's toolbar; Insert → Timeline starts a timeline from dates in the text. -->
+          <VeToolbar
+            v-if="authoring.ve.value && variant === 'ruler'"
+            :skin="skin"
+            :suggestions-on="false"
+            :count="0"
+            :show-suggestions-toggle="false"
+            :can-undo="authoring.canUndo.value"
+            :can-redo="false"
+            :can-publish="authoring.editing.value"
+            :review="false"
+            :insert-items="insertItems"
+            @insert="authoring.startNew()"
+            @undo="authoring.undo()"
+            @publish="authoring.done()"
+            @close="authoring.cancel()"
+          />
+          <CdxProgressBar
+            v-if="!article && !loadError"
+            inline
+            aria-label="Loading article"
+          />
+          <CdxMessage
+            v-if="loadError"
+            type="error"
+          >
+            Could not load the article: {{ loadError }}
+          </CdxMessage>
+          <CdxMessage
+            v-if="collection?.missing.length"
+            type="warning"
+          >
+            Some curated events were not found in this revision: {{ collection.missing.join('; ') }}
+          </CdxMessage>
+          <ArticleRenderer
+            v-if="article"
+            :key="articleId"
+            :dir="dir"
+          >
+            <!-- eslint-disable-next-line vue/no-v-html -->
+            <div
+              :ref="(el) => (bodyEl = el as HTMLElement | null)"
+              class="tn-body"
+              v-html="article.html"
+            />
+          </ArticleRenderer>
+        </ArticleWrapper>
+      </div>
+      <aside
+        v-if="margin === 'end'"
+        id="tn-margin-end"
+        class="tn-page__margin"
+      />
+    </div>
+
+    <component
+      :is="VARIANT_COMPONENTS[variant]"
+      v-if="ctx"
+      :key="`${variant}:${articleId}`"
+    />
+
+    <div
+      class="tn-visually-hidden"
+      aria-live="polite"
+      role="status"
+    >
+      {{ nav.announcement.value }}
+    </div>
+  </ChromeWrapper>
+</template>
+
+<style scoped>
+.tn-page {
+  position: relative;
+  /* Room for the bars fixed at the bottom, so they never cover the article's last lines. */
+  padding-block-end: 96px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  justify-content: center;
+}
+.tn-page--margin-start {
+  grid-template-columns: 232px minmax(0, 1016px);
+  column-gap: var(--spacing-100);
+}
+.tn-page--margin-end {
+  grid-template-columns: minmax(0, 1016px) 248px;
+  column-gap: var(--spacing-100);
+}
+.tn-page__main {
+  min-width: 0;
+}
+.tn-page__margin {
+  position: relative;
+  min-width: 0;
+  padding-block-start: var(--spacing-150);
+}
+</style>
+
+<style>
+@import './navigate.css';
+</style>

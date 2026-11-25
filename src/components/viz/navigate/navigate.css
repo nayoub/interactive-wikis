@@ -1,0 +1,336 @@
+/*
+ * Timeline navigation: the few global rules the navigators share. Everything
+ * else is scoped in each variant. Colours are Codex tokens only, so the
+ * light and dark themes follow.
+ */
+
+.tn-visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Passage links in the navigators (outside or inside the article). */
+.tn-link,
+.mw-parser-output a.tn-link {
+  color: var(--color-progressive);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.tn-link:visited,
+.mw-parser-output a.tn-link:visited {
+  color: var(--color-visited, var(--color-progressive));
+}
+.tn-link:hover {
+  text-decoration: underline;
+}
+.tn-link:focus-visible {
+  outline: var(--border-width-thick, 2px) solid var(--outline-color-progressive--focus, #36c);
+  outline-offset: 1px;
+  border-radius: var(--border-radius-base);
+}
+
+/*
+ * The jump: the sentence gets a background wash only (text and link colours
+ * are untouched), held, then lighter, then gone. Reduced motion: held, then gone.
+ */
+::highlight(tn-flash) {
+  background-color: var(--background-color-progressive-subtle--active);
+}
+::highlight(tn-flash-fade) {
+  background-color: var(--background-color-progressive-subtle);
+}
+/* Return to reading: the paragraph you came back to, in a neutral wash. */
+::highlight(tn-origin) {
+  background-color: var(--background-color-interactive-subtle--hover, var(--background-color-neutral-subtle));
+}
+
+/*
+ * The selected passage keeps a bar in the margin beside its paragraph (a
+ * shape, not only a colour), without moving any text.
+ */
+.tn-passage--selected {
+  position: relative;
+}
+.tn-passage--selected::before {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: calc(-1 * var(--spacing-75, 12px));
+  width: 3px;
+  background: var(--color-progressive);
+  pointer-events: none;
+}
+.tn-passage--selected:focus {
+  outline: none;
+}
+.tn-passage--selected:focus-visible {
+  outline: var(--border-width-thick, 2px) solid var(--outline-color-progressive--focus, #36c);
+  outline-offset: 4px;
+}
+/* Blocks focused by "Return to reading" (tabindex -1): no ring unless focus-visible. */
+.tn-body [tabindex='-1']:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* The mount below the introduction: a block between the lead and the first section. */
+.tn-mount {
+  /* Below the lead's infobox, at the full reading width. */
+  clear: both;
+  margin-block: var(--spacing-100) var(--spacing-150);
+}
+.tn-mount:empty {
+  display: none;
+}
+
+/* `?motion=reduce` behaves like the reduced-motion setting. */
+html[data-tn-motion='reduce'] *,
+html[data-tn-motion='reduce'] *::before,
+html[data-tn-motion='reduce'] *::after {
+  transition: none !important;
+  animation: none !important;
+  scroll-behavior: auto !important;
+}
+
+/*
+ * The skin makes the desktop .mw-parser-output a horizontal scroll container,
+ * which would also stop sticky navigators from sticking to the viewport. Clip
+ * instead, and let wide tables scroll on their own (as the module prototypes do).
+ */
+.tn-page .article .mw-parser-output.mw-parser-output {
+  overflow-x: clip;
+  /* …but leave the margin visible, for the selected passage's bar. */
+  overflow-clip-margin: var(--spacing-100, 16px);
+}
+.tn-page .mw-parser-output table.wikitable {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+}
+.tn-page .mw-parser-output ul.gallery {
+  margin-inline: 0;
+  max-width: 100%;
+}
+
+/* A navigator that stays below the top of the screen while in use (B). */
+.tn-mount--sticky {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 10;
+}
+
+/*
+ * B: native scroll anchoring is suspended on the document scroller for the
+ * length of a ruler transition only, so the article follows the panel's lower
+ * edge by layout alone (one owner of the compensation).
+ */
+html.tn-anchor-off,
+html.tn-anchor-off body {
+  overflow-anchor: none;
+}
+
+/* B: the docking sentinel sits directly above the mount (both clear the lead's infobox). */
+.tn-dock-sentinel {
+  clear: both;
+  height: 0;
+}
+
+/* B: the passage being read gets a quiet tick in the gutter, at the line of its date. */
+.tn-reading-tick {
+  position: relative;
+}
+.tn-reading-tick::after {
+  content: '';
+  position: absolute;
+  inset-block-start: var(--tn-tick-top, 0);
+  inset-inline-start: calc(-1 * var(--spacing-100, 16px));
+  width: 2px;
+  height: 1.4em;
+  background: var(--border-color-base);
+  pointer-events: none;
+}
+
+/*
+ * Dates are their own bidirectional runs: "1350–1450 CE" stays in order inside
+ * a right-to-left page (and a right-to-left label stays whole in a left-to-right one).
+ */
+.tn-row__date,
+.vr__date,
+.vp__date,
+.vm__date,
+.ra__label,
+.rt__label b,
+.vt-panel__date,
+.vt-bar__date,
+.vt-step__to b,
+.pc__custom,
+.tn-link {
+  unicode-bidi: plaintext;
+}
+.tn-link {
+  unicode-bidi: isolate;
+}
+
+/*
+ * Linked names in the navigators, styled as Wikipedia links (Codex link
+ * tokens): visited state kept, red only for links the source marks `new`
+ * (a missing page). Never used for any other meaning.
+ */
+a.tn-wl {
+  color: var(--color-progressive);
+  text-decoration: none;
+  unicode-bidi: isolate;
+}
+a.tn-wl:visited {
+  color: var(--color-visited);
+}
+a.tn-wl.new {
+  color: var(--color-link-red);
+}
+a.tn-wl.new:visited {
+  color: var(--color-link-red--visited);
+}
+a.tn-wl:hover {
+  text-decoration: underline;
+}
+a.tn-wl:focus-visible {
+  outline: var(--border-width-thick, 2px) solid var(--outline-color-progressive--focus, #36c);
+  outline-offset: 1px;
+  border-radius: var(--border-radius-base);
+}
+
+/* Connections (pass 2): four kinds, four different marks in the text. */
+::highlight(tn-thread) {
+  background-color: var(--background-color-progressive-subtle);
+  text-decoration: underline 2px var(--color-progressive);
+}
+::highlight(tn-topic) {
+  background-color: var(--background-color-neutral);
+}
+::highlight(tn-rel-end) {
+  background-color: var(--background-color-progressive-subtle);
+}
+::highlight(tn-rel-words) {
+  background-color: var(--background-color-progressive-subtle--active);
+  text-decoration: underline 2px var(--color-base);
+}
+::highlight(tn-together) {
+  text-decoration: underline dotted 2px var(--color-subtle);
+}
+
+/* Connections: the evidence card sits at the end of the margin column so it can stick to the bottom of the screen. */
+.tn-page--connect-brackets #tn-margin-end,
+.tn-page--connect-paths #tn-margin-end {
+  display: flex;
+  flex-direction: column;
+}
+
+/*
+ * B, editing: the article's dates become chips (the article editor's look,
+ * host/ArticleModules.vue), picked ones filled. Links stay blue, as in
+ * VisualEditor (they just do not open while editing). Same metrics as the
+ * text: picking never reflows the article.
+ */
+.tn-page--authoring .mw-parser-output .tl-mention--candidate {
+  padding: 1px 3px;
+  margin: -1px -3px;
+  border-radius: var(--border-radius-base, 2px);
+  background-color: var(--background-color-progressive-subtle);
+  color: var(--color-progressive);
+  cursor: pointer;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  transition:
+    background-color 120ms,
+    color 120ms,
+    box-shadow 240ms;
+}
+.tn-page--authoring .mw-parser-output .tl-mention--candidate:hover {
+  background-color: var(--background-color-progressive-subtle--hover);
+}
+.tn-page--authoring .mw-parser-output .tl-mention--candidate:focus-visible {
+  outline: 2px solid var(--outline-color-progressive--focus, #36c);
+  outline-offset: 1px;
+}
+.tn-page--authoring .mw-parser-output .tl-mention--candidate.tl-mention--picked {
+  background-color: var(--background-color-progressive);
+  color: var(--color-inverted-fixed, #fff);
+}
+.tn-page--authoring .mw-parser-output .tl-mention--picked:hover {
+  background-color: var(--background-color-progressive--hover);
+}
+.tn-page--authoring .mw-parser-output .tl-mention--pop {
+  animation: tn-ring 420ms ease-out;
+}
+@keyframes tn-ring {
+  from {
+    box-shadow: 0 0 0 0 var(--border-color-progressive);
+  }
+  to {
+    box-shadow: 0 0 0 6px transparent;
+  }
+}
+/* The sentence under the pointer: translucent, so a picked (filled) chip stays legible beneath it. */
+::highlight(tl-hover) {
+  background-color: rgba(114, 119, 125, 0.16);
+}
+/* Touch has no hover, and nothing would clear it after a tap. */
+@media (hover: none) {
+  ::highlight(tl-hover) {
+    background-color: transparent;
+  }
+}
+
+/* B, editing: the label is a span of its sentence, underlined, with an end to drag at each side (general/useSpanEditor.ts). */
+.gm-span {
+  position: absolute;
+  inset: 0 auto auto 0;
+  pointer-events: none;
+  z-index: 6;
+}
+.gm-span__line {
+  position: absolute;
+  height: 0;
+  border-top: var(--border-width-thick, 2px) solid var(--border-color-progressive);
+  transform: translateY(1px);
+}
+.gm-span__handle {
+  position: absolute;
+  width: 44px;
+  height: 44px;
+  margin: -34px 0 0 -22px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: ew-resize;
+  pointer-events: auto;
+  touch-action: none;
+}
+.gm-span__handle::before {
+  content: '';
+  position: absolute;
+  left: 21px;
+  top: 12px;
+  width: 2px;
+  height: 22px;
+  background: var(--background-color-progressive);
+}
+.gm-span__handle::after {
+  content: '';
+  position: absolute;
+  left: 17px;
+  top: 32px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--background-color-progressive);
+}
+.gm-span__handle:focus-visible {
+  outline: var(--border-width-thick, 2px) solid var(--outline-color-progressive--focus, #36c);
+}

@@ -26,7 +26,15 @@ import type {
 } from './types'
 
 export type FormId =
-  'timeline' | 'map' | 'line' | 'columns' | 'bars' | 'seats' | 'smallColumns' | 'annotated'
+  | 'timeline'
+  | 'map'
+  | 'linked'
+  | 'line'
+  | 'columns'
+  | 'bars'
+  | 'seats'
+  | 'smallColumns'
+  | 'annotated'
 
 export type ComponentKind = 'time' | 'place' | 'quantity' | 'category' | 'parent' | 'region'
 
@@ -50,12 +58,16 @@ export interface ItemSource {
   anchor?: SourceAnchor
   /** The sentence, the row's cells, or the image caption. */
   text: string
+  /** The label's words in the sentence (offsets into `text`): the label is this span, cleaned. */
+  span?: { start: number; end: number }
 }
 
 export interface Item {
   id: string
-  /** Short, editor-editable. */
+  /** Short, editor-editable: the source span, cleaned, unless the editor typed their own. */
   label: string
+  /** The editor typed the label (it no longer follows the span; the link to the sentence stays). */
+  labelEdited?: boolean
   components: ItemComponents
   source: ItemSource
   citation?: Citation

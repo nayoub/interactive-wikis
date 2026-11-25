@@ -7,6 +7,7 @@
  *   /timeline, /map, /election
  *   /timeline-module, /map-module, /election-module → redirects (links already shared)
  *   /visual      → the general visual tool (general/)
+ *   /timeline-navigation → five ways to navigate an article by time (navigate/)
  *
  * The route list is hub-routes.json, also read by vite.config.ts so every route
  * (and every old one) gets a real page on GitHub Pages.
@@ -16,18 +17,23 @@ import type { RouteRecordRaw } from 'vue-router'
 
 import routes from './hub-routes.json'
 
-export type HubId = 'timeline' | 'map' | 'election' | 'visual'
+export type HubId = 'timeline' | 'map' | 'election' | 'visual' | 'timeline-navigation'
 export interface HubEntry {
   id: HubId
   path: string
   label: string
   /** An older route that redirects here, if any. */
   legacy?: string
+  /** "earlier": listed under Earlier prototypes in the switcher. */
+  group?: string
 }
 export const HUB = routes as HubEntry[]
 
 const LAST = 'protowiki-hub:last'
 const KEY = 'protowiki-hub:v1'
+
+/** The first time: the timeline (the first earlier prototype), as before the visual tool existed. */
+const FIRST = '/timeline'
 
 export function lastPath(): string {
   try {
@@ -36,7 +42,7 @@ export function lastPath(): string {
   } catch {
     /* private mode */
   }
-  return HUB[0].path
+  return FIRST
 }
 export function rememberPath(path: string) {
   try {
@@ -75,10 +81,14 @@ export interface HubState {
   fallback: boolean
   /** Item labels in another language, where items have them (general tool): "en", "eu", "fr". */
   lang: string
+  /** Suggestion cards in edit mode (general tool). */
+  suggestions: boolean
+  /** Bumped by "Reset dismissed suggestions". */
+  suggestionsReset: number
 }
 
 function read(): HubState {
-  const init: HubState = { width: 'desktop', fallback: false, lang: 'en' }
+  const init: HubState = { width: 'desktop', fallback: false, lang: 'en', suggestions: true, suggestionsReset: 0 }
   try {
     const raw = localStorage.getItem(KEY)
     if (raw) return { ...init, ...JSON.parse(raw) }

@@ -13,6 +13,7 @@
  *   - for each: its sentence, section, citation and a drafted label
  *   - the article's own images and sections, and the subject's birth date
  */
+import { fetchArticleBody } from '@/components/article/shared/fetchArticleBody'
 import { draftLabel } from '../pick/draftLabel'
 import { extractDates, type DateMatch } from '../pick/extractDates'
 import { proposeGeneralRoles } from '../pick/toItems'
@@ -24,7 +25,7 @@ import {
   type ParsedTable,
 } from '../pick/tables'
 import { indexBlock, proseBlocks, rangeFor, sentences } from '../pick/textIndex'
-import type { ArticleSection, EventImage, PartialDate, Seating } from '../model/types'
+import type { ArticleSection, EventImage, PartialDate, Seating, SourceAnchor } from '../model/types'
 import type { DateMention, PlaceInfo, PlaceMention, TableMention } from '../pick/types'
 
 export type { DateMention, PlaceMention, TableMention }
@@ -45,6 +46,11 @@ export interface ArticleSource {
   general?: boolean
   /** Comparable articles (another city), parsed for their tables: the Compare operator's second set. */
   compare?: { slug: string; title: string }[]
+  /**
+   * Any article, read live from the wiki (REST `page/html`, through ProtoWiki's
+   * article cache) instead of a committed snapshot. `slug` is then only a cache key.
+   */
+  live?: { host: string }
 }
 
 export const GEHRY: ArticleSource = {
@@ -61,6 +67,20 @@ export interface RelatedArticle {
   seating?: Seating
 }
 
+/**
+ * A quantity over time told in one sentence ("grew from 11,000 in 1880 to
+ * 80,000 in 1900"): evidence for a chart, not events for a timeline (general tool).
+ */
+export interface SeriesMention {
+  id: string
+  sentence: string
+  anchor: SourceAnchor
+  inList: boolean
+  /** What the numbers measure, from the sentence's subject ("Population"), else "Value". */
+  measure: string
+  points: { id: string; year: number; value: number; text: string }[]
+}
+
 export interface LoadedArticle {
   html: string
   /** Date mentions (timeline). */
@@ -69,6 +89,14 @@ export interface LoadedArticle {
   places: PlaceMention[]
   /** Data tables (visual). */
   tables: TableMention[]
+  /** Quantities over time told in a sentence (general tool). */
+  series: SeriesMention[]
+  /**
+   * What the article is about, from its infobox type: a place (ib-settlement,
+   * ib-country…) or anything else (biography, organisation, event, work), and
+   * the place's own coordinates (the infobox's geo) when it has them.
+   */
+  subject: { name: string; birth?: PartialDate; kind: 'place' | 'other'; coords?: { lat: number; lon: number } }
   /** Election infobox: chamber size, majority, the article's party order. */
   infobox: InfoboxElection
   previous: RelatedArticle[]
@@ -83,12 +111,25 @@ export interface LoadedArticle {
   source: ArticleSource
   images: EventImage[]
   sections: ArticleSection[]
+  /** Text length of each top-level section (h2 id → characters), for ranking suggestions. */
+  sectionLength: Record<string, number>
   /** Every section's top-level (h2) section, any depth below it: id → { id, title }. */
   topSection: Record<string, { id: string; title: string }>
   /** {{Use dmy dates}}: write "6 May 2025", as the article does. */
   dayFirst: boolean
-  /** The article's subject; `birth` from the infobox when it has one. */
-  subject: { name: string; birth?: PartialDate }
+}
+
+/** "11,000 in 1880": a number, an optional unit word, then "in <year>". */
+const PAIR = /(\d[\d,.]*)(?:\s+(?:inhabitants|people|residents|workers|tonnes|tons|visitors|students))?\s+in\s+(1\d{3}|20[0-3]\d)\b/g
+/** The subject before "grew/rose/fell from": "the population grew from" → "population". */
+const SUBJECT = /(?:the\s+)?([a-z][a-z ]{2,30}?)\s+(?:of\s+[A-Z]\w+\s+)?(?:grew|rose|increased|fell|declined|dropped|went|doubled|tripled)\b[^.]*$/i
+
+/** A place or not, from the infobox's type class; its coordinates from the infobox's geo. */
+function subjectOf(body: HTMLElement): { kind: 'place' | 'other'; coords?: { lat: number; lon: number } } {
+  const box = body.querySelector('table.infobox')
+  const place = /\bib-(settlement|country|island|region|river|mountain|lake|body-of-water|protected-area|park|city|state)\b|\bgeography\b/.test(box?.className ?? '')
+  const geo = body.querySelector('.geo')?.textContent?.match(/(-?\d+(?:\.\d+)?)\s*;\s*(-?\d+(?:\.\d+)?)/)
+  return { kind: place ? 'place' : 'other', coords: geo ? { lat: Number(geo[1]), lon: Number(geo[2]) } : undefined }
 }
 
 const cache = new Map<string, Promise<LoadedArticle>>()
@@ -100,13 +141,17 @@ export function loadArticle(source: ArticleSource = GEHRY): Promise<LoadedArticl
       if (!r.ok) throw new Error(`Snapshot missing: ${url} (${r.status})`)
       return r.text()
     })
-  if (!cache.has(source.slug))
+  // The general tool processes the same snapshot differently (pickable images, table chips).
+  const key = `${source.slug}${source.general ? ':general' : ''}`
+  if (!cache.has(key))
     cache.set(
-      source.slug,
+      key,
       Promise.all([
-        text(`${base}snapshots/${source.slug}.html`),
+        source.live
+          ? fetchArticleBody(source.title, source.live.host).then((b) => b.html)
+          : text(`${base}snapshots/${source.slug}.html`),
         // No lookup for this article: no places.
-        text(`${base}snapshots/${source.slug}.places.json`)
+        (source.live ? Promise.reject(new Error('live')) : text(`${base}snapshots/${source.slug}.places.json`))
           .then((t) => JSON.parse(t).places)
           .catch(() => ({})),
         Promise.all(
@@ -116,7 +161,7 @@ export function loadArticle(source: ArticleSource = GEHRY): Promise<LoadedArticl
             ),
           ),
         ),
-        seatingOf(source.slug),
+        source.live ? undefined : seatingOf(source.slug),
         Promise.all(
           (source.compare ?? []).map((p) =>
             text(`${base}snapshots/${p.slug}.html`).then((html) => {
@@ -125,7 +170,7 @@ export function loadArticle(source: ArticleSource = GEHRY): Promise<LoadedArticl
             }),
           ),
         ),
-        text(`${base}snapshots/${source.slug}.labels.json`)
+        (source.live ? Promise.reject(new Error('live')) : text(`${base}snapshots/${source.slug}.labels.json`))
           .then((t) => JSON.parse(t))
           .catch(() => null),
       ]).then(([html, places, previous, seating, compare, labels]) => ({
@@ -136,7 +181,9 @@ export function loadArticle(source: ArticleSource = GEHRY): Promise<LoadedArticl
         labelLanguages: labels?.languages ?? [],
       })),
     )
-  return cache.get(source.slug)!
+  // A failed load (offline, missing page) is not kept: the next visit tries again.
+  cache.get(key)!.catch(() => cache.delete(key))
+  return cache.get(key)!
 }
 
 /** <slug>.seating.json, when the article has a parliament diagram. */
@@ -237,6 +284,8 @@ function process(
 
   const mentions: DateMention[] = []
   const places: PlaceMention[] = []
+  const series: SeriesMention[] = []
+  let seriesCount = 0
   let dateCount = 0
   let placeCount = 0
 
@@ -300,11 +349,54 @@ function process(
       })
     }
 
+    // Non-events (general tool only; the earlier prototypes keep their rules):
+    //   - a year inside a link's text (not at its start), or right after a capitalised
+    //     multi-word name ("Bilbao Ría 2000"), is part of a name: no date chip
+    //   - a sentence with two or more "<number> in <year>" pairs ("from 11,000 in 1880 to
+    //     80,000 in 1900") is a quantity over time: its years are chart evidence, not dates
+    const seriesYears = new Map<number, { id: string }>()
+    if (source.general) {
+      for (const sent of sents) {
+        const pairs = [...sent.text.matchAll(PAIR)]
+        if (pairs.length < 2) continue
+        const id = `s${++seriesCount}`
+        const subject = sent.text.slice(0, pairs[0].index).match(SUBJECT)
+        const points = pairs.map((m, k) => {
+          const yearAt = sent.start + m.index! + m[0].lastIndexOf(m[2])
+          const pid = `${id}-y${k}`
+          seriesYears.set(yearAt, { id: pid })
+          return { id: pid, year: Number(m[2]), value: Number(m[1].replace(/,/g, '')), text: m[0].trim() }
+        })
+        series.push({
+          id,
+          sentence: sent.text,
+          anchor: anchorFor(points[0].id, sent),
+          inList: ctx.el.tagName === 'LI',
+          measure: subject ? subject[1][0].toUpperCase() + subject[1].slice(1) : 'Value',
+          points,
+        })
+      }
+    }
+    const inName = (m: DateMatch) =>
+      m.date.precision === 'year' &&
+      /^\d{4}$/.test(m.text) &&
+      // In a link, but not leading it ("the 2018 MTV Europe Music Awards" is an event; "Bilbao Ría 2000" a name).
+      (block.links.some((l) => l.start < m.start && l.end >= m.end) ||
+        /(?:\p{Lu}[\p{L}’'-]*\s+){2,}$/u.test(block.text.slice(Math.max(0, m.start - 60), m.start)))
+
     // Dates: wrapped in spans.
-    const wraps: { range: Range; id: string }[] = []
+    const wraps: { range: Range; id: string; kind?: string }[] = []
     for (const match of found) {
       const sent = sentenceAt(match.start)
       if (!sent) continue
+      if (source.general && inName(match)) continue
+      const yearOf = seriesYears.get(match.start)
+      if (yearOf) {
+        // Kept in the text as an anchor for the chart's points, never a chip.
+        const range = rangeFor(block, match.start, match.end)
+        if (range) wraps.push({ range, id: yearOf.id, kind: 'series' })
+        continue
+      }
       const id = `d${++dateCount}`
       const others = found
         .filter((o) => o !== match && o.start >= sent.start && o.end <= sent.end)
@@ -332,10 +424,10 @@ function process(
       if (range) wraps.push({ range, id })
     }
     // Wrap last-to-first so earlier ranges stay valid.
-    for (const { range, id } of wraps.reverse()) {
+    for (const { range, id, kind } of wraps.reverse()) {
       const span = doc.createElement('span')
-      span.className = 'tl-mention'
-      span.dataset.kind = 'date'
+      span.className = kind === 'series' ? 'tl-series-year' : 'tl-mention'
+      span.dataset.kind = kind ?? 'date'
       span.dataset.tlId = id
       span.id = `tl-src-${id}`
       try {
@@ -359,7 +451,9 @@ function process(
     pick.setAttribute('contenteditable', 'false')
     pick.innerHTML =
       `<button type="button" class="tl-mention tl-table-chip" data-kind="table" data-tl-id="${t.id}">` +
-      '<span class="tl-table-chip__use">Use this table</span><span class="tl-table-chip__using">Using this table</span></button>'
+      (source.general
+        ? '<span class="tl-table-chip__use">Use this</span><span class="tl-table-chip__using">In use</span></button>'
+        : '<span class="tl-table-chip__use">Use this table</span><span class="tl-table-chip__using">Using this table</span></button>')
     t.el.before(pick)
     const label = t.caption || t.sectionTitle
     return {
@@ -406,6 +500,7 @@ function process(
     if (source.general) {
       const box = img.closest<HTMLElement>('figure, .gallerybox, .infobox-image') ?? img
       box.classList.add('tl-mention', 'tl-pick-image')
+      box.id ||= `tl-img-${i}`
       box.dataset.kind = 'image'
       box.dataset.tlId = `img${i}`
       box.setAttribute('contenteditable', 'false')
@@ -436,6 +531,12 @@ function process(
   }
   for (const im of images) im.src = largest.get(fileOf(im.src)) ?? im.src
 
+  const sectionLength: Record<string, number> = {}
+  body.querySelectorAll<HTMLElement>('section').forEach((sec) => {
+    const h = sec.querySelector<HTMLElement>(':scope > h2, :scope > .mw-heading > h2')
+    if (h?.id) sectionLength[h.id] = (sec.textContent ?? '').length
+  })
+
   const sections: ArticleSection[] = []
   body.querySelectorAll<HTMLElement>('section > h2, section > h3').forEach((h) => {
     sections.push({
@@ -445,8 +546,10 @@ function process(
     })
   })
 
-  // Infobox birth date (hCard `bday`, ISO).
-  const bday = body.querySelector('.infobox .bday')?.textContent?.trim() ?? ''
+  // Infobox birth date (hCard `bday`, ISO), in the "Born" row only: {{Start date}} marks a
+  // building's opening or an event's start with the same class, and those are not ages.
+  const bornRow = [...body.querySelectorAll('.infobox tr')].find((tr) => /^born$/i.test(tr.querySelector('th')?.textContent?.trim() ?? ''))
+  const bday = bornRow?.querySelector('.bday')?.textContent?.trim() ?? ''
   const bm = bday.match(/^(\d{4})(?:-(\d{2}))?(?:-(\d{2}))?$/)
   const birth = bm
     ? { y: +bm[1], m: bm[2] ? +bm[2] : undefined, d: bm[3] ? +bm[3] : undefined }
@@ -457,6 +560,7 @@ function process(
     mentions,
     places,
     tables,
+    series,
     infobox,
     previous,
     compare: [],
@@ -465,8 +569,9 @@ function process(
     source,
     dayFirst: /Template:Use_dmy_dates/.test(raw),
     topSection,
+    sectionLength,
     images,
     sections,
-    subject: { name: source.title, birth },
+    subject: { name: source.title, birth, ...subjectOf(body) },
   }
 }
