@@ -52,6 +52,8 @@ export const IMG_GAP = 8
 /** The subject's age at the event, under its date (biographies with a known birth year). */
 export const AGE_LINE = 16
 export const BLOCK_PAD = 8
+/** Room between the last line below the line (the age, or a photograph) and the panel's lower rule. */
+export const TRACK_FOOT = 16
 
 /** Compact strip: a row of dates above the line, the line, a row below (15px dates on 18px lines, clear of the current point's halo). */
 export const COMPACT = { axisY: 30, height: 60, stem: 11, dateLine: 18 }
@@ -161,7 +163,7 @@ export function richLayout(
     const linesBelow = Math.min(rr.lines, maxLines[1])
     const r = { ...rr, lines: Math.max(linesAbove, linesBelow) }
     const aboveH = sideH(r, linesAbove, imgAbove, ageLine)
-    const belowH = sideH(r, linesBelow, imgBelow, ageLine)
+    const belowH = sideH(r, linesBelow, imgBelow, ageLine) + TRACK_FOOT
     return { ...r, linesAbove, linesBelow, imgAbove, aboveH, belowH, height: aboveH + belowH }
   }
   for (const r of ladder) {
