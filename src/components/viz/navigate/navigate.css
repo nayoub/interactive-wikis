@@ -233,13 +233,10 @@ a.tn-wl:focus-visible {
 
 /*
  * B, editing: the article's dates become chips (the article editor's look,
- * host/ArticleModules.vue), picked ones filled; links stop being blue while
- * picking so the dates are the targets. Same metrics as the text: picking
- * never reflows the article.
+ * host/ArticleModules.vue), picked ones filled. Links stay blue, as in
+ * VisualEditor (they just do not open while editing). Same metrics as the
+ * text: picking never reflows the article.
  */
-.tn-page--authoring .tn-body a:not(.tl-mention--candidate) {
-  color: inherit;
-}
 .tn-page--authoring .mw-parser-output .tl-mention--candidate {
   padding: 1px 3px;
   margin: -1px -3px;

@@ -234,6 +234,18 @@ watch(articleId, () => {
   nav.range.value = null
 })
 onMounted(() => rememberPath('/timeline-navigation'))
+/**
+ * While the article editor is open, links are text to edit, not ways out (as in
+ * VisualEditor): a click on one does not open it. Captured on the document so
+ * it runs before ProtoWiki's in-article link handler, which skips a prevented click.
+ */
+function holdLinks(e: MouseEvent) {
+  if (!authoring.ve.value) return
+  const a = (e.target as Element | null)?.closest?.('a[href]')
+  if (a && bodyEl.value?.contains(a)) e.preventDefault()
+}
+onMounted(() => document.addEventListener('click', holdLinks, true))
+onBeforeUnmount(() => document.removeEventListener('click', holdLinks, true))
 
 const ctx = computed<NavContext | null>(() =>
   collection.value && article.value
