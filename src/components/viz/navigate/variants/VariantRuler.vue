@@ -23,7 +23,7 @@
  */
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue'
 import { CdxButton, CdxIcon, CdxToggleButton } from '@wikimedia/codex'
-import { cdxIconClose, cdxIconCollapse, cdxIconExpand, cdxIconListBullet } from '@wikimedia/codex-icons'
+import { cdxIconClose, cdxIconCollapse, cdxIconExpand, cdxIconImageGallery, cdxIconListBullet } from '@wikimedia/codex-icons'
 
 import { wikiTitleFromArticleHref } from '@/components/article/shared/wikiTitleFromArticleHref'
 import ImagePicker from '../../curate/ImagePicker.vue'
@@ -36,6 +36,7 @@ import AuthorBar from '../ruler/AuthorBar.vue'
 import EvenTrack from '../ruler/EvenTrack.vue'
 import { AGE_LINE, blockFor, COMPACT, MOTION_MS, richLayout, sideLines, slotFor, slotsOf } from '../ruler/layout'
 import RulerRegion from '../ruler/RulerRegion.vue'
+import PhotoTimeline from '../ruler/PhotoTimeline.vue'
 import VerticalTimeline from '../ruler/VerticalTimeline.vue'
 import { useDock } from '../ruler/useDock'
 import { useReading } from '../ruler/useReading'
@@ -81,20 +82,38 @@ const { reading, update: updateReading, set: setReading } = useReading({
 
 // ── Presentation (docking ≠ expansion; editing keeps it open) ────────────
 const exploring = ref(false)
-/** Phones: the reader can turn the timeline to read top to bottom, in place (not while editing). */
-const vertical = ref(false)
-const presentation = computed<'overview' | 'compact' | 'explore' | 'vertical'>(() =>
+/**
+ * How the reader sees the timeline (not while editing, which uses the line):
+ *   line    the even timeline (default)
+ *   list    phones: top to bottom, in place
+ *   photos  one large photograph per date, swiped sideways (immersive)
+ */
+const view = ref<'line' | 'list' | 'photos'>('line')
+const vertical = computed({ get: () => view.value === 'list', set: (on: boolean) => (view.value = on ? 'list' : 'line') })
+const photos = computed({ get: () => view.value === 'photos', set: (on: boolean) => (view.value = on ? 'photos' : 'line') })
+const presentation = computed<'overview' | 'compact' | 'explore' | 'vertical' | 'photos'>(() =>
   editing.value
     ? 'explore'
     : vertical.value && narrow.value
       ? 'vertical'
-      : exploring.value
+      : photos.value
+        ? 'photos'
+        : exploring.value
         ? 'explore'
         : dock.contracted.value
           ? 'compact'
           : 'overview',
 )
 const isVertical = computed(() => presentation.value === 'vertical')
+const isPhotos = computed(() => presentation.value === 'photos')
+const ptRef = ref<InstanceType<typeof PhotoTimeline> | null>(null)
+/** Photo cards: large in the article, a short strip when docked. */
+const photoH = computed(() => (dock.stuck.value ? 104 : narrow.value ? 280 : 260))
+// Turned to photos, or the strip changed height: the card being read goes to the middle.
+watch([isPhotos, photoH], ([on]) => {
+  if (!on) return
+  nextTick(() => requestAnimationFrame(() => reading.value.id && ptRef.value?.reveal(reading.value.id, false)))
+})
 const compact = computed(() => presentation.value === 'compact')
 /**
  * Hidden: the reader closed the docked timeline. It stays out of the way
@@ -215,6 +234,8 @@ const panelH = computed(() =>
     ? 0
     : isVertical.value
       ? 2 * PADY + HEAD + vlistH.value
+      : isPhotos.value
+        ? 2 * PADY + HEAD + photoH.value + 8
       : 2 * PADY + headH.value + trackH.value + regionH.value + (editing.value ? barH.value : 0),
 )
 
@@ -295,7 +316,7 @@ function resume() {
   exploring.value = false
 }
 /** The one chevron, once the timeline has docked (or is open beyond the overview). */
-const showToggle = computed(() => !editing.value && presentation.value !== 'overview' && !isVertical.value)
+const showToggle = computed(() => !editing.value && presentation.value !== 'overview' && !isVertical.value && !isPhotos.value)
 const toggle = computed(() =>
   presentation.value === 'explore'
     ? { label: msg.trCloseTimeline, icon: cdxIconCollapse, run: resume, expanded: true }
@@ -395,6 +416,7 @@ watch(
     const id = rid ?? events.value[0]?.id
     if (!id) return
     if (isVertical.value) vlist.value?.reveal(id, !reduced())
+    else if (isPhotos.value) ptRef.value?.reveal(id, !reduced())
     else track.value?.reveal(id, { center: true, smooth: !reduced(), follow: true })
   },
 )
@@ -537,6 +559,16 @@ const px = (n: number) => `${Math.round(n)}px`
         >
           <CdxIcon :icon="cdxIconListBullet" />
         </CdxToggleButton>
+        <CdxToggleButton
+          v-if="!editing"
+          v-model="photos"
+          quiet
+          class="tr__mode tr__orient"
+          :aria-label="msg.trPhotos"
+          :title="msg.trPhotos"
+        >
+          <CdxIcon :icon="cdxIconImageGallery" />
+        </CdxToggleButton>
         <CdxButton
           v-if="dock.stuck.value && !editing"
           size="small"
@@ -565,6 +597,23 @@ const px = (n: number) => `${Math.round(n)}px`
           :birth-year="birthYear"
           @pick="pick"
           @size="(h) => (vlistNat = h)"
+        />
+      </div>
+      <!-- Photographs: one large card per date. -->
+      <div
+        v-else-if="isPhotos"
+        class="tr__photos"
+        :style="{ height: px(photoH + 8) }"
+      >
+        <PhotoTimeline
+          ref="ptRef"
+          :events="events"
+          :era="era"
+          :reading-id="reading.id"
+          :birth-year="birthYear"
+          :height="photoH"
+          :short="dock.stuck.value"
+          @pick="pick"
         />
       </div>
       <EvenTrack
@@ -781,6 +830,12 @@ const px = (n: number) => `${Math.round(n)}px`
 .tr__vlist {
   flex: none;
   overflow: hidden;
+}
+.tr__photos {
+  flex: none;
+  padding-block-start: 4px;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 /* The orientation toggle, as small as the other controls. */
 .tr__orient {
