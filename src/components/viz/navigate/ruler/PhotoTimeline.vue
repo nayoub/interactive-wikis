@@ -135,7 +135,16 @@ defineExpose({ reveal })
 /* A fine edge, so light photographs keep their shape on a white page (one class: states below win). */
 .pt__card {
   box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.12);
-  transition: box-shadow 200ms ease;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    box-shadow 200ms ease,
+    transform 200ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+/* Clickable: a pointer, an underlined title on hover, and the card gives slightly under a press. */
+.pt__card:active {
+  transform: scale(0.98);
+  transition-duration: 80ms;
 }
 /* The date being read: a thin blue ring, set off from the card by the page colour. */
 .pt__card--reading {
@@ -150,11 +159,12 @@ defineExpose({ reveal })
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transition: transform 600ms cubic-bezier(0.2, 0.7, 0.2, 1);
 }
+/* Under the pointer the title reads as a link (underlined), as links do on the wiki. */
 @media (hover: hover) {
-  .pt__card:hover .pt__img {
-    transform: scale(1.04);
+  .pt__card:hover .pt__title {
+    text-decoration: underline;
+    text-underline-offset: 2px;
   }
 }
 /* The date at the top, on a soft shade from the card's top edge. */
@@ -259,9 +269,11 @@ defineExpose({ reveal })
   color: var(--color-progressive);
 }
 @media (prefers-reduced-motion: reduce) {
-  .pt__card,
-  .pt__img {
+  .pt__card {
     transition: none;
+  }
+  .pt__card:active {
+    transform: none;
   }
 }
 </style>
