@@ -11,6 +11,7 @@ import { CdxButton, CdxField, CdxIcon, CdxRadio, CdxToggleButtonGroup } from '@w
 import { cdxIconDownTriangle, cdxIconUserAvatar, cdxIconUserAvatarOutline } from '@wikimedia/codex-icons'
 
 import SettingsPopover from '@/components/settings/SettingsPopover.vue'
+import UserSettingsPanel from '@/components/settings/UserSettingsPanel.vue'
 import { protowikiConfig } from '@/appearance/config-store'
 import type { ConfigTheme } from '@/config'
 import { globalSkin } from '@/theme'
@@ -215,6 +216,10 @@ const themeButtons = [
             }}
           </CdxRadio>
         </CdxField>
+        <!-- ProtoWiki's own user settings (mock user, language, page lists), which this menu replaces in the header. -->
+        <div class="nm__protowiki">
+          <UserSettingsPanel :settings-open="open" />
+        </div>
       </div>
     </template>
   </SettingsPopover>
@@ -254,6 +259,11 @@ const themeButtons = [
   margin: var(--spacing-50) 0 var(--spacing-25);
   color: var(--color-subtle);
   font-size: var(--font-size-small);
+}
+.nm__protowiki {
+  margin-top: var(--spacing-75);
+  padding-top: var(--spacing-75);
+  border-top: var(--border-width-base) solid var(--border-color-subtle);
 }
 .nm__caret {
   margin-inline-start: -4px;

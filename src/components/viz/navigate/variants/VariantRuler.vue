@@ -22,8 +22,8 @@
  * source and Remove event. Undo, Cancel and Done are in one bar.
  */
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue'
-import { CdxButton, CdxIcon } from '@wikimedia/codex'
-import { cdxIconCollapse, cdxIconExpand } from '@wikimedia/codex-icons'
+import { CdxButton, CdxIcon, CdxToggleButton } from '@wikimedia/codex'
+import { cdxIconClose, cdxIconCollapse, cdxIconExpand, cdxIconListBullet } from '@wikimedia/codex-icons'
 
 import ImagePicker from '../../curate/ImagePicker.vue'
 import type { EventImage } from '../../model/types'
@@ -35,6 +35,7 @@ import AuthorBar from '../ruler/AuthorBar.vue'
 import EvenTrack from '../ruler/EvenTrack.vue'
 import { AGE_LINE, blockFor, COMPACT, MOTION_MS, richLayout, sideLines, slotFor, slotsOf } from '../ruler/layout'
 import RulerRegion from '../ruler/RulerRegion.vue'
+import VerticalTimeline from '../ruler/VerticalTimeline.vue'
 import { useDock } from '../ruler/useDock'
 import { useReading } from '../ruler/useReading'
 
@@ -73,10 +74,45 @@ const { reading, update: updateReading, set: setReading } = useReading({ body, e
 
 // ── Presentation (docking ≠ expansion; editing keeps it open) ────────────
 const exploring = ref(false)
-const presentation = computed<'overview' | 'compact' | 'explore'>(() =>
-  exploring.value || editing.value ? 'explore' : dock.contracted.value ? 'compact' : 'overview',
+/** Phones: the reader can turn the timeline to read top to bottom, in place (not while editing). */
+const vertical = ref(false)
+const presentation = computed<'overview' | 'compact' | 'explore' | 'vertical'>(() =>
+  editing.value
+    ? 'explore'
+    : vertical.value && narrow.value
+      ? 'vertical'
+      : exploring.value
+        ? 'explore'
+        : dock.contracted.value
+          ? 'compact'
+          : 'overview',
 )
+const isVertical = computed(() => presentation.value === 'vertical')
 const compact = computed(() => presentation.value === 'compact')
+/**
+ * Hidden: the reader closed the docked timeline. It stays out of the way
+ * while they read on, and comes back (as the overview) once they scroll back
+ * up to where it sits in the article.
+ */
+const dismissed = ref(false)
+const hidden = computed(() => dismissed.value && dock.stuck.value && !editing.value && !exploring.value)
+watch(
+  () => dock.contracted.value,
+  (c) => {
+    if (!c) dismissed.value = false
+  },
+)
+function hide() {
+  exploring.value = false
+  dismissed.value = true
+}
+const vlist = ref<InstanceType<typeof VerticalTimeline> | null>(null)
+/** The vertical list's natural height (reported by the list itself). */
+const vlistNat = ref(0)
+// Turned vertical: start at the date being read.
+watch(isVertical, (v) => {
+  if (v) nextTick(() => requestAnimationFrame(() => reading.value.id && vlist.value?.reveal(reading.value.id, false)))
+})
 
 // ── Measurements ─────────────────────────────────────────────────────────
 const root = ref<HTMLElement | null>(null)
@@ -130,7 +166,17 @@ const trackMode = computed<'rich' | 'compact'>(() => (compact.value ? 'compact' 
 const trackH = computed(() => (trackMode.value === 'rich' ? rich.value.height : COMPACT.height) + sb.value)
 const headH = computed(() => (compact.value ? 0 : HEAD))
 const regionH = computed(() => (editing.value ? editH.value : 0))
-const panelH = computed(() => 2 * PADY + headH.value + trackH.value + regionH.value + (editing.value ? barH.value : 0))
+/** Vertical: as tall as the list, up to most of the screen in the article, or half of it when docked. */
+const vlistH = computed(() =>
+  Math.max(120, Math.min(vlistNat.value || 9999, Math.round(avail.value * (dock.stuck.value ? 0.5 : 0.7)) - 2 * PADY - HEAD)),
+)
+const panelH = computed(() =>
+  hidden.value
+    ? 0
+    : isVertical.value
+      ? 2 * PADY + HEAD + vlistH.value
+      : 2 * PADY + headH.value + trackH.value + regionH.value + (editing.value ? barH.value : 0),
+)
 
 // Every presentation change is a panel transition: hold native anchoring off until it lands.
 const motion = ref<'expand' | 'collapse'>('expand')
@@ -175,7 +221,7 @@ function resume() {
   exploring.value = false
 }
 /** The one chevron, once the timeline has docked (or is open beyond the overview). */
-const showToggle = computed(() => !editing.value && presentation.value !== 'overview')
+const showToggle = computed(() => !editing.value && presentation.value !== 'overview' && !isVertical.value)
 const toggle = computed(() =>
   presentation.value === 'explore'
     ? { label: msg.trCloseTimeline, icon: cdxIconCollapse, run: resume, expanded: true }
@@ -270,7 +316,9 @@ watch(editing, (on) => {
 watch(
   () => reading.value.id,
   (id) => {
-    if (id && !editing.value) track.value?.reveal(id, { center: true, smooth: !reduced(), follow: true })
+    if (!id || editing.value) return
+    if (isVertical.value) vlist.value?.reveal(id, !reduced())
+    else track.value?.reveal(id, { center: true, smooth: !reduced(), follow: true })
   },
 )
 
@@ -342,7 +390,8 @@ const px = (n: number) => `${Math.round(n)}px`
     <section
       ref="root"
       class="tr"
-      :class="[`tr--${presentation}`, `tr--${motion}`, { 'tr--stuck': dock.stuck.value, 'tr--narrow': narrow, 'tr--editing': editing }]"
+      :class="[`tr--${presentation}`, `tr--${motion}`, { 'tr--stuck': dock.stuck.value, 'tr--narrow': narrow, 'tr--editing': editing, 'tr--hidden': hidden }]"
+      :inert="hidden || undefined"
       :style="{ height: px(panelH), '--tr-motion': `${MOTION_MS}ms`, '--tr-ctrl': px(ctrlW) }"
       aria-labelledby="tr-title"
       @keydown="onKeydown"
@@ -387,10 +436,48 @@ const px = (n: number) => `${Math.round(n)}px`
         >
           <CdxIcon :icon="toggle.icon" />
         </CdxButton>
+        <CdxToggleButton
+          v-if="narrow && !editing"
+          v-model="vertical"
+          quiet
+          class="tr__mode tr__orient"
+          :aria-label="msg.trVertical"
+          :title="msg.trVertical"
+        >
+          <CdxIcon :icon="cdxIconListBullet" />
+        </CdxToggleButton>
+        <CdxButton
+          v-if="dock.stuck.value && !editing"
+          size="small"
+          weight="quiet"
+          class="tr__mode"
+          :aria-label="msg.trHideTimeline"
+          :title="msg.trHideTimeline"
+          @click="hide"
+        >
+          <CdxIcon :icon="cdxIconClose" />
+        </CdxButton>
       </div>
 
       <!-- The timeline: one surface, dates always visible. -->
+      <!-- Phones, turned: the same events top to bottom. -->
+      <div
+        v-if="isVertical"
+        class="tr__vlist"
+        :style="{ height: px(vlistH) }"
+      >
+        <VerticalTimeline
+          ref="vlist"
+          :events="events"
+          :era="era"
+          :reading-id="reading.id"
+          :birth-year="birthYear"
+          @pick="pick"
+          @size="(h) => (vlistNat = h)"
+        />
+      </div>
       <EvenTrack
+        v-else
         ref="track"
         class="tr__track"
         :events="events"
@@ -541,6 +628,26 @@ const px = (n: number) => `${Math.round(n)}px`
   outline-offset: 1px;
 }
 /* Controls: at the header's end when open, at the strip's end when docked. */
+.tr__vlist {
+  flex: none;
+  overflow: hidden;
+}
+/* The orientation toggle, as small as the other controls. */
+.tr__orient {
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0 var(--spacing-25);
+}
+/* Closed while scrolled away: nothing left in the page until the reader scrolls back up. */
+.tr--hidden {
+  padding: 0;
+  border-color: transparent;
+  box-shadow: none;
+  visibility: hidden;
+  transition:
+    height var(--tr-motion) var(--tr-ease),
+    visibility 0s linear var(--tr-motion);
+}
 .tr__ctrl {
   position: absolute;
   inset-block-start: 8px;

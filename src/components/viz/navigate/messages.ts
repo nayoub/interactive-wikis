@@ -178,6 +178,8 @@ export const msg = {
   trEditingTitle: 'Editing timeline',
   trOpenTimeline: 'Open the timeline',
   trCloseTimeline: 'Close the timeline',
+  trHideTimeline: 'Hide the timeline until you scroll back to it',
+  trVertical: 'Show the timeline top to bottom',
   trReadingAfterShort: (when: string) => `After ${when}`,
   trFigure: 'Events from the article in date order, evenly spaced: the distance between two events shows their order, not how much time passed.',
   trReadPassage: 'Read passage',

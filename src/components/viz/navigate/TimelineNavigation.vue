@@ -225,11 +225,7 @@ provide(NAV, provided)
 </script>
 
 <template>
-  <ChromeWrapper
-    :last-edited-notice="false"
-    tag="Prototype"
-    :dir="dir"
-  >
+  <ChromeWrapper :dir="dir">
     <template #user-menu>
       <NavMenu
         :variant="variant"

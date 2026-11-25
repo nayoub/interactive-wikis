@@ -26,8 +26,8 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 
 import type { NavEvent } from '../events'
 import { msg } from '../messages'
-import { formatWhen, interval, timeKind } from '../time'
-import { above, BLOCK_PAD, COMPACT, imgWidth, linesPerTitle, slotsOf, STEM, type RichLayout, type Slot } from './layout'
+import { formatWhen, timeKind } from '../time'
+import { above, ageAt, BLOCK_PAD, COMPACT, imgWidth, linesPerTitle, slotsOf, STEM, type RichLayout, type Slot } from './layout'
 
 const props = withDefaults(
   defineProps<{
@@ -64,16 +64,7 @@ const contentH = computed(() => (rich.value ? props.geom.height : COMPACT.height
 const aboveItemH = computed(() => props.geom.aboveH - STEM)
 const belowItemH = computed(() => props.geom.belowH - STEM)
 
-/** "aged 60", "aged 40–44" (a span), or nothing (no birth year, or at or before birth). */
-function age(e: NavEvent): string | null {
-  const b = props.birthYear
-  if (b === null || b === undefined) return null
-  const [a, z] = interval(e.date)
-  const from = Math.floor(a) - b
-  const to = Math.ceil(z) - 1 - b
-  if (to < 1) return null
-  return from === to || from < 1 ? `aged ${to}` : `aged ${from}–${to}`
-}
+const age = (e: NavEvent) => ageAt(e.date, props.birthYear)
 function aria(e: NavEvent) {
   const bits = [`${formatWhen(e.date, props.era)}: ${e.label}`]
   const a = age(e)

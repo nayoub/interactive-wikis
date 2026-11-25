@@ -17,7 +17,17 @@
  * between presentations, filters or selections.
  */
 import type { NavEvent } from '../events'
-import { formatWhen } from '../time'
+import { formatWhen, interval } from '../time'
+
+/** "aged 60", "aged 40–44" (a span), or nothing (no birth year, or at or before birth). */
+export function ageAt(date: NavEvent['date'], birthYear: number | null | undefined): string | null {
+  if (birthYear === null || birthYear === undefined) return null
+  const [a, z] = interval(date)
+  const from = Math.floor(a) - birthYear
+  const to = Math.ceil(z) - 1 - birthYear
+  if (to < 1) return null
+  return from === to || from < 1 ? `aged ${to}` : `aged ${from}–${to}`
+}
 
 /** One motion value for every presentation change (Codex `--transition-timing-function-user` easing). */
 export const MOTION_MS = 240
