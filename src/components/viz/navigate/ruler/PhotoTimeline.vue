@@ -28,8 +28,8 @@ const emit = defineEmits<{ pick: [id: string] }>()
 const scroller = ref<HTMLElement | null>(null)
 const slots = computed(() => slotsOf(props.events, props.era))
 const has = (events: NavEvent[], id: string | null) => !!id && events.some((e) => e.id === id)
-/** Landscape cards, a little wider than tall; short (docked) cards wider still. */
-const cardW = computed(() => Math.round(props.height * (props.short ? 1.9 : 1.35)))
+/** Square frames, every card the same (with or without a photograph). */
+const cardW = computed(() => props.height)
 
 /** A larger rendition of a Wikimedia thumbnail (cards are bigger than the timeline's thumbnails). */
 function bigger(src: string): string {
@@ -112,7 +112,8 @@ defineExpose({ reveal })
 .mw-parser-output .pt__list,
 .pt__list {
   display: flex;
-  gap: 10px;
+  /* Frames on a strip: a hairline of page between them. */
+  gap: 2px;
   box-sizing: border-box;
   height: 100%;
   margin: 0;
@@ -145,11 +146,17 @@ defineExpose({ reveal })
   transform: scale(0.98);
   transition-duration: 80ms;
 }
-/* The date being read: a thin blue ring, set off from the card by the page colour. */
-.pt__card--reading {
+/* The date being read: a blue frame drawn inside the card (the strip leaves no room outside it). */
+.pt__card--reading::after,
+.pt__card:has(.pt__title:focus-visible)::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
   box-shadow:
-    0 0 0 2px var(--background-color-base),
-    0 0 0 3.5px var(--border-color-progressive, #36c);
+    inset 0 0 0 3px var(--border-color-progressive, #36c),
+    inset 0 0 0 4px rgba(255, 255, 255, 0.5);
+  pointer-events: none;
 }
 .pt__img {
   position: absolute;
@@ -234,10 +241,10 @@ defineExpose({ reveal })
 .pt__title:focus-visible {
   outline: none;
 }
-.pt__card:has(.pt__title:focus-visible) {
+.pt__card:has(.pt__title:focus-visible)::after {
   box-shadow:
-    0 0 0 2px var(--background-color-base),
-    0 0 0 3.5px var(--outline-color-progressive--focus, #36c);
+    inset 0 0 0 3px var(--outline-color-progressive--focus, #36c),
+    inset 0 0 0 4px rgba(255, 255, 255, 0.5);
 }
 .pt__age {
   margin-block-start: 2px;
@@ -245,10 +252,9 @@ defineExpose({ reveal })
   line-height: 14px;
   opacity: 0.75;
 }
-/* No photograph: a lighter, narrower card, the words at its foot in the page's own colours. */
+/* No photograph: a lighter card, the words in the page's own colours. */
 .mw-parser-output .pt__card--plain,
 .pt__card--plain {
-  width: calc(var(--pt-card-w) * 0.56);
   background: var(--background-color-interactive-subtle, #f8f9fa);
 }
 .pt__card--plain .pt__text,
