@@ -13,6 +13,7 @@
  *   - for each: its sentence, section, citation and a drafted label
  *   - the article's own images and sections, and the subject's birth date
  */
+import { fetchArticleBody } from '@/components/article/shared/fetchArticleBody'
 import { draftLabel } from '../pick/draftLabel'
 import { extractDates, type DateMatch } from '../pick/extractDates'
 import { proposeGeneralRoles } from '../pick/toItems'
@@ -45,6 +46,11 @@ export interface ArticleSource {
   general?: boolean
   /** Comparable articles (another city), parsed for their tables: the Compare operator's second set. */
   compare?: { slug: string; title: string }[]
+  /**
+   * Any article, read live from the wiki (REST `page/html`, through ProtoWiki's
+   * article cache) instead of a committed snapshot. `slug` is then only a cache key.
+   */
+  live?: { host: string }
 }
 
 export const GEHRY: ArticleSource = {
@@ -141,9 +147,11 @@ export function loadArticle(source: ArticleSource = GEHRY): Promise<LoadedArticl
     cache.set(
       key,
       Promise.all([
-        text(`${base}snapshots/${source.slug}.html`),
+        source.live
+          ? fetchArticleBody(source.title, source.live.host).then((b) => b.html)
+          : text(`${base}snapshots/${source.slug}.html`),
         // No lookup for this article: no places.
-        text(`${base}snapshots/${source.slug}.places.json`)
+        (source.live ? Promise.reject(new Error('live')) : text(`${base}snapshots/${source.slug}.places.json`))
           .then((t) => JSON.parse(t).places)
           .catch(() => ({})),
         Promise.all(
@@ -153,7 +161,7 @@ export function loadArticle(source: ArticleSource = GEHRY): Promise<LoadedArticl
             ),
           ),
         ),
-        seatingOf(source.slug),
+        source.live ? undefined : seatingOf(source.slug),
         Promise.all(
           (source.compare ?? []).map((p) =>
             text(`${base}snapshots/${p.slug}.html`).then((html) => {
@@ -162,7 +170,7 @@ export function loadArticle(source: ArticleSource = GEHRY): Promise<LoadedArticl
             }),
           ),
         ),
-        text(`${base}snapshots/${source.slug}.labels.json`)
+        (source.live ? Promise.reject(new Error('live')) : text(`${base}snapshots/${source.slug}.labels.json`))
           .then((t) => JSON.parse(t))
           .catch(() => null),
       ]).then(([html, places, previous, seating, compare, labels]) => ({
@@ -173,6 +181,8 @@ export function loadArticle(source: ArticleSource = GEHRY): Promise<LoadedArticl
         labelLanguages: labels?.languages ?? [],
       })),
     )
+  // A failed load (offline, missing page) is not kept: the next visit tries again.
+  cache.get(key)!.catch(() => cache.delete(key))
   return cache.get(key)!
 }
 
@@ -536,8 +546,10 @@ function process(
     })
   })
 
-  // Infobox birth date (hCard `bday`, ISO).
-  const bday = body.querySelector('.infobox .bday')?.textContent?.trim() ?? ''
+  // Infobox birth date (hCard `bday`, ISO), in the "Born" row only: {{Start date}} marks a
+  // building's opening or an event's start with the same class, and those are not ages.
+  const bornRow = [...body.querySelectorAll('.infobox tr')].find((tr) => /^born$/i.test(tr.querySelector('th')?.textContent?.trim() ?? ''))
+  const bday = bornRow?.querySelector('.bday')?.textContent?.trim() ?? ''
   const bm = bday.match(/^(\d{4})(?:-(\d{2}))?(?:-(\d{2}))?$/)
   const birth = bm
     ? { y: +bm[1], m: bm[2] ? +bm[2] : undefined, d: bm[3] ? +bm[3] : undefined }

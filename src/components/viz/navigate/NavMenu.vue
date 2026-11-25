@@ -39,7 +39,7 @@ const variant = computed({
 })
 const article = computed({
   get: () => props.article,
-  set: (v: string) => setQuery({ article: v, event: null }),
+  set: (v: string) => setQuery({ article: v, event: null, title: null }),
 })
 const direction = computed({
   get: () => props.dir,

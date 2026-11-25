@@ -2,7 +2,7 @@
 import type { ComputedRef, InjectionKey, Ref } from 'vue'
 
 import type { LoadedArticle } from '../host/loadArticle'
-import type { Collection } from './events'
+import type { ArticleId, Collection } from './events'
 import type { Occurrence } from './occurrences'
 import type { Navigator } from './useNavigator'
 import type { Authoring } from './ruler/authoring'
@@ -18,7 +18,7 @@ export interface NavContext {
   skin: ComputedRef<'desktop' | 'mobile'>
   /** Dated occurrences with their linked names (pass 2); a superset of the collection's events. */
   occurrences: Occurrence[]
-  articleId: 'frank-gehry' | 'bilbao' | 'test-fixture'
+  articleId: ArticleId
   variant: string
   /** B's authored timeline and its editor. */
   authoring: Authoring

@@ -166,7 +166,7 @@ const BILBAO_MORE: Rec[] = [
   { date: 'around 2038', sentence: 'Basque Y', links: ['Basque Y'], qualifier: 'will be connected to the Basque Y high-speed train network', category: 'city', status: 'expected', pair: 'plan' },
 ]
 
-const RECORDS: Record<Exclude<ArticleId, 'test-fixture'>, Rec[]> = {
+const RECORDS: Partial<Record<ArticleId, Rec[]>> = {
   'frank-gehry': [...GEHRY_CURATED, ...GEHRY_MORE],
   bilbao: [...BILBAO_CURATED, ...BILBAO_MORE],
 }
@@ -227,7 +227,7 @@ export function buildOccurrences(id: ArticleId, a: LoadedArticle, c: Collection)
   const order = new Map(a.mentions.map((m, i) => [m.id, i]))
   const byMention = new Map(c.events.map((e) => [e.sourceAnchor.mentionId, e]))
   const items: Occurrence[] = []
-  for (const r of RECORDS[id]) {
+  for (const r of RECORDS[id] ?? []) {
     const m = r.sameMention
       ? a.mentions.find((x) => x.text === r.date && x.sentence.includes(r.sentence))
       : find(r.date, r.sentence, used)

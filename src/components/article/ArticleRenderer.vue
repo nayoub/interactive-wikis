@@ -10,6 +10,7 @@ import {
 import { globalSkin, globalTheme, PROTOWIKI_CHROME_SKIN, PROTOWIKI_CHROME_THEME } from '@/theme'
 import type { Skin, Theme } from '@/theme'
 import { collapseArticleTables } from './shared/collapseArticleTables'
+import PagePreviews from './PagePreviews.vue'
 import { mobileH2ChevronSvg, mobileH2EditIconSvg } from './shared/mobileH2CodexIcons'
 
 /**
@@ -29,6 +30,11 @@ interface Props {
    * **`'mobile'`**, since app chrome provides no **`data-skin`** to inherit.
    */
   app?: boolean
+  /**
+   * Page Previews and Reference Previews on hover, as on Wikipedia's desktop
+   * site (desktop skin with a pointer only; never in app articles). On by default.
+   */
+  previews?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -37,6 +43,7 @@ const props = withDefaults(defineProps<Props>(), {
   skin: undefined,
   theme: undefined,
   app: false,
+  previews: true,
 })
 
 const inheritedSkin = inject(PROTOWIKI_CHROME_SKIN)
@@ -283,6 +290,11 @@ onUpdated(() => {
         <slot />
       </div>
     </div>
+    <PagePreviews
+      v-if="props.previews && !props.app && effectiveSkin === 'desktop'"
+      :root="mwParserOutputRef"
+      :host="articleWikiHost ?? 'en.wikipedia.org'"
+    />
   </div>
 </template>
 

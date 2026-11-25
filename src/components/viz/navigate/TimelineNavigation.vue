@@ -9,6 +9,9 @@
  * URL: ?variant=contents|ruler|trail|parallel|milestones
  *              |field|field-margin|link-columns|link-chronology|connect-brackets|connect-paths|paired
  *      &article=frank-gehry|bilbao|test-fixture  &event=<id>  &dir=rtl  &motion=reduce
+ *      &title=<any Wikipedia article>   read live, as on ProtoWiki's article template
+ * Links in the article and the header search open other articles here (`?title=`),
+ * so a timeline can be made on any of them.
  * Changing the variant keeps the selected event.
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, shallowRef, watch } from 'vue'
@@ -20,6 +23,9 @@ import ArticleRenderer from '@/components/article/ArticleRenderer.vue'
 import ArticleWrapper from '@/components/article/ArticleWrapper.vue'
 import ChromeWrapper from '@/components/chrome/ChromeWrapper.vue'
 import VeToolbar from '@/components/visual-editor/VeToolbar.vue'
+import { provideChromeSearchHandlers } from '@/composables/useChromeSearch'
+import { PROTOWIKI_ARTICLE_WIKI_HOST, PROTOWIKI_IN_ARTICLE_WIKI_LINK } from '@/composables/useInArticleWikiLinks'
+import { parseWikiPageTitleQuery } from '@/composables/useWikiPageTitleQuery'
 import { globalSkin } from '@/theme'
 
 import '../tokens.css'
@@ -27,7 +33,7 @@ import { loadArticle, type LoadedArticle } from '../host/loadArticle'
 import { rememberPath } from '../host/hub'
 import { setDayFirst } from '../model/dates'
 import { NAV, type NavContext } from './context'
-import { ARTICLES, buildCollection, type ArticleId, type Collection } from './events'
+import { ARTICLES, buildCollection, emptyCollection, isLive, type ArticleId, type Collection } from './events'
 import { buildFixture, FIXTURE_SOURCE } from './fixture'
 import { OCCURRENCE_VARIANTS, VARIANTS, type VariantId } from './messages'
 import { buildOccurrences, type Occurrences } from './occurrences'
@@ -55,10 +61,39 @@ const variant = computed<VariantId>(() => {
   const v = one(route.query, 'variant')
   return (VARIANTS.find((x) => x.id === v)?.id ?? 'contents') as VariantId
 })
+/** The wiki every live article is read from (ProtoWiki's default). */
+const WIKI_HOST = 'en.wikipedia.org'
+const norm = (t: string) => t.replace(/_/g, ' ').trim().toLowerCase()
+/** `?title=` names any article (the curated demos keep their own snapshots); else `?article=`. */
 const articleId = computed<ArticleId>(() => {
+  const title = parseWikiPageTitleQuery(route.query)
+  if (title) {
+    const curated = (Object.keys(ARTICLES) as (keyof typeof ARTICLES)[]).find((k) => norm(ARTICLES[k].source.title) === norm(title))
+    return curated ?? `live:${WIKI_HOST}:${title.replace(/_/g, ' ').trim()}`
+  }
   const a = one(route.query, 'article')
   return a === 'bilbao' || a === 'test-fixture' ? a : 'frank-gehry'
 })
+const liveTitle = (id: ArticleId) => id.split(':').slice(2).join(':')
+
+// ── Other articles: links and search open them here, as on the wiki ────────
+function locationFor(title: string) {
+  const q: LocationQuery = { ...route.query, title }
+  delete q.article
+  delete q.event
+  return { path: route.path, query: q }
+}
+function openArticle(title: string | null | undefined) {
+  const t = title?.trim()
+  if (!t) return
+  void router.push(locationFor(t)).then(() => window.scrollTo({ top: 0 }))
+}
+provide(PROTOWIKI_ARTICLE_WIKI_HOST, computed(() => WIKI_HOST))
+provide(PROTOWIKI_IN_ARTICLE_WIKI_LINK, {
+  navigate: openArticle,
+  resolveUrl: (title) => (title?.trim() ? router.resolve(locationFor(title.trim())).href : null),
+})
+provideChromeSearchHandlers({ onSelect: openArticle, onSubmit: ({ title }) => openArticle(title) })
 const dir = computed(() => (one(route.query, 'dir') === 'rtl' ? 'rtl' : 'ltr'))
 /** `?motion=reduce`: behave as with the reduced-motion setting (no smooth scrolling or fades). */
 watch(
@@ -115,11 +150,15 @@ async function load(id: ArticleId) {
   occurrences.value = null
   loadError.value = null
   try {
-    const source = id === 'test-fixture' ? FIXTURE_SOURCE : ARTICLES[id].source
+    const source = isLive(id)
+      ? { slug: id, title: liveTitle(id), defaultSection: { id: 'Lead', title: 'Lead' }, live: { host: WIKI_HOST } }
+      : id === 'test-fixture'
+        ? FIXTURE_SOURCE
+        : ARTICLES[id].source
     const a = await loadArticle(source)
     if (articleId.value !== id) return
     setDayFirst(a.dayFirst)
-    collection.value = id === 'test-fixture' ? buildFixture(a) : buildCollection(id, a)
+    collection.value = isLive(id) ? emptyCollection(id, a) : id === 'test-fixture' ? buildFixture(a) : buildCollection(id, a)
     occurrences.value = buildOccurrences(id, a, collection.value)
     article.value = a
   } catch (e) {
@@ -278,7 +317,7 @@ provide(NAV, provided)
             v-if="loadError"
             type="error"
           >
-            Could not load the article snapshot: {{ loadError }}
+            Could not load the article: {{ loadError }}
           </CdxMessage>
           <CdxMessage
             v-if="collection?.missing.length"

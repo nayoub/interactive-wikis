@@ -48,7 +48,10 @@ export interface Collection {
   era?: boolean
 }
 
-export type ArticleId = 'frank-gehry' | 'bilbao' | 'test-fixture'
+/** The curated demos, the test fixture, or any other article read live (`live:<host>:<title>`). */
+export type CuratedId = 'frank-gehry' | 'bilbao' | 'test-fixture'
+export type ArticleId = CuratedId | `live:${string}`
+export const isLive = (id: ArticleId): id is `live:${string}` => id.startsWith('live:')
 
 interface Pick {
   /** The mention's text exactly as the article has it. */
@@ -127,7 +130,7 @@ const BILBAO: Pick[] = [
   { date: '18 May 2010', sentence: 'Lee Kuan Yew', label: 'Awarded the Lee Kuan Yew World City Prize', short: 'World City Prize', topic: 'city' },
 ]
 
-export const ARTICLES: Record<Exclude<ArticleId, 'test-fixture'>, { source: ArticleSource; picks: Pick[]; topics: Topic[] }> = {
+export const ARTICLES: Record<Exclude<CuratedId, 'test-fixture'>, { source: ArticleSource; picks: Pick[]; topics: Topic[] }> = {
   'frank-gehry': {
     source: { slug: 'frank-gehry', title: 'Frank Gehry', defaultSection: { id: 'Career', title: 'Career' } },
     picks: GEHRY,
@@ -152,7 +155,12 @@ export function chronological<T extends NavEvent>(events: T[]): T[] {
   return [...events].sort((a, b) => dateYears(a.date) - dateYears(b.date) || a.order - b.order)
 }
 
-export function buildCollection(id: Exclude<ArticleId, 'test-fixture'>, article: LoadedArticle): Collection {
+/** An article nobody has curated: no events yet (its timeline is made in the editor). */
+export function emptyCollection(id: ArticleId, article: LoadedArticle): Collection {
+  return { id, source: article.source, title: article.source.title, events: [], topics: [], missing: [] }
+}
+
+export function buildCollection(id: Exclude<CuratedId, 'test-fixture'>, article: LoadedArticle): Collection {
   const def = ARTICLES[id]
   const missing: string[] = []
   const used = new Set<string>()
