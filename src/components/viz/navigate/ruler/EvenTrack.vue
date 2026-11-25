@@ -249,7 +249,7 @@ const px = (v: number) => `${Math.round(v * 10) / 10}px`
               class="et__age"
             >{{ age(s.events[0]) }}</span>
             <img
-              v-if="s.image && geom.imgH"
+              v-if="s.image && geom.imgH && (geom.imgAbove || !above(i))"
               class="et__img"
               :src="s.image.src"
               :alt="s.image.caption"
@@ -293,7 +293,7 @@ const px = (v: number) => `${Math.round(v * 10) / 10}px`
               class="et__age"
             >{{ age(s.events[0]) }}</span>
             <img
-              v-if="s.image && geom.imgH"
+              v-if="s.image && geom.imgH && (geom.imgAbove || !above(i))"
               class="et__img"
               :src="s.image.src"
               :alt="s.image.caption"

@@ -116,6 +116,8 @@ export interface RichLayout extends Richness {
   /** Title lines per side (each at most `lines`). */
   linesAbove: number
   linesBelow: number
+  /** Photographs are drawn above the line too (not on phones). */
+  imgAbove: boolean
   aboveH: number
   belowH: number
   /** Height of the drawn track (without a scrollbar). */
@@ -134,9 +136,15 @@ export function richLayout(
   maxLines: [number, number] = [3, 3],
   imagesFirst = false,
   ageLine = 0,
+  /**
+   * Phones: photographs only below the line. With about two and a half events
+   * in view, room held above the line for photographs further along reads as
+   * a blank band; below, a missing photograph only leaves space at the foot.
+   */
+  photosBelowOnly = false,
 ): RichLayout {
   const ladder = imagesFirst ? LADDER_IMAGES : LADDER
-  const imgAbove = slots.some((s, i) => above(i) && s.image)
+  const imgAbove = !photosBelowOnly && slots.some((s, i) => above(i) && s.image)
   const imgBelow = slots.some((s, i) => !above(i) && s.image)
   const make = (rr: Richness): RichLayout => {
     const linesAbove = Math.min(rr.lines, maxLines[0])
@@ -144,7 +152,7 @@ export function richLayout(
     const r = { ...rr, lines: Math.max(linesAbove, linesBelow) }
     const aboveH = sideH(r, linesAbove, imgAbove, ageLine)
     const belowH = sideH(r, linesBelow, imgBelow, ageLine)
-    return { ...r, linesAbove, linesBelow, aboveH, belowH, height: aboveH + belowH }
+    return { ...r, linesAbove, linesBelow, imgAbove, aboveH, belowH, height: aboveH + belowH }
   }
   for (const r of ladder) {
     const l = make(r)
