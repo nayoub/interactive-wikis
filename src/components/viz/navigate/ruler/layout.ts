@@ -35,7 +35,7 @@ export function slotFor(width: number, narrow: boolean) {
 export const blockFor = (slot: number, narrow: boolean) => Math.min(2 * slot - 2 * BLOCK_PAD, narrow ? 210 : 240)
 
 // Type and block metrics (px), matched to the CSS in EvenTrack.vue.
-export const STEM = 10
+export const STEM = 16
 export const DATE_LINE = 24
 export const LABEL_LINE = 20
 export const IMG_GAP = 8
@@ -43,8 +43,8 @@ export const IMG_GAP = 8
 export const AGE_LINE = 16
 export const BLOCK_PAD = 8
 
-/** Compact strip: a row of dates above the line, the line, a row below (15px dates on 18px lines). */
-export const COMPACT = { axisY: 25, height: 50, stem: 5, dateLine: 18 }
+/** Compact strip: a row of dates above the line, the line, a row below (15px dates on 18px lines, clear of the current point's halo). */
+export const COMPACT = { axisY: 30, height: 60, stem: 11, dateLine: 18 }
 
 export const above = (i: number) => i % 2 === 0
 

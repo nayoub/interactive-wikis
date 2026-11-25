@@ -115,6 +115,23 @@ function onScroll() {
 /** The reader's own horizontal gesture: following the reading position waits for it. */
 let userAt = 0
 const markUser = () => (userAt = performance.now())
+/** A sideways swipe on the timeline is the reader's; a vertical one scrolls the page. */
+let touch0: { x: number; y: number } | null = null
+const onTouchStart = (e: TouchEvent) => (touch0 = { x: e.touches[0].clientX, y: e.touches[0].clientY })
+const onTouchMove = (e: TouchEvent) => {
+  if (!touch0) return
+  const dx = Math.abs(e.touches[0].clientX - touch0.x)
+  const dy = Math.abs(e.touches[0].clientY - touch0.y)
+  if (dx > 6 && dx > dy) markUser()
+}
+/** A mouse press (dragging the scrollbar, a click); touches are judged by direction instead. */
+const onPointerDown = (e: PointerEvent) => {
+  if (e.pointerType !== 'touch') markUser()
+}
+/** Only a sideways wheel is the reader moving the timeline; scrolling the page over it is not. */
+const onWheel = (e: WheelEvent) => {
+  if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) markUser()
+}
 
 const rtl = () => !!scroller.value && getComputedStyle(scroller.value).direction === 'rtl'
 /**
@@ -126,7 +143,7 @@ function reveal(id: string, how: { center?: boolean; smooth?: boolean; follow?: 
   const el = scroller.value
   const i = slotOf(id)
   if (!el || i < 0 || el.scrollWidth <= el.clientWidth) return
-  if (how.follow && performance.now() - userAt < 2500) return
+  if (how.follow && performance.now() - userAt < 1500) return
   const x = cx(i)
   const view = el.clientWidth
   const left = Math.abs(el.scrollLeft)
@@ -177,9 +194,10 @@ const px = (v: number) => `${Math.round(v * 10) / 10}px`
     @scroll.passive="onScroll"
     @click="onClick"
     @keydown="onKeydown"
-    @wheel.passive="markUser"
-    @pointerdown="markUser"
-    @touchstart.passive="markUser"
+    @wheel.passive="onWheel"
+    @pointerdown="onPointerDown"
+    @touchstart.passive="onTouchStart"
+    @touchmove.passive="onTouchMove"
   >
     <figure
       class="et__track"
@@ -404,7 +422,7 @@ const px = (v: number) => `${Math.round(v * 10) / 10}px`
   border-color: var(--color-progressive);
   box-shadow:
     0 0 0 2px var(--background-color-base),
-    0 0 0 5px var(--background-color-progressive-subtle);
+    0 0 0 4px var(--background-color-progressive-subtle);
 }
 
 /* ── Events ───────────────────────────────────────────────────────────── */
@@ -544,7 +562,7 @@ const px = (v: number) => `${Math.round(v * 10) / 10}px`
   flex: none;
   margin-block: 8px 0;
   object-fit: cover;
-  border-radius: calc(3 * var(--border-radius-base, 2px));
+  border-radius: 0;
   background: var(--background-color-neutral-subtle);
   /* A hairline edge, so light photographs keep their shape on the page. */
   box-shadow: 0 0 0 1px var(--border-color-muted, rgba(0, 0, 0, 0.08));

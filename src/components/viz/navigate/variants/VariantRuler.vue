@@ -265,12 +265,12 @@ watch(editing, (on) => {
   }
 })
 
-// While reading (not exploring or editing), the timeline keeps the date being read in view,
-// unless the reader is scrolling it sideways themselves.
+// While reading (open or docked, not editing), the timeline brings the date being read to its
+// centre, unless the reader has just moved it sideways themselves.
 watch(
   () => reading.value.id,
   (id) => {
-    if (id && !exploring.value && !editing.value) track.value?.reveal(id, { smooth: !reduced(), follow: true })
+    if (id && !editing.value) track.value?.reveal(id, { center: true, smooth: !reduced(), follow: true })
   },
 )
 
