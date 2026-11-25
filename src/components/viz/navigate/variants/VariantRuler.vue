@@ -160,7 +160,7 @@ const slots = computed(() => slotsOf(events.value, era))
 const maxLines = computed(() => sideLines(slots.value, blockW.value))
 /** In flow (not docked), the timeline may be as rich as the reference figure. */
 const richOverview = computed(() =>
-  richLayout(slots.value, Math.max(cap.value, avail.value * 0.55) - 2 * PADY - HEAD - sb.value, maxLines.value, false, ageLine.value, narrow.value),
+  richLayout(slots.value, Math.max(cap.value, avail.value * 0.55) - 2 * PADY - HEAD - sb.value, maxLines.value, false, ageLine.value),
 )
 /** Docked and open (or editing): within the cap, the editing area included. */
 const richDocked = computed(() =>
@@ -171,11 +171,12 @@ const richDocked = computed(() =>
         maxLines.value,
         true,
         ageLine.value,
-        narrow.value,
+        // Photographs on both sides of the line, phones included.
+        false,
         // Editing may take up to 70% of the screen so the photographs being chosen show in the timeline.
         Math.round(avail.value * 0.7) - 2 * PADY - HEAD - sb.value - editH.value - barH.value,
       )
-    : richLayout(slots.value, cap.value - 2 * PADY - HEAD - sb.value, maxLines.value, false, ageLine.value, narrow.value),
+    : richLayout(slots.value, cap.value - 2 * PADY - HEAD - sb.value, maxLines.value, false, ageLine.value),
 )
 const rich = computed(() => (editing.value || (presentation.value === 'explore' && dock.stuck.value) ? richDocked.value : richOverview.value))
 const trackMode = computed<'rich' | 'compact'>(() => (compact.value ? 'compact' : 'rich'))
