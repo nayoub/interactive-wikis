@@ -127,7 +127,6 @@ defineExpose({ reveal })
   height: 100%;
   margin: 0;
   overflow: hidden;
-  border-radius: 12px;
   background: var(--background-color-neutral-subtle, #f8f9fa);
   scroll-snap-align: center;
   isolation: isolate;
