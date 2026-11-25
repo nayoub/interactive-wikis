@@ -50,6 +50,12 @@ import VariantField from './variants/VariantField.vue'
 import VariantLinks from './variants/VariantLinks.vue'
 import VariantPaired from './variants/VariantPaired.vue'
 
+/**
+ * `standalone`: one variant on its own page (for sharing), without the menu that
+ * switches variants and prototypes; the header keeps ProtoWiki's own user menu.
+ */
+const props = defineProps<{ standalone?: VariantId }>()
+
 const route = useRoute()
 const router = useRouter()
 const one = (q: LocationQuery, k: string) => {
@@ -58,6 +64,7 @@ const one = (q: LocationQuery, k: string) => {
 }
 
 const variant = computed<VariantId>(() => {
+  if (props.standalone) return props.standalone
   const v = one(route.query, 'variant')
   return (VARIANTS.find((x) => x.id === v)?.id ?? 'contents') as VariantId
 })
@@ -233,7 +240,7 @@ watch(articleId, () => {
   nav.unresolved.value = null
   nav.range.value = null
 })
-onMounted(() => rememberPath('/timeline-navigation'))
+onMounted(() => props.standalone || rememberPath('/timeline-navigation'))
 /**
  * While the article editor is open, links are text to edit, not ways out (as in
  * VisualEditor): a click on one does not open it. Captured on the document so
@@ -277,7 +284,10 @@ provide(NAV, provided)
 
 <template>
   <ChromeWrapper :dir="dir">
-    <template #user-menu>
+    <template
+      v-if="!standalone"
+      #user-menu
+    >
       <NavMenu
         :variant="variant"
         :article="articleId"
