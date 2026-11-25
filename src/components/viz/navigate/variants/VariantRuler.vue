@@ -25,6 +25,7 @@ import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch, typ
 import { CdxButton, CdxIcon, CdxToggleButton } from '@wikimedia/codex'
 import { cdxIconClose, cdxIconCollapse, cdxIconExpand, cdxIconListBullet } from '@wikimedia/codex-icons'
 
+import { wikiTitleFromArticleHref } from '@/components/article/shared/wikiTitleFromArticleHref'
 import ImagePicker from '../../curate/ImagePicker.vue'
 import type { EventImage } from '../../model/types'
 import { useSelectMode } from '../../pick/useSelectMode'
@@ -188,6 +189,40 @@ watch(panelH, (h, old) => {
 // ── Selecting an event: go to its passage, or (editing) edit it ──────────
 /** Only while editing is an event "selected"; reading, selecting an event goes to it. */
 const selectedId = computed(() => (editing.value ? authoring.currentId.value : null))
+/**
+ * The articles the edited event's sentence links to (its blue links, in order):
+ * the image picker offers their pictures first (a single's cover, a building's photo).
+ */
+const linkedPages = computed<string[]>(() => {
+  const e = editEvent.value
+  if (!e || !pickerOpen.value) return []
+  const mention = nav.resolve(e)
+  const block = mention?.closest('p, li, dd, td, th, blockquote, figcaption')
+  if (!mention || !block) return []
+  const words = new Set((e.sourceLinks ?? []).map((t) => t.trim()))
+  const subject = ctx.article.subject.name.toLowerCase()
+  // Text offsets in the block: the link nearest the date comes first ("his 2020 single
+  // "After Party"" → After Party before the 2019 single named earlier in the sentence).
+  const offset = (el: Element) => {
+    const r = document.createRange()
+    r.setStart(block, 0)
+    r.setEnd(el, 0)
+    return r.toString().length
+  }
+  const at = offset(mention)
+  const found: { title: string; d: number }[] = []
+  block.querySelectorAll<HTMLAnchorElement>('a[href]').forEach((a) => {
+    if (a.classList.contains('new') || a.closest('sup.reference')) return
+    if (words.size && !words.has(a.textContent?.trim() ?? '')) return
+    const t = wikiTitleFromArticleHref(a.dataset.protowikiWikiHref ?? a.getAttribute('href') ?? '', 'en.wikipedia.org')
+    if (!t || t.toLowerCase() === subject || found.some((f) => f.title === t)) return
+    found.push({ title: t, d: Math.abs(offset(a) - at) })
+  })
+  return found
+    .sort((x, y) => x.d - y.d)
+    .slice(0, 6)
+    .map((f) => f.title)
+})
 const editEvent = computed(() => (authoring.currentId.value ? (events.value.find((e) => e.id === authoring.currentId.value) ?? null) : null))
 function pick(id: string) {
   const e = events.value.find((v) => v.id === id)
@@ -529,6 +564,8 @@ const px = (n: number) => `${Math.round(n)}px`
     :images="ctx.article.images"
     :event="editEvent"
     :subject="ctx.article.subject.name"
+    :linked-pages="linkedPages"
+    host="en.wikipedia.org"
     removable
     @choose="chooseImage"
   />

@@ -790,3 +790,7 @@ Screenshots: `screenshots/ruler-polish/`.
 - **Ages for people only.** The birth year comes from the infobox's "Born" row. `{{Start date}}` (a building's opening) uses the same `bday` class and no longer turns into ages.
 - **ProtoWiki article wiring.** The page now provides ProtoWiki's in-article link and wiki-host context (as `ArticleLive` does), so `ArticleRenderer` rewrites links to prototype URLs, and new tab and middle-click work.
 - **Page Previews and Reference Previews** are new in ProtoWiki itself (`src/components/article/PagePreviews.vue`, on by default in `ArticleRenderer`, desktop skin only). Every ProtoWiki article prototype gets them, not just this one.
+
+## Follow-up: images from linked articles
+
+When choosing an event's image, the picker now starts with pictures from the articles its sentence links to: its blue links, nearest to the picked date first. Each linked article lists its lead image first, then files named after the article, then non-free files, which are usually a work's cover or poster. This catches what Commons search can't, such as single and album covers, which are non-free files kept on English Wikipedia ("After Party" on Don Toliver). Files keep their author and licence ("Fair use" included) like Commons files. Code: `curate/linkedImages.ts`, plus `linkedPages` in `VariantRuler.vue`.
