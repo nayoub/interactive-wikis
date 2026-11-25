@@ -165,7 +165,16 @@ const richOverview = computed(() =>
 /** Docked and open (or editing): within the cap, the editing area included. */
 const richDocked = computed(() =>
   editing.value
-    ? richLayout(slots.value, editCap.value - 2 * PADY - HEAD - sb.value - editH.value - barH.value, maxLines.value, true, ageLine.value, narrow.value)
+    ? richLayout(
+        slots.value,
+        editCap.value - 2 * PADY - HEAD - sb.value - editH.value - barH.value,
+        maxLines.value,
+        true,
+        ageLine.value,
+        narrow.value,
+        // Editing may take up to 70% of the screen so the photographs being chosen show in the timeline.
+        Math.round(avail.value * 0.7) - 2 * PADY - HEAD - sb.value - editH.value - barH.value,
+      )
     : richLayout(slots.value, cap.value - 2 * PADY - HEAD - sb.value, maxLines.value, false, ageLine.value, narrow.value),
 )
 const rich = computed(() => (editing.value || (presentation.value === 'explore' && dock.stuck.value) ? richDocked.value : richOverview.value))

@@ -154,6 +154,12 @@ export function richLayout(
    * a blank band; below, a missing photograph only leaves space at the foot.
    */
   photosBelowOnly = false,
+  /**
+   * Editing: when `budget` leaves no room for photographs but there are some, the
+   * panel may grow up to this many px so they show (the smallest such layout, not
+   * the richest): a chosen image appears in the timeline being edited.
+   */
+  photoBudget = 0,
 ): RichLayout {
   const ladder = imagesFirst ? LADDER_IMAGES : LADDER
   const imgAbove = !photosBelowOnly && slots.some((s, i) => above(i) && s.image)
@@ -166,9 +172,21 @@ export function richLayout(
     const belowH = sideH(r, linesBelow, imgBelow, ageLine) + TRACK_FOOT
     return { ...r, linesAbove, linesBelow, imgAbove, aboveH, belowH, height: aboveH + belowH }
   }
+  let fit: RichLayout | null = null
   for (const r of ladder) {
     const l = make(r)
-    if (l.height <= budget) return l
+    if (l.height <= budget) {
+      fit = l
+      break
+    }
   }
-  return make(ladder[ladder.length - 1])
+  if ((!fit || !fit.imgH) && photoBudget > budget && (imgAbove || imgBelow)) {
+    // Poorest first: just enough room for the photographs, at a readable size (40px).
+    for (const r of [...ladder].reverse()) {
+      if (r.imgH < 40) continue
+      const l = make(r)
+      if (l.height <= photoBudget) return l
+    }
+  }
+  return fit ?? make(ladder[ladder.length - 1])
 }
