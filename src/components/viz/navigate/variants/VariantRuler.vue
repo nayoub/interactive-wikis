@@ -33,7 +33,7 @@ import type { NavEvent } from '../events'
 import { msg } from '../messages'
 import AuthorBar from '../ruler/AuthorBar.vue'
 import EvenTrack from '../ruler/EvenTrack.vue'
-import { AGE_LINE, blockFor, COMPACT, MOTION_MS, richLayout, slotFor, slotsOf, stackLines } from '../ruler/layout'
+import { AGE_LINE, blockFor, COMPACT, MOTION_MS, richLayout, sideLines, slotFor, slotsOf } from '../ruler/layout'
 import RulerRegion from '../ruler/RulerRegion.vue'
 import { useDock } from '../ruler/useDock'
 import { useReading } from '../ruler/useReading'
@@ -114,7 +114,7 @@ const birthYear = computed(() => ctx.article.subject.birth?.y ?? null)
 const ageLine = computed(() => (birthYear.value !== null ? AGE_LINE : 0))
 /** One slot per date (same-date events share a point, a date and an age). */
 const slots = computed(() => slotsOf(events.value, era))
-const maxLines = computed(() => stackLines(slots.value, blockW.value))
+const maxLines = computed(() => sideLines(slots.value, blockW.value))
 /** In flow (not docked), the timeline may be as rich as the reference figure. */
 const richOverview = computed(() =>
   richLayout(slots.value, Math.max(cap.value, avail.value * 0.55) - 2 * PADY - HEAD - sb.value, maxLines.value, false, ageLine.value),

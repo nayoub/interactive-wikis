@@ -77,7 +77,16 @@ export function slotsOf(events: NavEvent[], era = false): Slot[] {
 export function stackLines(slots: Slot[], blockW: number): number {
   const perLine = Math.max(8, Math.floor((blockW - 8) / 7))
   const need = (e: NavEvent) => Math.min(2, Math.max(1, Math.ceil(e.label.length / perLine)))
+  if (!slots.length) return 1
   return Math.min(4, Math.max(1, ...slots.map((s) => s.events.reduce((n, e) => n + need(e), 0))))
+}
+/**
+ * Title lines each side of the line needs: slots alternate above and below,
+ * so each side reserves only what its own blocks use (one long title below
+ * does not leave blank lines above).
+ */
+export function sideLines(slots: Slot[], blockW: number): [number, number] {
+  return [stackLines(slots.filter((_, i) => above(i)), blockW), stackLines(slots.filter((_, i) => !above(i)), blockW)]
 }
 /** Lines each title gets in a slot of `count` titles when `lines` are available. */
 export const linesPerTitle = (lines: number, count: number) => Math.max(1, Math.floor(lines / count))
@@ -104,27 +113,38 @@ const LADDER_IMAGES: Richness[] = [...LADDER.slice(0, 7), { lines: 1, imgH: 40 }
 export const imgWidth = (imgH: number) => Math.round(imgH * 1.5)
 
 export interface RichLayout extends Richness {
+  /** Title lines per side (each at most `lines`). */
+  linesAbove: number
+  linesBelow: number
   aboveH: number
   belowH: number
   /** Height of the drawn track (without a scrollbar). */
   height: number
 }
-function sideH(r: Richness, hasImg: boolean, age: number) {
-  return STEM + DATE_LINE + age + r.lines * LABEL_LINE + (hasImg && r.imgH ? r.imgH + IMG_GAP : 0) + 2
+function sideH(r: Richness, lines: number, hasImg: boolean, age: number) {
+  return STEM + DATE_LINE + age + lines * LABEL_LINE + (hasImg && r.imgH ? r.imgH + IMG_GAP : 0) + 2
 }
 /**
  * The richest blocks that fit `budget` px of track. Ages are left out, image
  * height gives way first, then label lines; text is never scaled down.
  */
-export function richLayout(slots: Slot[], budget: number, maxLines = 3, imagesFirst = false, ageLine = 0): RichLayout {
+export function richLayout(
+  slots: Slot[],
+  budget: number,
+  maxLines: [number, number] = [3, 3],
+  imagesFirst = false,
+  ageLine = 0,
+): RichLayout {
   const ladder = imagesFirst ? LADDER_IMAGES : LADDER
   const imgAbove = slots.some((s, i) => above(i) && s.image)
   const imgBelow = slots.some((s, i) => !above(i) && s.image)
   const make = (rr: Richness): RichLayout => {
-    const r = { ...rr, lines: Math.min(rr.lines, maxLines) }
-    const aboveH = sideH(r, imgAbove, ageLine)
-    const belowH = sideH(r, imgBelow, ageLine)
-    return { ...r, aboveH, belowH, height: aboveH + belowH }
+    const linesAbove = Math.min(rr.lines, maxLines[0])
+    const linesBelow = Math.min(rr.lines, maxLines[1])
+    const r = { ...rr, lines: Math.max(linesAbove, linesBelow) }
+    const aboveH = sideH(r, linesAbove, imgAbove, ageLine)
+    const belowH = sideH(r, linesBelow, imgBelow, ageLine)
+    return { ...r, linesAbove, linesBelow, aboveH, belowH, height: aboveH + belowH }
   }
   for (const r of ladder) {
     const l = make(r)

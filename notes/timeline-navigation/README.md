@@ -774,3 +774,4 @@ A quieter, more refined pass on the same structure:
 - **Scrollbar.** Thin, with a transparent track.
 
 Screenshots: `screenshots/ruler-polish/`.
+- **Per-side title room.** Each side of the line reserves only the title lines its own blocks need (`sideLines` in `ruler/layout.ts`), so one long title below no longer leaves blank lines above. The band that remains above the line is photo room for the photographs further along that side; it is kept so the line does not jump while scrolling sideways.

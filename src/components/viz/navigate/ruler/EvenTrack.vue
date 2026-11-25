@@ -239,7 +239,7 @@ const px = (v: number) => `${Math.round(v * 10) / 10}px`
             :aria-label="aria(s.events[0])"
             :aria-pressed="selectedId === s.events[0].id ? 'true' : 'false'"
             :title="s.events[0].label"
-            :style="{ '--et-lines': geom.lines }"
+            :style="{ '--et-lines': above(i) ? geom.linesAbove : geom.linesBelow }"
             @click="emit('pick', s.events[0].id)"
           >
             <span class="et__date">{{ s.key }}</span>
@@ -281,7 +281,7 @@ const px = (v: number) => `${Math.round(v * 10) / 10}px`
                   :aria-label="aria(e)"
                   :aria-pressed="selectedId === e.id ? 'true' : 'false'"
                   :title="e.label"
-                  :style="{ '--et-lines': linesPerTitle(geom.lines, s.events.length) }"
+                  :style="{ '--et-lines': linesPerTitle(above(i) ? geom.linesAbove : geom.linesBelow, s.events.length) }"
                   @click="emit('pick', e.id)"
                 >
                   {{ e.label }}
