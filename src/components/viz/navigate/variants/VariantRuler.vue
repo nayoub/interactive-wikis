@@ -71,7 +71,13 @@ async function settle() {
 const dock = useDock(ctx.leadMount)
 const bodyEl = ref<HTMLElement | null>(null)
 const body = () => document.querySelector<HTMLElement>('.tn-body')
-const { reading, update: updateReading, set: setReading } = useReading({ body, events: () => events.value, resolve: nav.resolve })
+const { reading, update: updateReading, set: setReading } = useReading({
+  body,
+  events: () => events.value,
+  resolve: nav.resolve,
+  // The introduction (above the timeline) does not set the place: the timeline starts at its beginning.
+  startAfter: () => ctx.leadMount.value,
+})
 
 // ── Presentation (docking ≠ expansion; editing keeps it open) ────────────
 const exploring = ref(false)
@@ -350,8 +356,11 @@ watch(editing, (on) => {
 // centre, unless the reader has just moved it sideways themselves.
 watch(
   () => reading.value.id,
-  (id) => {
-    if (!id || editing.value) return
+  (rid) => {
+    if (editing.value) return
+    // Back in the introduction (nothing read yet): the timeline returns to its beginning.
+    const id = rid ?? events.value[0]?.id
+    if (!id) return
     if (isVertical.value) vlist.value?.reveal(id, !reduced())
     else track.value?.reveal(id, { center: true, smooth: !reduced(), follow: true })
   },

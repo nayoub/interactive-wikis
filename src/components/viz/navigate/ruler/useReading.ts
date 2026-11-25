@@ -39,6 +39,12 @@ export function useReading(opts: {
   body: () => HTMLElement | null
   events: () => NavEvent[]
   resolve: (e: NavEvent) => HTMLElement | null
+  /**
+   * Where reading in time begins: passages before this element (the introduction,
+   * above the timeline) never become the reading anchor while scrolling. An
+   * introduction summarises out of order, so the timeline starts at its beginning.
+   */
+  startAfter?: () => Element | null
 }) {
   const reading: Ref<Reading> = ref({ id: null, state: 'before', section: 'Introduction' })
   let ticked: HTMLElement | null = null
@@ -62,6 +68,8 @@ export function useReading(opts: {
       const el = opts.resolve(e)
       // A passage in a closed section has no boxes: it cannot be the one being read.
       if (!el || !el.getClientRects().length) continue
+      const start = opts.startAfter?.()
+      if (start && start.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_PRECEDING) continue
       if (el.getBoundingClientRect().top <= lineY) last = { e, el }
       else break
     }
