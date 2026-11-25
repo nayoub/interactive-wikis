@@ -1,9 +1,10 @@
 <script setup lang="ts">
 /**
  * The same timeline as photographs: one large card per date, in order, swiped
- * sideways and snapping into place. Each card is its photograph with the date,
- * title(s) and age over a soft shade at its foot; a date without a photograph
- * is a quiet card with the date set large. The date being read is ringed in
+ * sideways and snapping into place. Each card is its photograph with the date
+ * at its top and the title(s) and age at its foot (the date never moves with the
+ * length of the text), each on a soft shade; a date without a photograph is a
+ * plain card with the same type in the page's colours. The date being read is ringed in
  * blue and kept in the middle; selecting a card goes to its passage.
  */
 import { computed, ref } from 'vue'
@@ -74,8 +75,8 @@ defineExpose({ reveal })
           :alt="s.image.caption"
           loading="lazy"
         >
+        <span class="pt__date">{{ s.key }}</span>
         <div class="pt__text">
-          <span class="pt__date">{{ s.key }}</span>
           <button
             v-for="e in s.events"
             :key="e.id"
@@ -111,11 +112,11 @@ defineExpose({ reveal })
 .mw-parser-output .pt__list,
 .pt__list {
   display: flex;
-  gap: var(--spacing-75);
+  gap: 10px;
   box-sizing: border-box;
   height: 100%;
   margin: 0;
-  padding: 4px 0;
+  padding: 4px;
   list-style: none;
 }
 .mw-parser-output .pt__card,
@@ -126,47 +127,71 @@ defineExpose({ reveal })
   height: 100%;
   margin: 0;
   overflow: hidden;
-  border-radius: 6px;
-  background: var(--background-color-neutral, #eaecf0);
+  border-radius: 12px;
+  background: var(--background-color-neutral-subtle, #f8f9fa);
   scroll-snap-align: center;
-  transition: box-shadow 200ms;
+  isolation: isolate;
 }
+/* A fine edge, so light photographs keep their shape on a white page (one class: states below win). */
+.pt__card {
+  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.12);
+  transition: box-shadow 200ms ease;
+}
+/* The date being read: a thin blue ring, set off from the card by the page colour. */
 .pt__card--reading {
   box-shadow:
     0 0 0 2px var(--background-color-base),
-    0 0 0 4px var(--border-color-progressive, #36c);
+    0 0 0 3.5px var(--border-color-progressive, #36c);
 }
 .pt__img {
   position: absolute;
   inset: 0;
+  z-index: -1;
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transition: transform 600ms cubic-bezier(0.2, 0.7, 0.2, 1);
 }
-/* The words sit on a shade at the card's foot (white on the photograph). */
+@media (hover: hover) {
+  .pt__card:hover .pt__img {
+    transform: scale(1.04);
+  }
+}
+/* The date at the top, on a soft shade from the card's top edge. */
+.pt__date {
+  position: absolute;
+  inset: 0 0 auto;
+  padding: 10px 12px 24px;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.5), transparent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 16px;
+  letter-spacing: 0.01em;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  pointer-events: none;
+}
+.pt--short .pt__date {
+  padding: 7px 10px 16px;
+  font-size: 12px;
+  line-height: 15px;
+}
+/* Title(s) and age on a soft shade at the card's foot. */
 .pt__text {
   position: absolute;
   inset: auto 0 0;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 2px;
-  padding: 40px 14px 12px;
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.72), rgba(0, 0, 0, 0.35) 60%, transparent);
+  gap: 1px;
+  padding: 36px 12px 10px;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.62), rgba(0, 0, 0, 0.28) 55%, transparent);
   color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
 }
 .pt--short .pt__text {
-  padding: 28px 12px 8px;
-}
-.pt__date {
-  font-size: 20px;
-  font-weight: var(--font-weight-bold, 700);
-  line-height: 24px;
-  font-variant-numeric: tabular-nums;
-}
-.pt--short .pt__date {
-  font-size: 16px;
-  line-height: 20px;
+  padding: 24px 10px 7px;
 }
 .pt__title {
   display: -webkit-box;
@@ -178,14 +203,18 @@ defineExpose({ reveal })
   background: none;
   color: inherit;
   font: inherit;
-  font-size: 15px;
-  line-height: 20px;
+  font-size: 13px;
+  line-height: 17px;
+  opacity: 0.92;
   text-align: start;
   cursor: pointer;
 }
 .pt--short .pt__title {
+  font-size: 12px;
+  line-height: 15px;
+}
+.pt--short .pt__title {
   -webkit-line-clamp: 1;
-  font-size: 14px;
 }
 /* One event: the whole card is its button. */
 .pt__title--cover::after {
@@ -199,53 +228,39 @@ defineExpose({ reveal })
 .pt__card:has(.pt__title:focus-visible) {
   box-shadow:
     0 0 0 2px var(--background-color-base),
-    0 0 0 4px var(--outline-color-progressive--focus, #36c);
+    0 0 0 3.5px var(--outline-color-progressive--focus, #36c);
 }
 .pt__age {
-  font-size: 12px;
-  line-height: 16px;
-  opacity: 0.85;
+  margin-block-start: 2px;
+  font-size: 11px;
+  line-height: 14px;
+  opacity: 0.75;
 }
-/* No photograph: a quiet card, the date set large. */
-/* No photograph: narrower, so the photographs lead. */
+/* No photograph: a lighter, narrower card, the words at its foot in the page's own colours. */
 .mw-parser-output .pt__card--plain,
 .pt__card--plain {
-  width: calc(var(--pt-card-w) * 0.62);
+  width: calc(var(--pt-card-w) * 0.56);
   background: var(--background-color-interactive-subtle, #f8f9fa);
-  box-shadow: inset 0 0 0 1px var(--border-color-subtle, #c8ccd1);
 }
-.pt__card--plain.pt__card--reading {
-  box-shadow:
-    inset 0 0 0 1px var(--border-color-subtle, #c8ccd1),
-    0 0 0 2px var(--background-color-base),
-    0 0 0 4px var(--border-color-progressive, #36c);
-}
-.pt__card--plain .pt__text {
-  inset: 0;
-  justify-content: flex-end;
+.pt__card--plain .pt__text,
+.pt__card--plain .pt__date {
   background: none;
   color: var(--color-base);
+  text-shadow: none;
 }
-.pt__card--plain .pt__date {
-  font-size: 28px;
-  line-height: 32px;
-}
-.pt--short .pt__card--plain .pt__date {
-  font-size: 18px;
-  line-height: 22px;
+.pt__card--plain .pt__title {
+  color: var(--color-base);
 }
 .pt__card--plain .pt__age {
-  color: var(--color-subtle);
+  color: var(--color-placeholder);
   opacity: 1;
-}
-.pt__card--reading .pt__date {
-  color: inherit;
 }
 .pt__card--plain.pt__card--reading .pt__date {
   color: var(--color-progressive);
 }
 @media (prefers-reduced-motion: reduce) {
-  .pt__card {
+  .pt__card,
+  .pt__img {
     transition: none;
   }
 }
