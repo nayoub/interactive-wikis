@@ -20,8 +20,8 @@
  *   focus     Codex focus outline around the date
  *
  * It owns no selection or navigation: activating an event emits `pick`.
- * Native horizontal scrolling and arrow keys browse. The scrollbar shows while
- * the timeline moves, under the pointer, or with focus inside; otherwise it fades.
+ * Native horizontal scrolling and arrow keys browse. The scrollbar is hidden
+ * unless the reader is scrolling the timeline themselves.
  */
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 
@@ -100,12 +100,17 @@ onMounted(() => {
   ro.observe(el)
 })
 onBeforeUnmount(() => ro?.disconnect())
-/** Moving right now (any cause): the scrollbar shows, and fades a moment after it stops. */
+/**
+ * The reader is scrolling the timeline right now (their own wheel, swipe, drag or
+ * arrow keys, not the timeline following the article): the scrollbar shows, and
+ * hides a moment after it stops.
+ */
 const moving = ref(false)
 let movingTimer: ReturnType<typeof setTimeout> | null = null
 function onScroll() {
   edges()
   emit('scrolled')
+  if (performance.now() - userAt > 1000) return
   moving.value = true
   if (movingTimer) clearTimeout(movingTimer)
   movingTimer = setTimeout(() => (moving.value = false), 900)
@@ -336,9 +341,8 @@ const px = (v: number) => `${Math.round(v * 10) / 10}px`
   transition: height var(--et-motion) var(--et-ease);
 }
 /*
- * A real scrollbar (its room is always kept, so nothing shifts), shown only when it
- * is useful: while the timeline moves, under a mouse pointer, or with keyboard focus
- * inside. At rest it fades away, like the system's overlay scrollbars.
+ * A real scrollbar (its room is always kept, so nothing shifts), hidden unless the
+ * reader is scrolling the timeline themselves (it can still be dragged where it is).
  */
 .et::-webkit-scrollbar {
   height: 8px;
@@ -352,14 +356,8 @@ const px = (v: number) => `${Math.round(v * 10) / 10}px`
   border: 2px solid transparent;
   background-clip: padding-box;
 }
-.et--moving::-webkit-scrollbar-thumb,
-.et:has(:focus-visible)::-webkit-scrollbar-thumb {
+.et--moving::-webkit-scrollbar-thumb {
   background-color: var(--border-color-base);
-}
-@media (hover: hover) {
-  .et:hover::-webkit-scrollbar-thumb {
-    background-color: var(--border-color-base);
-  }
 }
 .et::-webkit-scrollbar-thumb:hover {
   background-color: var(--color-placeholder);
@@ -369,14 +367,8 @@ const px = (v: number) => `${Math.round(v * 10) / 10}px`
     scrollbar-width: thin;
     scrollbar-color: transparent transparent;
   }
-  .et--moving,
-  .et:has(:focus-visible) {
+  .et--moving {
     scrollbar-color: var(--border-color-base) transparent;
-  }
-  @media (hover: hover) {
-    .et:hover {
-      scrollbar-color: var(--border-color-base) transparent;
-    }
   }
 }
 .et--more-start {
