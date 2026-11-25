@@ -29,8 +29,33 @@ import type { Item } from '../../model/visual'
 import { itemFromDate } from '../../pick/toItems'
 import { chronological, type ArticleId, type Collection, type NavEvent } from '../events'
 
+import gehryDefault from './defaults/frank-gehry.json'
+
 const store = createStore('protowiki-timeline-navigation:v1')
-const keyOf = (id: ArticleId) => `ruler:${id}`
+
+/**
+ * Hand-made starting timelines (titles and photographs chosen in the editor,
+ * exported from it), used instead of the curated picks on a first visit.
+ * `version` is part of the saved key, so a new default reaches everyone who
+ * already has the previous one saved; other articles keep theirs.
+ * Article images are stored relative to the site (`snapshots/…`).
+ */
+const DEFAULTS: Partial<Record<ArticleId, { version: number; items: Item[] }>> = {
+  'frank-gehry': { version: 2, items: gehryDefault as unknown as Item[] },
+}
+const keyOf = (id: ArticleId) => (DEFAULTS[id] ? `ruler:${id}:v${DEFAULTS[id]!.version}` : `ruler:${id}`)
+/** The starting timeline for an article: its hand-made default, else its curated picks. */
+function startItems(id: ArticleId, article: LoadedArticle, collection: Collection): Item[] {
+  const d = DEFAULTS[id]
+  if (!d) return seedItems(article, collection)
+  const base = import.meta.env.BASE_URL
+  return clone(d.items)
+    .filter((i) => article.mentions.some((m) => m.id === i.id))
+    .map((i) => {
+      if (i.image && i.image.src.startsWith('snapshots/')) i.image.src = base + i.image.src
+      return i
+    })
+}
 const clone = <T>(x: T): T => JSON.parse(JSON.stringify(x)) as T
 
 /** The curated picks as authored items (labels: the pick's words where the sentence has them). */
@@ -101,7 +126,7 @@ export function useAuthoredTimeline(o: {
   function seed() {
     const a = o.article.value
     const c = o.collection.value
-    if (a && c && !placed.value && !store.state.visuals.some((v) => v.id === `${key.value}:none`)) place(seedItems(a, c))
+    if (a && c && !placed.value && !store.state.visuals.some((v) => v.id === `${key.value}:none`)) place(startItems(o.articleId.value, a, c))
   }
   watch([o.article, o.collection], seed, { immediate: true })
 

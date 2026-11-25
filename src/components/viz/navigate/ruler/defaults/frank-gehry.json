@@ -1,0 +1,720 @@
+[
+ {
+  "id": "d6",
+  "label": "Born in Toronto",
+  "components": {
+   "time": {
+    "start": {
+     "y": 1929,
+     "m": 2,
+     "d": 28
+    },
+    "precision": "day"
+   }
+  },
+  "source": {
+   "kind": "sentence",
+   "anchor": {
+    "sectionId": "Early_life",
+    "sectionTitle": "Early life",
+    "mentionId": "d6",
+    "sentenceStart": 0,
+    "sentenceEnd": 169
+   },
+   "text": "Ephraim Owen Goldberg was born on February 28, 1929, at Toronto General Hospital in Toronto, Ontario, to parents Sadie Thelma (née Kaplanski/Caplan) and Irving Goldberg.",
+   "span": {
+    "start": 0,
+    "end": 30
+   }
+  },
+  "citation": {
+   "label": "[2]",
+   "href": "#cite_note-guardian-bio-2"
+  },
+  "labelEdited": true,
+  "image": {
+   "id": "wiki:File:Toronto Skyline from Snake Island, September 11 2026 (01).jpg",
+   "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8b/Toronto_Skyline_from_Snake_Island%2C_September_11_2026_%2801%29.jpg/330px-Toronto_Skyline_from_Snake_Island%2C_September_11_2026_%2801%29.jpg?utm_source=en.wikipedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "caption": "Toronto Skyline from Snake Island, September 11 2026 (01)",
+   "source": "commons",
+   "fileTitle": "File:Toronto Skyline from Snake Island, September 11 2026 (01).jpg",
+   "artist": "Dillan Payne",
+   "license": "CC BY-SA 4.0",
+   "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0",
+   "pageUrl": "https://commons.wikimedia.org/wiki/File:Toronto_Skyline_from_Snake_Island,_September_11_2026_(01).jpg"
+  }
+ },
+ {
+  "id": "d8",
+  "label": "Moved to Timmins, Ontario",
+  "components": {
+   "time": {
+    "start": {
+     "y": 1937
+    },
+    "precision": "year"
+   }
+  },
+  "source": {
+   "kind": "sentence",
+   "anchor": {
+    "sectionId": "Early_life",
+    "sectionTitle": "Early life",
+    "mentionId": "d8",
+    "sentenceStart": 0,
+    "sentenceEnd": 132
+   },
+   "text": "Gehry and his family moved to the gold mining town of Timmins, Ontario, in 1937 but moved back to Toronto after facing antisemitism.",
+   "span": {
+    "start": 10,
+    "end": 70
+   }
+  },
+  "citation": {
+   "label": "[15]",
+   "href": "#cite_note-Chretien-15"
+  },
+  "labelEdited": true,
+  "image": {
+   "id": "wiki:File:Timmins, Ontario.jpg",
+   "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/80/Timmins%2C_Ontario.jpg/330px-Timmins%2C_Ontario.jpg?utm_source=en.wikipedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "caption": "Timmins, Ontario",
+   "source": "commons",
+   "fileTitle": "File:Timmins, Ontario.jpg",
+   "artist": "Quintin Soloviev",
+   "license": "CC BY 4.0",
+   "licenseUrl": "https://creativecommons.org/licenses/by/4.0",
+   "pageUrl": "https://commons.wikimedia.org/wiki/File:Timmins,_Ontario.jpg"
+  }
+ },
+ {
+  "id": "d9",
+  "label": "Immigrated to the United States",
+  "components": {
+   "time": {
+    "start": {
+     "y": 1947
+    },
+    "precision": "year"
+   }
+  },
+  "source": {
+   "kind": "sentence",
+   "anchor": {
+    "sectionId": "Education",
+    "sectionTitle": "Education",
+    "mentionId": "d9",
+    "sentenceStart": 0,
+    "sentenceEnd": 80
+   },
+   "text": "In 1947, Gehry's family immigrated to the United States, settling in California.",
+   "span": {
+    "start": 24,
+    "end": 55
+   }
+  },
+  "labelEdited": true,
+  "image": {
+   "id": "wiki:File:LA Skyline Mountains2.jpg",
+   "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/57/LA_Skyline_Mountains2.jpg/330px-LA_Skyline_Mountains2.jpg?utm_source=en.wikipedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "caption": "LA Skyline Mountains2",
+   "source": "commons",
+   "fileTitle": "File:LA Skyline Mountains2.jpg",
+   "artist": "Nserrano",
+   "license": "CC BY-SA 3.0",
+   "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0",
+   "pageUrl": "https://commons.wikimedia.org/wiki/File:LA_Skyline_Mountains2.jpg"
+  }
+ },
+ {
+  "id": "d7",
+  "label": "Changed his surname to Gehry",
+  "components": {
+   "time": {
+    "start": {
+     "y": 1954
+    },
+    "precision": "year"
+   }
+  },
+  "source": {
+   "kind": "sentence",
+   "anchor": {
+    "sectionId": "Early_life",
+    "sectionTitle": "Early life",
+    "mentionId": "d7",
+    "sentenceStart": 96,
+    "sentenceEnd": 218
+   },
+   "text": "In 1954, Gehry changed his surname from Goldberg to Gehry, after his then-wife Anita expressed concern about antisemitism.",
+   "span": {
+    "start": 9,
+    "end": 57
+   }
+  },
+  "citation": {
+   "label": "[14]",
+   "href": "#cite_note-Verge-14"
+  },
+  "labelEdited": true
+ },
+ {
+  "id": "d10",
+  "label": "Graduated from USC",
+  "components": {
+   "time": {
+    "start": {
+     "y": 1954
+    },
+    "precision": "year"
+   }
+  },
+  "source": {
+   "kind": "sentence",
+   "anchor": {
+    "sectionId": "Education",
+    "sectionTitle": "Education",
+    "mentionId": "d10",
+    "sentenceStart": 0,
+    "sentenceEnd": 149
+   },
+   "text": "Gehry went on to graduate from the University of Southern California's School of Architecture in 1954, where his professors included William Pereira.",
+   "span": {
+    "start": 0,
+    "end": 93
+   }
+  },
+  "citation": {
+   "label": "[18]",
+   "href": "#cite_note-18"
+  },
+  "labelEdited": true,
+  "image": {
+   "id": "wiki:File:052607-014-DohenyLibrary-USC.jpg",
+   "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/fc/052607-014-DohenyLibrary-USC.jpg/330px-052607-014-DohenyLibrary-USC.jpg?utm_source=en.wikipedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "caption": "052607-014-DohenyLibrary-USC",
+   "source": "commons",
+   "fileTitle": "File:052607-014-DohenyLibrary-USC.jpg",
+   "artist": "Bobak Ha'Eri",
+   "license": "CC BY 3.0",
+   "licenseUrl": "https://creativecommons.org/licenses/by/3.0",
+   "pageUrl": "https://commons.wikimedia.org/wiki/File:052607-014-DohenyLibrary-USC.jpg"
+  }
+ },
+ {
+  "id": "d11",
+  "label": "City planning at Harvard",
+  "components": {
+   "time": {
+    "start": {
+     "y": 1956
+    },
+    "precision": "year",
+    "qualifier": "fall"
+   }
+  },
+  "source": {
+   "kind": "sentence",
+   "anchor": {
+    "sectionId": "Education",
+    "sectionTitle": "Education",
+    "mentionId": "d11",
+    "sentenceStart": 320,
+    "sentenceEnd": 488
+   },
+   "text": "He moved his family to Cambridge, Massachusetts in the fall of 1956, where he studied city planning at Harvard University's Graduate School of Design using the GI Bill.",
+   "span": {
+    "start": 86,
+    "end": 110
+   }
+  },
+  "citation": {
+   "label": "[21]",
+   "href": "#cite_note-21"
+  },
+  "labelEdited": true,
+  "image": {
+   "id": "commons:179644866",
+   "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/03/2014-04-03-GSD-Gund-Hall-3.jpg/330px-2014-04-03-GSD-Gund-Hall-3.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "caption": "2014-04-03-GSD-Gund-Hall-3",
+   "source": "commons",
+   "fileTitle": "File:2014-04-03-GSD-Gund-Hall-3.jpg",
+   "artist": "Gunnar Klack",
+   "license": "CC BY-SA 4.0",
+   "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0",
+   "pageUrl": "https://commons.wikimedia.org/wiki/File:2014-04-03-GSD-Gund-Hall-3.jpg"
+  }
+ },
+ {
+  "id": "d14",
+  "label": "Practice in Los Angeles",
+  "components": {
+   "time": {
+    "start": {
+     "y": 1962
+    },
+    "precision": "year"
+   }
+  },
+  "source": {
+   "kind": "sentence",
+   "anchor": {
+    "sectionId": "Career",
+    "sectionTitle": "Career",
+    "mentionId": "d14",
+    "sentenceStart": 76,
+    "sentenceEnd": 202
+   },
+   "text": "In 1962, he established a practice in Los Angeles that became Frank Gehry and Associates in 1967, then Gehry Partners in 2001.",
+   "span": {
+    "start": 26,
+    "end": 49
+   }
+  },
+  "citation": {
+   "label": "[11]",
+   "href": "#cite_note-Templer-11"
+  },
+  "labelEdited": true
+ },
+ {
+  "id": "d60",
+  "label": "“Art Treasures of Japan” display",
+  "components": {
+   "time": {
+    "start": {
+     "y": 1965
+    },
+    "precision": "year"
+   }
+  },
+  "source": {
+   "kind": "sentence",
+   "anchor": {
+    "sectionId": "Exhibition_design",
+    "sectionTitle": "Exhibition design",
+    "mentionId": "d60",
+    "sentenceStart": 107,
+    "sentenceEnd": 211
+   },
+   "text": "In 1965, Gehry designed the exhibition display for the \"Art Treasures of Japan\" exhibition at the LACMA.",
+   "span": {
+    "start": 9,
+    "end": 103
+   }
+  },
+  "labelEdited": true
+ },
+ {
+  "id": "d75",
+  "label": "“Easy Edges” furniture",
+  "components": {
+   "time": {
+    "start": {
+     "y": 1969
+    },
+    "end": {
+     "y": 1973
+    },
+    "precision": "year"
+   }
+  },
+  "source": {
+   "kind": "sentence",
+   "anchor": {
+    "sectionId": "Other_designs",
+    "sectionTitle": "Other designs",
+    "mentionId": "d75",
+    "sentenceStart": 204,
+    "sentenceEnd": 315
+   },
+   "text": "His first line of furniture, produced from 1969 to 1973, was called \"Easy Edges\", constructed out of cardboard.",
+   "span": {
+    "start": 0,
+    "end": 37
+   }
+  },
+  "labelEdited": true
+ },
+ {
+  "id": "d20",
+  "label": "Santa Monica residence",
+  "components": {
+   "time": {
+    "start": {
+     "y": 1977
+    },
+    "precision": "year"
+   }
+  },
+  "source": {
+   "kind": "sentence",
+   "anchor": {
+    "sectionId": "Career",
+    "sectionTitle": "Career",
+    "mentionId": "d20",
+    "sentenceStart": 104,
+    "sentenceEnd": 279
+   },
+   "text": "Originally built in 1920 and purchased by Gehry in 1977, it features a metallic exterior wrapped around the original building that leaves many of the original details visible.",
+   "span": {
+    "start": 29,
+    "end": 47
+   }
+  },
+  "citation": {
+   "label": "[31]",
+   "href": "#cite_note-31"
+  },
+  "labelEdited": true,
+  "image": {
+   "id": "img1",
+   "src": "snapshots/frank-gehry/250px-Gehry_House_-_Image02.jpg",
+   "caption": "Gehry Residence in Santa Monica, California",
+   "source": "article"
+  }
+ },
+ {
+  "id": "d78",
+  "label": "First Fish Lamps",
+  "components": {
+   "time": {
+    "start": {
+     "y": 1984
+    },
+    "end": {
+     "y": 1986
+    },
+    "precision": "year"
+   }
+  },
+  "source": {
+   "kind": "sentence",
+   "anchor": {
+    "sectionId": "Other_designs",
+    "sectionTitle": "Other designs",
+    "mentionId": "d78",
+    "sentenceStart": 0,
+    "sentenceEnd": 91
+   },
+   "text": "As a result of his fascination, the first Fish Lamps were fabricated between 1984 and 1986.",
+   "span": {
+    "start": 36,
+    "end": 52
+   }
+  },
+  "labelEdited": true
+ },
+ {
+  "id": "d24",
+  "label": "Pritzker Architecture Prize",
+  "components": {
+   "time": {
+    "start": {
+     "y": 1989
+    },
+    "precision": "year"
+   }
+  },
+  "source": {
+   "kind": "sentence",
+   "anchor": {
+    "sectionId": "Career",
+    "sectionTitle": "Career",
+    "mentionId": "d24",
+    "sentenceStart": 0,
+    "sentenceEnd": 266
+   },
+   "text": "In 1989, Gehry received the Pritzker Architecture Prize, where the jury described him: \"Always open to experimentation, he has as well a sureness and maturity that resists, in the same way that Picasso did, being bound either by critical acceptance or his successes.",
+   "span": {
+    "start": 28,
+    "end": 55
+   }
+  },
+  "labelEdited": true
+ },
+ {
+  "id": "d30",
+  "label": "Public housing in Goldstein",
+  "components": {
+   "time": {
+    "start": {
+     "y": 1994
+    },
+    "end": {
+     "y": 1996
+    },
+    "precision": "year"
+   }
+  },
+  "source": {
+   "kind": "sentence",
+   "anchor": {
+    "sectionId": "Career",
+    "sectionTitle": "Career",
+    "mentionId": "d30",
+    "sentenceStart": 0,
+    "sentenceEnd": 138
+   },
+   "text": "From 1994 to 1996 several buildings by Gehry for a public housing project were realized in Goldstein, part of Frankfurt-Schwanheim (1994).",
+   "span": {
+    "start": 18,
+    "end": 100
+   }
+  },
+  "labelEdited": true
+ },
+ {
+  "id": "d32",
+  "label": "Guggenheim Bilbao opens",
+  "components": {
+   "time": {
+    "start": {
+     "y": 1997
+    },
+    "precision": "year"
+   }
+  },
+  "source": {
+   "kind": "sentence",
+   "anchor": {
+    "sectionId": "Career",
+    "sectionTitle": "Career",
+    "mentionId": "d32",
+    "sentenceStart": 139,
+    "sentenceEnd": 260
+   },
+   "text": "In 1997, Gehry vaulted to a new level of international acclaim when the Guggenheim Museum Bilbao opened in Bilbao, Spain.",
+   "span": {
+    "start": 72,
+    "end": 103
+   }
+  },
+  "citation": {
+   "label": "[1]",
+   "href": "#cite_note-VF_Tyrnauer_2010-1"
+  },
+  "labelEdited": true,
+  "image": {
+   "id": "commons:163590692",
+   "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a1/Guggenheim_Museum_Bilbao_2.jpg/330px-Guggenheim_Museum_Bilbao_2.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "caption": "Guggenheim Museum Bilbao 2",
+   "source": "commons",
+   "fileTitle": "File:Guggenheim Museum Bilbao 2.jpg",
+   "artist": "kallerna",
+   "license": "CC BY-SA 4.0",
+   "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0",
+   "pageUrl": "https://commons.wikimedia.org/wiki/File:Guggenheim_Museum_Bilbao_2.jpg"
+  }
+ },
+ {
+  "id": "d88",
+  "label": "Gehry Technologies",
+  "components": {
+   "time": {
+    "start": {
+     "y": 2002
+    },
+    "precision": "year"
+   }
+  },
+  "source": {
+   "kind": "sentence",
+   "anchor": {
+    "sectionId": "Software_development",
+    "sectionTitle": "Software development",
+    "mentionId": "d88",
+    "sentenceStart": 71,
+    "sentenceEnd": 157
+   },
+   "text": "His firm spun off another firm called Gehry Technologies that was established in 2002.",
+   "span": {
+    "start": 38,
+    "end": 56
+   }
+  },
+  "labelEdited": true
+ },
+ {
+  "id": "d92",
+  "label": "Canadian citizenship restored",
+  "components": {
+   "time": {
+    "start": {
+     "y": 2002
+    },
+    "precision": "year"
+   }
+  },
+  "source": {
+   "kind": "sentence",
+   "anchor": {
+    "sectionId": "Personal_life_and_death",
+    "sectionTitle": "Personal life and death",
+    "mentionId": "d92",
+    "sentenceStart": 194,
+    "sentenceEnd": 269
+   },
+   "text": "Prime Minister Jean Chrétien restored Gehry's Canadian citizenship in 2002.",
+   "span": {
+    "start": 0,
+    "end": 66
+   }
+  },
+  "citation": {
+   "label": "[15]",
+   "href": "#cite_note-Chretien-15"
+  },
+  "labelEdited": true
+ },
+ {
+  "id": "d33",
+  "label": "Walt Disney Concert Hall",
+  "components": {
+   "time": {
+    "start": {
+     "y": 2003
+    },
+    "precision": "year"
+   }
+  },
+  "source": {
+   "kind": "sentence",
+   "anchor": {
+    "sectionId": "Career",
+    "sectionTitle": "Career",
+    "mentionId": "d33",
+    "sentenceStart": 198,
+    "sentenceEnd": 484
+   },
+   "text": "The boisterous, curvaceous Walt Disney Concert Hall (2003) in downtown Los Angeles is the centerpiece of the neighborhood's revitalization; the Los Angeles Times called it \"the most effective answer to doubters, naysayers, and grumbling critics an American architect has ever produced\".",
+   "span": {
+    "start": 27,
+    "end": 51
+   }
+  },
+  "citation": {
+   "label": "[40]",
+   "href": "#cite_note-40"
+  },
+  "labelEdited": true,
+  "image": {
+   "id": "img15",
+   "src": "snapshots/frank-gehry/330px-Disney_Concert_Hall_by_Carol_Highsmith_edit2.jpg",
+   "caption": "Walt Disney Concert Hall – Los Angeles (2003)",
+   "source": "article"
+  }
+ },
+ {
+  "id": "d98",
+  "label": "Died in Santa Monica",
+  "components": {
+   "time": {
+    "start": {
+     "y": 2025,
+     "m": 12,
+     "d": 5
+    },
+    "precision": "day"
+   }
+  },
+  "source": {
+   "kind": "sentence",
+   "anchor": {
+    "sectionId": "Personal_life_and_death",
+    "sectionTitle": "Personal life and death",
+    "mentionId": "d98",
+    "sentenceStart": 0,
+    "sentenceEnd": 106
+   },
+   "text": "On December 5, 2025, Gehry died at the age of 96 from a respiratory condition at his home in Santa Monica.",
+   "span": {
+    "start": 21,
+    "end": 105
+   }
+  },
+  "citation": {
+   "label": "[118]",
+   "href": "#cite_note-NYTobit-118"
+  },
+  "labelEdited": true,
+  "image": {
+   "id": "img30",
+   "src": "snapshots/frank-gehry/250px-Frank_O._Gehry_-_Parc_des_Ateliers.jpg",
+   "caption": "",
+   "source": "article"
+  }
+ },
+ {
+  "id": "d12",
+  "label": "David Cabin, his first residence",
+  "components": {
+   "time": {
+    "start": {
+     "y": 1957
+    },
+    "precision": "year"
+   }
+  },
+  "source": {
+   "kind": "sentence",
+   "anchor": {
+    "sectionId": "Career",
+    "sectionTitle": "Career",
+    "mentionId": "d12",
+    "sentenceStart": 107,
+    "sentenceEnd": 230
+   },
+   "text": "In 1957, at age 28, he was given the chance to design his first private residence with friend and old classmate Greg Walsh.",
+   "span": {
+    "start": 9,
+    "end": 18
+   }
+  },
+  "labelEdited": true,
+  "image": {
+   "id": "img7",
+   "src": "snapshots/frank-gehry/500px-Frank_Gehry_-_David_Cabin__Idyllwild_CA._1957.jpg",
+   "caption": "David Cabin – Idyllwild, CA (1957)",
+   "source": "article"
+  }
+ },
+ {
+  "id": "d25",
+  "label": "Chiat/Day Building",
+  "components": {
+   "time": {
+    "start": {
+     "y": 1991
+    },
+    "precision": "year"
+   }
+  },
+  "source": {
+   "kind": "sentence",
+   "anchor": {
+    "sectionId": "Career",
+    "sectionTitle": "Career",
+    "mentionId": "d25",
+    "sentenceStart": 0,
+    "sentenceEnd": 213
+   },
+   "text": "Gehry continued to design other notable buildings in California, such as the Chiat/Day Building (1991) in Venice, in collaboration with Claes Oldenburg, which is well known for its massive sculpture of binoculars.",
+   "span": {
+    "start": 65,
+    "end": 97
+   }
+  },
+  "citation": {
+   "label": "[34]",
+   "href": "#cite_note-34"
+  },
+  "labelEdited": true,
+  "image": {
+   "id": "img2",
+   "src": "snapshots/frank-gehry/250px-052607-006-Chiat-Day.jpg",
+   "caption": "Chiat/Day Building in Venice, California (1991)",
+   "source": "article"
+  }
+ }
+]
