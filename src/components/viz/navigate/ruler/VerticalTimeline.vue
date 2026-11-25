@@ -42,6 +42,15 @@ function reveal(id: string, smooth = true) {
   el.scrollTo({ top: Math.max(0, top), behavior: smooth ? 'smooth' : 'auto' })
 }
 defineExpose({ reveal })
+/**
+ * The whole row is the touch target. One event: its title button covers the row.
+ * Several on one date: each title is its own target; a tap on the date, the age or
+ * the photograph goes to the first.
+ */
+function onRow(first: string, e: MouseEvent) {
+  if ((e.target as Element | null)?.closest('button')) return
+  emit('pick', first)
+}
 </script>
 
 <template>
@@ -58,8 +67,9 @@ defineExpose({ reveal })
         v-for="s in slotsOf(events, era)"
         :key="s.events[0].id"
         class="vt__slot"
-        :class="{ 'vt__slot--reading': has(s.events, readingId) }"
+        :class="{ 'vt__slot--reading': has(s.events, readingId), 'vt__slot--single': s.events.length === 1 }"
         :data-slot-of="s.events.map((e) => e.id).join(' ')"
+        @click="onRow(s.events[0].id, $event)"
       >
         <span
           class="vt__dot"
@@ -174,6 +184,25 @@ defineExpose({ reveal })
   line-height: 20px;
   text-align: start;
   cursor: pointer;
+}
+/* One event: its button covers the whole row (date, title, age, photograph). */
+.vt__slot--single .vt__title::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+/* Several titles: each one a comfortable target of its own. */
+.vt__slot:not(.vt__slot--single) .vt__title {
+  display: block;
+  width: 100%;
+  padding-block: 4px;
+}
+.vt__slot {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.vt__slot:active {
+  background-color: var(--background-color-interactive-subtle--active, rgba(0, 0, 0, 0.06));
 }
 .vt__title:hover {
   color: var(--color-progressive--hover, var(--color-progressive));

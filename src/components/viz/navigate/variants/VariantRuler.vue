@@ -184,8 +184,30 @@ const headH = computed(() => (compact.value ? 0 : HEAD))
 /** The event editor appears only with an event selected (no empty state); the track keeps its size either way. */
 const regionH = computed(() => (editing.value && editEvent.value ? editH.value : 0))
 /** Vertical: as tall as the list, up to most of the screen in the article, or half of it when docked. */
+/**
+ * Docked, the list is short by default: a window on the date being read (about one
+ * row), with the chevron to open it to half the screen. In the article it is as tall
+ * as it needs, up to most of the screen.
+ */
+const LIST_SHORT = 104
+const listOpen = ref(false)
+const listShort = computed(() => dock.stuck.value && !listOpen.value)
 const vlistH = computed(() =>
-  Math.max(120, Math.min(vlistNat.value || 9999, Math.round(avail.value * (dock.stuck.value ? 0.5 : 0.7)) - 2 * PADY - HEAD)),
+  listShort.value
+    ? LIST_SHORT
+    : Math.max(120, Math.min(vlistNat.value || 9999, Math.round(avail.value * (dock.stuck.value ? 0.5 : 0.7)) - 2 * PADY - HEAD)),
+)
+// The list's height changed: the date being read goes back to its middle once the panel has moved.
+watch(vlistH, () => {
+  if (!isVertical.value) return
+  setTimeout(() => reading.value.id && vlist.value?.reveal(reading.value.id, !reduced()), MOTION_MS + 20)
+})
+// Leaving the dock folds the list again for next time.
+watch(
+  () => dock.stuck.value,
+  (s) => {
+    if (!s) listOpen.value = false
+  },
 )
 const panelH = computed(() =>
   hidden.value
@@ -491,6 +513,18 @@ const px = (n: number) => `${Math.round(n)}px`
           @click="toggle.run"
         >
           <CdxIcon :icon="toggle.icon" />
+        </CdxButton>
+        <CdxButton
+          v-if="isVertical && dock.stuck.value"
+          size="small"
+          weight="quiet"
+          class="tr__mode"
+          :aria-label="listOpen ? msg.trCloseTimeline : msg.trOpenTimeline"
+          :title="listOpen ? msg.trCloseTimeline : msg.trOpenTimeline"
+          :aria-expanded="listOpen ? 'true' : 'false'"
+          @click="listOpen = !listOpen"
+        >
+          <CdxIcon :icon="listOpen ? cdxIconCollapse : cdxIconExpand" />
         </CdxButton>
         <CdxToggleButton
           v-if="narrow && !editing"
